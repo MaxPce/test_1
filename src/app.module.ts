@@ -20,7 +20,7 @@ import { FormatsModule } from './formats/formats.module';
         password: config.get<string>('DB_PASS'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true, // SOLO desarrollo
+        synchronize: true, // desarrollo
       }),
     }),
 
