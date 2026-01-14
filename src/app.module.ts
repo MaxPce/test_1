@@ -1,8 +1,18 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { APP_GUARD } from '@nestjs/core';
 
-import { FormatsModule } from './formats/formats.module';
+// Módulos
+import { AuthModule } from './auth/auth.module';
+import { SportsModule } from './sports/sports.module';
+import { InstitutionsModule } from './institutions/institutions.module';
+import { EventsModule } from './events/events.module';
+import { CompetitionsModule } from './competitions/competitions.module';
+import { ResultsModule } from './results/results.module';
+
+// Guards globales
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
   imports: [
@@ -20,11 +30,26 @@ import { FormatsModule } from './formats/formats.module';
         password: config.get<string>('DB_PASS'),
         database: config.get<string>('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true, // desarrollo
+        synchronize: false,
+        logging: config.get<string>('NODE_ENV') === 'development',
+        charset: 'utf8mb4',
       }),
     }),
 
-    FormatsModule,
+    // Módulos de la aplicación
+    AuthModule,
+    SportsModule,
+    InstitutionsModule,
+    EventsModule,
+    CompetitionsModule,
+    ResultsModule,
+  ],
+  providers: [
+    // Guard global de JWT (todas las rutas requieren autenticación por defecto)
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
   ],
 })
 export class AppModule {}

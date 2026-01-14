@@ -14,6 +14,9 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const origins = getCorsOrigins();
 
+  // ✨ AGREGAR ESTA LÍNEA ✨
+  app.setGlobalPrefix('api');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -36,5 +39,8 @@ async function bootstrap() {
   });
 
   await app.listen(3000);
+
+  // Opcional: agregar logs
+  console.log('🚀 Server running on http://localhost:3000/api');
 }
 bootstrap();
