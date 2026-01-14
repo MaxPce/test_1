@@ -46,7 +46,9 @@ export class CompetitionsService {
       .leftJoinAndSelect('matches.participations', 'participations')
       .leftJoinAndSelect('participations.registration', 'registration')
       .leftJoinAndSelect('registration.athlete', 'athlete')
-      .leftJoinAndSelect('registration.team', 'team');
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution');
 
     if (eventCategoryId) {
       queryBuilder.andWhere('phase.eventCategoryId = :eventCategoryId', {
@@ -66,12 +68,16 @@ export class CompetitionsService {
         'matches.participations',
         'matches.participations.registration',
         'matches.participations.registration.athlete',
+        'matches.participations.registration.athlete.institution',
         'matches.participations.registration.team',
+        'matches.participations.registration.team.institution',
         'matches.winner',
         'standings',
         'standings.registration',
         'standings.registration.athlete',
+        'standings.registration.athlete.institution',
         'standings.registration.team',
+        'standings.registration.team.institution',
       ],
     });
 
@@ -292,13 +298,13 @@ export class CompetitionsService {
 
   private getRoundName(numMatches: number): string {
     const rounds: { [key: number]: string } = {
-      1: 'Final',
-      2: 'Semifinal',
-      4: 'Cuartos de Final',
-      8: 'Octavos de Final',
-      16: 'Dieciseisavos de Final',
+      1: 'final',
+      2: 'semifinal',
+      4: 'cuartos',
+      8: 'octavos',
+      16: 'dieciseisavos',
     };
-    return rounds[numMatches] || `Ronda de ${numMatches * 2}`;
+    return rounds[numMatches] || `ronda_${numMatches * 2}`;
   }
 
   // ==================== ROUND ROBIN ====================
