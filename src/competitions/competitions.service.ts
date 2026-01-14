@@ -400,15 +400,109 @@ export class CompetitionsService {
   }
 
   async updateStandings(phaseId: number): Promise<Standing[]> {
-    const standings = await this.getStandings(phaseId);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    // Actualizar posiciones
-    let currentRank = 1;
-    for (const standing of standings) {
-      standing.rankPosition = currentRank++;
-      await this.standingRepository.save(standing);
+    try {
+      // Obtener todos los standings de esta fase
+      const standings = await this.standingRepository.find({
+        where: { phaseId },
+        relations: ['registration'],
+      });
+
+      // Obtener todos los partidos finalizados de esta fase
+      const matches = await this.matchRepository.find({
+        where: {
+          phaseId,
+          status: MatchStatus.FINALIZADO,
+        },
+        relations: ['participations', 'participations.registration', 'winner'],
+      });
+
+      // Resetear estadísticas
+      for (const standing of standings) {
+        standing.matchesPlayed = 0;
+        standing.wins = 0;
+        standing.draws = 0;
+        standing.losses = 0;
+        standing.points = 0;
+        standing.scoreFor = 0;
+        standing.scoreAgainst = 0;
+        standing.scoreDiff = 0;
+      }
+
+      // Calcular estadísticas basadas en partidos finalizados
+      for (const match of matches) {
+        if (match.participations.length !== 2) continue;
+
+        const [p1, p2] = match.participations;
+
+        const s1 = standings.find(
+          (s) => s.registrationId === p1.registrationId,
+        );
+        const s2 = standings.find(
+          (s) => s.registrationId === p2.registrationId,
+        );
+
+        if (!s1 || !s2) continue;
+
+        // Incrementar partidos jugados
+        s1.matchesPlayed++;
+        s2.matchesPlayed++;
+
+        // Si hay ganador
+        if (match.winnerRegistrationId) {
+          if (match.winnerRegistrationId === p1.registrationId) {
+            // p1 ganó
+            s1.wins++;
+            s1.points += 3;
+            s2.losses++;
+          } else if (match.winnerRegistrationId === p2.registrationId) {
+            // p2 ganó
+            s2.wins++;
+            s2.points += 3;
+            s1.losses++;
+          }
+        } else {
+          // Empate (si no hay ganador)
+          s1.draws++;
+          s2.draws++;
+          s1.points += 1;
+          s2.points += 1;
+        }
+
+        // Si tienes marcadores en el match, actualiza scoreFor/scoreAgainst
+        // Por ahora dejamos en 0 si no hay campo de marcador
+      }
+
+      // Calcular diferencia de goles/puntos
+      for (const standing of standings) {
+        standing.scoreDiff = standing.scoreFor - standing.scoreAgainst;
+      }
+
+      // Ordenar por puntos, diferencia, goles a favor
+      standings.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.scoreDiff !== a.scoreDiff) return b.scoreDiff - a.scoreDiff;
+        return b.scoreFor - a.scoreFor;
+      });
+
+      // Asignar posiciones
+      let currentRank = 1;
+      for (const standing of standings) {
+        standing.rankPosition = currentRank++;
+        await queryRunner.manager.save(standing);
+      }
+
+      await queryRunner.commitTransaction();
+
+      return this.getStandings(phaseId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    return standings;
   }
 }
