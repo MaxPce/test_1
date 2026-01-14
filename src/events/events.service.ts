@@ -1,3 +1,5 @@
+// src/events/events.service.ts
+
 import {
   Injectable,
   NotFoundException,
@@ -149,7 +151,9 @@ export class EventsService {
       .leftJoinAndSelect('category.sport', 'sport')
       .leftJoinAndSelect('eventCategory.registrations', 'registrations')
       .leftJoinAndSelect('registrations.athlete', 'athlete')
-      .leftJoinAndSelect('registrations.team', 'team');
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registrations.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution');
 
     if (eventId) {
       queryBuilder.andWhere('eventCategory.eventId = :eventId', { eventId });

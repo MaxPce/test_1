@@ -46,7 +46,9 @@ export class CompetitionsService {
       .leftJoinAndSelect('matches.participations', 'participations')
       .leftJoinAndSelect('participations.registration', 'registration')
       .leftJoinAndSelect('registration.athlete', 'athlete')
-      .leftJoinAndSelect('registration.team', 'team');
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution');
 
     if (eventCategoryId) {
       queryBuilder.andWhere('phase.eventCategoryId = :eventCategoryId', {
@@ -66,12 +68,16 @@ export class CompetitionsService {
         'matches.participations',
         'matches.participations.registration',
         'matches.participations.registration.athlete',
+        'matches.participations.registration.athlete.institution',
         'matches.participations.registration.team',
+        'matches.participations.registration.team.institution',
         'matches.winner',
         'standings',
         'standings.registration',
         'standings.registration.athlete',
+        'standings.registration.athlete.institution',
         'standings.registration.team',
+        'standings.registration.team.institution',
       ],
     });
 
@@ -292,13 +298,13 @@ export class CompetitionsService {
 
   private getRoundName(numMatches: number): string {
     const rounds: { [key: number]: string } = {
-      1: 'Final',
-      2: 'Semifinal',
-      4: 'Cuartos de Final',
-      8: 'Octavos de Final',
-      16: 'Dieciseisavos de Final',
+      1: 'final',
+      2: 'semifinal',
+      4: 'cuartos',
+      8: 'octavos',
+      16: 'dieciseisavos',
     };
-    return rounds[numMatches] || `Ronda de ${numMatches * 2}`;
+    return rounds[numMatches] || `ronda_${numMatches * 2}`;
   }
 
   // ==================== ROUND ROBIN ====================
@@ -504,5 +510,139 @@ export class CompetitionsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async initializeBestOf3Series(phaseId: number, registrationIds: number[]) {
+    if (registrationIds.length !== 2) {
+      throw new BadRequestException(
+        'Mejor de 3 requiere exactamente 2 participantes',
+      );
+    }
+
+    const phase = await this.phaseRepository.findOne({
+      where: { phaseId },
+    });
+
+    if (!phase) {
+      throw new NotFoundException('Fase no encontrada');
+    }
+
+    if (phase.type !== PhaseType.MEJOR_DE_3) {
+      throw new BadRequestException('Esta fase no es de tipo Mejor de 3');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const matches: Match[] = [];
+
+      for (let i = 1; i <= 3; i++) {
+        const match = queryRunner.manager.create(Match, {
+          phaseId: phase.phaseId,
+          matchNumber: i,
+          round: `Partido ${i} de 3`,
+          status: i === 1 ? MatchStatus.PROGRAMADO : MatchStatus.PROGRAMADO,
+        });
+
+        const savedMatch = await queryRunner.manager.save(match);
+        matches.push(savedMatch);
+
+        // Crear participaciones para cada partido
+        const participations = registrationIds.map((regId, index) =>
+          queryRunner.manager.create(Participation, {
+            matchId: savedMatch.matchId,
+            registrationId: regId,
+            corner: index === 0 ? Corner.A : Corner.B,
+          }),
+        );
+
+        await queryRunner.manager.save(participations);
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        message: 'Serie Mejor de 3 inicializada correctamente',
+        matches,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async updateBestOf3MatchResult(
+    matchId: number,
+    winnerRegistrationId: number,
+  ) {
+    const match = await this.matchRepository.findOne({
+      where: { matchId },
+      relations: ['phase', 'phase.matches', 'participations'],
+    });
+
+    if (!match) {
+      throw new NotFoundException('Partido no encontrado');
+    }
+
+    if (match.phase.type !== PhaseType.MEJOR_DE_3) {
+      throw new BadRequestException('Este partido no es de tipo Mejor de 3');
+    }
+
+    // Actualizar el resultado del partido actual
+    match.winnerRegistrationId = winnerRegistrationId;
+    match.status = MatchStatus.FINALIZADO;
+    await this.matchRepository.save(match);
+
+    // Contar victorias de cada participante
+    const allMatches = await this.matchRepository.find({
+      where: { phaseId: match.phaseId, status: MatchStatus.FINALIZADO },
+    });
+
+    const victorias: Record<number, number> = {};
+    allMatches.forEach((m) => {
+      if (m.winnerRegistrationId) {
+        victorias[m.winnerRegistrationId] =
+          (victorias[m.winnerRegistrationId] || 0) + 1;
+      }
+    });
+
+    // Verificar si alguien ya ganó 2 partidos
+    const ganadorEntry = Object.entries(victorias).find(
+      ([_, wins]) => wins >= 2,
+    );
+
+    if (ganadorEntry) {
+      const [ganadorId] = ganadorEntry;
+
+      // Marcar partidos restantes como CANCELADOS
+      const partidosPendientes = await this.matchRepository.find({
+        where: {
+          phaseId: match.phaseId,
+          status: MatchStatus.PROGRAMADO,
+        },
+      });
+
+      for (const p of partidosPendientes) {
+        p.status = MatchStatus.CANCELADO;
+        await this.matchRepository.save(p);
+      }
+
+      return {
+        message: 'Serie completada',
+        winner: Number(ganadorId),
+        victorias,
+        serieCompleta: true,
+      };
+    }
+
+    return {
+      message: 'Partido actualizado, serie continúa',
+      victorias,
+      serieCompleta: false,
+    };
   }
 }

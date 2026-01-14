@@ -19,6 +19,7 @@ import { MatchStatus } from '../../common/enums';
 @Index(['status'])
 @Index(['winnerRegistrationId'])
 @Index(['phaseId', 'status'])
+@Index(['seriesId'])
 export class Match {
   @PrimaryGeneratedColumn({ name: 'match_id' })
   matchId: number;
@@ -45,7 +46,7 @@ export class Match {
   status: MatchStatus;
 
   @Column({ name: 'winner_registration_id', nullable: true })
-  winnerRegistrationId?: number; // ✅ Usar ? en lugar de | null
+  winnerRegistrationId?: number;
 
   @Column({ name: 'scheduled_time', type: 'datetime', nullable: true })
   scheduledTime: Date;
@@ -56,6 +57,31 @@ export class Match {
     comment: 'Tatami/Plataforma',
   })
   platformNumber: number;
+
+  // ======= NUEVOS CAMPOS PARA MEJOR DE 3 =======
+
+  @Column({
+    name: 'series_id',
+    nullable: true,
+    comment: 'ID único para agrupar matches de una serie (Mejor de 3)',
+  })
+  seriesId: string;
+
+  @Column({
+    name: 'series_match_number',
+    nullable: true,
+    comment: 'Número del match dentro de la serie (1, 2 o 3)',
+  })
+  seriesMatchNumber: number;
+
+  @Column({
+    name: 'series_winner_registration_id',
+    nullable: true,
+    comment: 'Ganador de toda la serie (se actualiza al finalizar)',
+  })
+  seriesWinnerRegistrationId: number;
+
+  // ============================================
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
@@ -70,6 +96,10 @@ export class Match {
   @ManyToOne(() => Registration)
   @JoinColumn({ name: 'winner_registration_id' })
   winner: Registration;
+
+  @ManyToOne(() => Registration)
+  @JoinColumn({ name: 'series_winner_registration_id' })
+  seriesWinner: Registration;
 
   @OneToMany(() => Participation, (participation) => participation.match)
   participations: Participation[];

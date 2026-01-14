@@ -162,4 +162,28 @@ export class CompetitionsController {
   updateStandings(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return this.competitionsService.updateStandings(phaseId);
   }
+
+  @Post('phases/:phaseId/initialize-best-of-3')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async initializeBestOf3(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body('registrationIds') registrationIds: number[],
+  ) {
+    return this.competitionsService.initializeBestOf3Series(
+      phaseId,
+      registrationIds,
+    );
+  }
+
+  @Patch('matches/:matchId/best-of-3-result')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async updateBestOf3Result(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body('winnerRegistrationId', ParseIntPipe) winnerRegistrationId: number,
+  ) {
+    return this.competitionsService.updateBestOf3MatchResult(
+      matchId,
+      winnerRegistrationId,
+    );
+  }
 }
