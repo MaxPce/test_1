@@ -5,3 +5,5 @@ export * from './update-match.dto';
 export * from './create-participation.dto';
 export * from './generate-bracket.dto';
 export * from './initialize-round-robin.dto';
+export * from './match-lineup.dto';
+export * from './match-game.dto';

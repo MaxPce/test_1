@@ -1,3 +1,4 @@
+// src/competitions/competitions.controller.ts
 import {
   Controller,
   Get,
@@ -11,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CompetitionsService } from './competitions.service';
+import { TableTennisService } from './table-tennis.service'; // ✅ Agregar
 import {
   CreatePhaseDto,
   UpdatePhaseDto,
@@ -19,6 +21,8 @@ import {
   CreateParticipationDto,
   GenerateBracketDto,
   InitializeRoundRobinDto,
+  SetMatchLineupDto, // ✅ Agregar
+  UpdateMatchGameDto, // ✅ Agregar
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -30,7 +34,10 @@ import { MatchStatus } from '../common/enums';
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class CompetitionsController {
-  constructor(private readonly competitionsService: CompetitionsService) {}
+  constructor(
+    private readonly competitionsService: CompetitionsService,
+    private readonly tableTennisService: TableTennisService, // ✅ Agregar
+  ) {}
 
   // ==================== PHASES ====================
 
@@ -185,5 +192,87 @@ export class CompetitionsController {
       matchId,
       winnerRegistrationId,
     );
+  }
+
+  // ==================== TENIS DE MESA - LINEUPS ====================
+
+  /**
+   * Configurar lineup de un equipo para un match
+   * POST /competitions/participations/:id/lineup
+   */
+  @Post('participations/:id/lineup')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async setLineup(
+    @Param('id', ParseIntPipe) participationId: number,
+    @Body() dto: SetMatchLineupDto,
+  ) {
+    return this.tableTennisService.setLineup(participationId, dto);
+  }
+
+  /**
+   * Obtener lineups de un match (ambos equipos)
+   * GET /competitions/matches/:id/lineups
+   */
+  @Get('matches/:id/lineups')
+  @Public()
+  async getMatchLineups(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.getMatchLineups(matchId);
+  }
+
+  // ==================== TENIS DE MESA - GAMES ====================
+
+  /**
+   * Generar juegos automáticamente para un match
+   * POST /competitions/matches/:id/generate-games
+   */
+  @Post('matches/:id/generate-games')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generateGames(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.generateGames(matchId);
+  }
+
+  /**
+   * Obtener todos los juegos de un match
+   * GET /competitions/matches/:id/games
+   */
+  @Get('matches/:id/games')
+  @Public()
+  async getMatchGames(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.getMatchGames(matchId);
+  }
+
+  /**
+   * Actualizar resultado de un juego individual
+   * PATCH /competitions/games/:id
+   */
+  @Patch('games/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async updateGameResult(
+    @Param('id', ParseIntPipe) gameId: number,
+    @Body() dto: UpdateMatchGameDto,
+  ) {
+    return this.tableTennisService.updateGameResult(gameId, dto);
+  }
+
+  // ==================== TENIS DE MESA - MATCH DETAILS ====================
+
+  /**
+   * Obtener detalles completos de un match de tenis de mesa
+   * GET /competitions/matches/:id/table-tennis
+   */
+  @Get('matches/:id/table-tennis')
+  @Public()
+  async getTableTennisMatchDetails(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.getMatchDetails(matchId);
+  }
+
+  /**
+   * Calcular resultado actual del match
+   * GET /competitions/matches/:id/result
+   */
+  @Get('matches/:id/result')
+  @Public()
+  async calculateMatchResult(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.calculateMatchResult(matchId);
   }
 }

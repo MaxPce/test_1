@@ -2,3 +2,5 @@ export * from './phase.entity';
 export * from './match.entity';
 export * from './participation.entity';
 export * from './standing.entity';
+export * from './match-lineup.entity';
+export * from './match-game.entity';
