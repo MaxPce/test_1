@@ -13,6 +13,7 @@ import {
   CreateAttemptDto,
   PublishMatchResultDto,
   UpdateLiveScoreDto,
+  CreateTimeResultDto,
 } from './dto';
 import { MatchStatus, PhaseType } from '../common/enums';
 
@@ -454,5 +455,191 @@ export class ResultsService {
       ...match,
       participations: participationsWithResults,
     };
+  }
+
+  // ==================== MATCH RESULTS TIME VIEW ====================
+
+  async recalculateSwimmingPositions(eventCategoryId: number) {
+    // Obtener todos los resultados con tiempo registrado
+    const results = await this.resultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.participation', 'participation')
+      .leftJoinAndSelect('participation.registration', 'registration')
+      .where('registration.eventCategoryId = :eventCategoryId', {
+        eventCategoryId,
+      })
+      .andWhere('result.timeValue IS NOT NULL')
+      .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
+      .orderBy('result.timeValue', 'ASC')
+      .getMany();
+
+    // Asignar posiciones
+    for (let i = 0; i < results.length; i++) {
+      results[i].rankPosition = i + 1;
+      results[i].isWinner = i === 0; // El primero es el ganador
+      await this.resultRepository.save(results[i]);
+    }
+
+    // Obtener descalificados y asignarles null
+    const disqualified = await this.resultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.participation', 'participation')
+      .leftJoinAndSelect('participation.registration', 'registration')
+      .where('registration.eventCategoryId = :eventCategoryId', {
+        eventCategoryId,
+      })
+      .andWhere('result.timeValue IS NOT NULL')
+      .andWhere("result.notes LIKE '%DQ%'")
+      .getMany();
+
+    for (const result of disqualified) {
+      result.rankPosition = null;
+      result.isWinner = false;
+      await this.resultRepository.save(result);
+    }
+
+    return {
+      message: 'Posiciones recalculadas exitosamente',
+      totalResults: results.length,
+      disqualified: disqualified.length,
+    };
+  }
+
+  async createTimeResult(dto: CreateTimeResultDto, userId: number) {
+    // 1. Buscar o crear la participation para esta registration
+    let participation = await this.participationRepository.findOne({
+      where: { registrationId: dto.registrationId },
+      relations: ['registration', 'registration.athlete', 'registration.team'],
+    });
+
+    // Si no existe participation, crear una (para deportes sin matches)
+    if (!participation) {
+      participation = this.participationRepository.create({
+        registrationId: dto.registrationId,
+        matchId: null,
+        corner: null,
+      });
+      participation = await this.participationRepository.save(participation);
+    }
+
+    // 2. Detectar si está descalificado
+    const isDQ = dto.timeValue.startsWith('x');
+    const cleanTime = isDQ ? dto.timeValue.substring(1) : dto.timeValue;
+
+    // 3. Buscar si ya existe un resultado para esta participation
+    let result = await this.resultRepository.findOne({
+      where: { participationId: participation.participationId },
+    });
+
+    if (result) {
+      // Actualizar resultado existente
+      result.timeValue = cleanTime;
+      result.notes = isDQ
+        ? `DQ - ${dto.notes || 'Descalificado'}`
+        : dto.notes || null; // ✅ Convertir undefined a null
+      result.recordedBy = userId;
+    } else {
+      // Crear nuevo resultado
+      result = this.resultRepository.create({
+        participationId: participation.participationId,
+        timeValue: cleanTime,
+        notes: isDQ
+          ? `DQ - ${dto.notes || 'Descalificado'}`
+          : dto.notes || null, // ✅ Convertir undefined a null
+        recordedBy: userId,
+        rankPosition: null,
+        isWinner: false,
+      });
+    }
+
+    const savedResult = await this.resultRepository.save(result);
+
+    // 4. Recalcular posiciones automáticamente después de guardar
+    const eventCategoryId = participation.registration.eventCategoryId;
+    await this.recalculateSwimmingPositions(eventCategoryId);
+
+    return savedResult;
+  }
+
+  /**
+   * Obtener resultados de natación por categoría
+   */
+  async getSwimmingResults(eventCategoryId: number) {
+    const results = await this.resultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.participation', 'participation')
+      .leftJoinAndSelect('participation.registration', 'registration')
+      .leftJoinAndSelect('registration.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'members')
+      .leftJoinAndSelect('members.athlete', 'memberAthlete')
+      .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
+      .where('eventCategory.eventCategoryId = :eventCategoryId', {
+        eventCategoryId,
+      })
+      .andWhere('result.timeValue IS NOT NULL')
+      .orderBy('CASE WHEN result.rankPosition IS NULL THEN 1 ELSE 0 END', 'ASC')
+      .addOrderBy('result.rankPosition', 'ASC')
+      .addOrderBy('result.timeValue', 'ASC')
+      .getMany();
+
+    return results;
+  }
+
+  /**
+   * Actualizar un resultado de tiempo
+   */
+  async updateTimeResult(
+    resultId: number,
+    dto: Partial<CreateTimeResultDto>,
+    userId: number,
+  ) {
+    const result = await this.resultRepository.findOne({
+      where: { resultId },
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Resultado con ID ${resultId} no encontrado`);
+    }
+
+    // Si se actualiza el tiempo, procesar descalificación
+    if (dto.timeValue) {
+      const isDQ = dto.timeValue.startsWith('x');
+      result.timeValue = isDQ ? dto.timeValue.substring(1) : dto.timeValue;
+      if (isDQ && !result.notes?.includes('DQ')) {
+        result.notes = `DQ - ${dto.notes || 'Descalificado'}`;
+      }
+    }
+
+    if (dto.rankPosition !== undefined) {
+      result.rankPosition = dto.rankPosition;
+      result.isWinner = dto.rankPosition === 1;
+    }
+
+    if (dto.notes !== undefined) {
+      result.notes = dto.notes;
+    }
+
+    result.recordedBy = userId;
+
+    return await this.resultRepository.save(result);
+  }
+
+  /**
+   * Eliminar un resultado
+   */
+  async deleteTimeResult(resultId: number) {
+    const result = await this.resultRepository.findOne({
+      where: { resultId },
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Resultado con ID ${resultId} no encontrado`);
+    }
+
+    await this.resultRepository.remove(result);
+    return { message: 'Resultado eliminado correctamente' };
   }
 }

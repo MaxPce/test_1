@@ -1,3 +1,4 @@
+// src/results/entities/result.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -20,18 +21,20 @@ export class Result {
   participationId: number;
 
   @Column({
+    type: 'int', // ✅ Especificar tipo explícitamente
     name: 'score_value',
     nullable: true,
     comment: 'Puntos en combate o general',
   })
-  scoreValue?: number; // ✅ Usar ? en lugar de | null
+  scoreValue: number | null;
 
   @Column({
+    type: 'int', // ✅ Especificar tipo explícitamente
     name: 'rank_position',
     nullable: true,
     comment: 'Posición final: 1,2,3',
   })
-  rankPosition?: number; // ✅ Usar ?
+  rankPosition: number | null;
 
   @Column({
     name: 'is_winner',
@@ -39,15 +42,15 @@ export class Result {
     default: false,
     nullable: true,
   })
-  isWinner?: boolean; // ✅ Usar ?
+  isWinner: boolean | null;
 
   @Column({
+    type: 'time', // ✅ Ya estaba especificado
     name: 'time_value',
-    type: 'time',
     nullable: true,
     comment: 'Para deportes cronometrados',
   })
-  timeValue?: string; // ✅ Usar ?
+  timeValue: string | null;
 
   @Column({
     name: 'total_value',
@@ -57,10 +60,13 @@ export class Result {
     nullable: true,
     comment: 'Total general (ej: arranque+envión)',
   })
-  totalValue?: number; // ✅ Usar ?
+  totalValue: number | null;
 
-  @Column({ type: 'text', nullable: true })
-  notes?: string; // ✅ Usar ?
+  @Column({
+    type: 'text', // ✅ Ya estaba especificado
+    nullable: true,
+  })
+  notes: string | null;
 
   @CreateDateColumn({ name: 'recorded_at' })
   recordedAt: Date;

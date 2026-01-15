@@ -20,10 +20,10 @@ export class Participation {
   participationId: number;
 
   @Column({ name: 'match_id', nullable: true })
-  matchId: number;
+  matchId: number | null;
 
   @Column({ name: 'registration_id', nullable: true })
-  registrationId: number;
+  registrationId: number | null;
 
   @Column({
     type: 'enum',
@@ -31,7 +31,7 @@ export class Participation {
     nullable: true,
     comment: 'Esquina/Color del competidor',
   })
-  corner: Corner;
+  corner: Corner | null;
 
   @ManyToOne(() => Match, (match) => match.participations)
   @JoinColumn({ name: 'match_id' })

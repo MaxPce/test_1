@@ -1,3 +1,4 @@
+// src/results/results.controller.ts
 import {
   Controller,
   Get,
@@ -9,6 +10,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ResultsService } from './results.service';
 import {
@@ -17,6 +19,7 @@ import {
   CreateAttemptDto,
   PublishMatchResultDto,
   UpdateLiveScoreDto,
+  CreateTimeResultDto,
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -130,5 +133,34 @@ export class ResultsController {
   @Public()
   getMatchResults(@Param('matchId', ParseIntPipe) matchId: number) {
     return this.resultsService.getMatchResults(matchId);
+  }
+
+  // ==================== SWIMMING TIME RESULTS ====================
+
+  @Post('time')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async createTimeResult(
+    @Body() dto: CreateTimeResultDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return await this.resultsService.createTimeResult(dto, user.userId);
+  }
+
+  @Get('swimming/:eventCategoryId')
+  @Public()
+  async getSwimmingResults(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+  ) {
+    return await this.resultsService.getSwimmingResults(eventCategoryId);
+  }
+
+  @Post('swimming/:eventCategoryId/recalculate')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async recalculatePositions(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+  ) {
+    return await this.resultsService.recalculateSwimmingPositions(
+      eventCategoryId,
+    );
   }
 }
