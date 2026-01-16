@@ -12,7 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { CompetitionsService } from './competitions.service';
-import { TableTennisService } from './table-tennis.service'; // ✅ Agregar
+import { TableTennisService } from './table-tennis.service';
 import {
   CreatePhaseDto,
   UpdatePhaseDto,
@@ -21,8 +21,8 @@ import {
   CreateParticipationDto,
   GenerateBracketDto,
   InitializeRoundRobinDto,
-  SetMatchLineupDto, // ✅ Agregar
-  UpdateMatchGameDto, // ✅ Agregar
+  SetMatchLineupDto,
+  UpdateMatchGameDto,
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -36,7 +36,7 @@ import { MatchStatus } from '../common/enums';
 export class CompetitionsController {
   constructor(
     private readonly competitionsService: CompetitionsService,
-    private readonly tableTennisService: TableTennisService, // ✅ Agregar
+    private readonly tableTennisService: TableTennisService,
   ) {}
 
   // ==================== PHASES ====================
@@ -72,7 +72,7 @@ export class CompetitionsController {
   }
 
   @Delete('phases/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR) // ✅ Cambiado: antes solo ADMIN
   removePhase(@Param('id', ParseIntPipe) id: number) {
     return this.competitionsService.removePhase(id);
   }
@@ -111,7 +111,7 @@ export class CompetitionsController {
   }
 
   @Delete('matches/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR) // ✅ Cambiado: antes solo ADMIN
   removeMatch(@Param('id', ParseIntPipe) id: number) {
     return this.competitionsService.removeMatch(id);
   }
@@ -169,6 +169,8 @@ export class CompetitionsController {
   updateStandings(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return this.competitionsService.updateStandings(phaseId);
   }
+
+  // ==================== BEST OF 3 ====================
 
   @Post('phases/:phaseId/initialize-best-of-3')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -274,5 +276,22 @@ export class CompetitionsController {
   @Public()
   async calculateMatchResult(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.calculateMatchResult(matchId);
+  }
+
+  // ==================== TENIS DE MESA - FINALIZE MATCH ====================
+
+  /**
+   * Finalizar match manualmente (marcar como finalizado)
+   * PATCH /competitions/matches/:id/finalize
+   */
+  @Patch('matches/:id/finalize')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async finalizeMatch(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.finalizeMatch(matchId);
+  }
+  @Patch('matches/:id/reopen')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async reopenMatch(@Param('id', ParseIntPipe) matchId: number) {
+    return this.tableTennisService.reopenMatch(matchId);
   }
 }

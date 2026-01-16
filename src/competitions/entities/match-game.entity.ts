@@ -15,6 +15,13 @@ export enum GameStatus {
   COMPLETED = 'completed',
 }
 
+export interface GameSet {
+  setNumber: number;
+  player1Score: number;
+  player2Score: number;
+  winnerId?: number | null;
+}
+
 @Entity('match_games')
 @Index(['matchId'])
 @Index(['player1Id'])
@@ -38,6 +45,14 @@ export class MatchGame {
 
   @Column({ name: 'player2_id', comment: 'Atleta del equipo 2' })
   player2Id: number;
+
+  @Column({
+    name: 'sets',
+    type: 'json',
+    nullable: true,
+    comment: 'Detalle de sets jugados (hasta 5)',
+  })
+  sets: GameSet[] | null;
 
   @Column({
     name: 'score1',

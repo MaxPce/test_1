@@ -122,6 +122,9 @@ export class CompetitionsService {
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'teamMembers')
+      .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
+      .leftJoinAndSelect('memberAthlete.institution', 'memberInstitution')
       .leftJoinAndSelect('match.winner', 'winner');
 
     if (phaseId) {
@@ -145,6 +148,7 @@ export class CompetitionsService {
         'phase',
         'phase.eventCategory',
         'phase.eventCategory.category',
+        'phase.eventCategory.category.sport',
         'participations',
         'participations.registration',
         'participations.registration.athlete',
@@ -153,6 +157,7 @@ export class CompetitionsService {
         'participations.registration.team.institution',
         'participations.registration.team.members',
         'participations.registration.team.members.athlete',
+        'participations.registration.team.members.athlete.institution',
         'winner',
       ],
     });

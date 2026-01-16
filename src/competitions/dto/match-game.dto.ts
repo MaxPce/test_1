@@ -1,5 +1,34 @@
-import { IsNumber, IsOptional, IsEnum, Min } from 'class-validator';
+import {
+  IsNumber,
+  IsOptional,
+  IsEnum,
+  Min,
+  IsArray,
+  ValidateNested,
+  Max,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { GameStatus } from '../entities/match-game.entity';
+
+// ✅ AGREGAR: DTO para sets (solo para tenis de mesa)
+export class GameSetDto {
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  setNumber: number;
+
+  @IsNumber()
+  @Min(0)
+  player1Score: number;
+
+  @IsNumber()
+  @Min(0)
+  player2Score: number;
+
+  @IsOptional()
+  @IsNumber()
+  winnerId?: number | null;
+}
 
 export class CreateMatchGameDto {
   @IsNumber()
@@ -17,6 +46,14 @@ export class CreateMatchGameDto {
 }
 
 export class UpdateMatchGameDto {
+  // ✅ AGREGAR: Campo opcional para sets (solo tenis de mesa)
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => GameSetDto)
+  sets?: GameSetDto[];
+
+  // Mantener campos existentes para compatibilidad con otros deportes
   @IsOptional()
   @IsNumber()
   @Min(0)
