@@ -45,7 +45,7 @@ export class Result {
   isWinner: boolean | null;
 
   @Column({
-    type: 'time', // ✅ Ya estaba especificado
+    type: 'time',
     name: 'time_value',
     nullable: true,
     comment: 'Para deportes cronometrados',
@@ -63,7 +63,7 @@ export class Result {
   totalValue: number | null;
 
   @Column({
-    type: 'text', // ✅ Ya estaba especificado
+    type: 'text',
     nullable: true,
   })
   notes: string | null;

@@ -30,6 +30,10 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { MatchStatus } from '../common/enums';
+import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
+import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
+import { UpdateKyoruguiScoreDto } from './dto/update-kyorugui-score.dto';
+import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,6 +41,8 @@ export class CompetitionsController {
   constructor(
     private readonly competitionsService: CompetitionsService,
     private readonly tableTennisService: TableTennisService,
+    private readonly taekwondoKyoruguiService: TaekwondoKyoruguiService,
+    private readonly taekwondoPoomsaeService: TaekwondoPoomsaeService,
   ) {}
 
   // ==================== PHASES ====================
@@ -293,5 +299,58 @@ export class CompetitionsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async reopenMatch(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.reopenMatch(matchId);
+  }
+
+  // ===== KYORUGUI ENDPOINTS =====
+
+  @Patch('matches/:matchId/kyorugui-score')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async updateKyoruguiScore(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() updateDto: UpdateKyoruguiScoreDto,
+  ) {
+    return this.taekwondoKyoruguiService.updateMatchScore(matchId, updateDto);
+  }
+
+  @Get('matches/:matchId/kyorugui-details')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async getKyoruguiMatchDetails(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ) {
+    return this.taekwondoKyoruguiService.getMatchDetails(matchId);
+  }
+
+  @Get('phases/:phaseId/kyorugui-bracket')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async getKyoruguiBracket(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.taekwondoKyoruguiService.getBracketWithScores(phaseId);
+  }
+
+  // ===== POOMSAE ENDPOINTS =====
+
+  @Patch('participations/:participationId/poomsae-score')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async updatePoomsaeScore(
+    @Param('participationId', ParseIntPipe) participationId: number,
+    @Body() updateDto: UpdatePoomsaeScoreDto,
+  ) {
+    return this.taekwondoPoomsaeService.updatePoomsaeScore(
+      participationId,
+      updateDto,
+    );
+  }
+
+  @Get('phases/:phaseId/poomsae-table')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async getPoomsaeScoreTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.taekwondoPoomsaeService.getPhaseScores(phaseId);
+  }
+
+  @Get('participations/:participationId/poomsae-score')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async getPoomsaeScore(
+    @Param('participationId', ParseIntPipe) participationId: number,
+  ) {
+    return this.taekwondoPoomsaeService.getParticipationScore(participationId);
   }
 }

@@ -58,6 +58,20 @@ export class Match {
   })
   platformNumber: number;
 
+  @Column({
+    name: 'participant1_score',
+    nullable: true,
+    comment: 'Puntaje del participante 1',
+  })
+  participant1Score?: number;
+
+  @Column({
+    name: 'participant2_score',
+    nullable: true,
+    comment: 'Puntaje del participante 2',
+  })
+  participant2Score?: number;
+
   // ======= NUEVOS CAMPOS PARA MEJOR DE 3 =======
 
   @Column({

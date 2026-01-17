@@ -1,31 +1,43 @@
 // src/competitions/competitions.module.ts
+
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { CompetitionsService } from './competitions.service';
 import { CompetitionsController } from './competitions.controller';
-import {
-  Phase,
-  Match,
-  Participation,
-  Standing,
-  MatchLineup,
-  MatchGame,
-} from './entities';
+import { CompetitionsService } from './competitions.service';
 import { TableTennisService } from './table-tennis.service';
+import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
+import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
+import { TaekwondoPoomsaeController } from './taekwondo-poomsae.controller'; // ✅ Ya lo tienes
+
+import {
+  Match,
+  MatchGame,
+  MatchLineup,
+  Participation,
+  Phase,
+  Standing,
+  IndividualScore,
+} from './entities';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      Phase,
       Match,
-      Participation,
-      Standing,
-      MatchLineup,
       MatchGame,
+      MatchLineup,
+      Participation,
+      Phase,
+      Standing,
+      IndividualScore,
     ]),
   ],
-  controllers: [CompetitionsController],
-  providers: [CompetitionsService, TableTennisService],
-  exports: [CompetitionsService, TableTennisService],
+  controllers: [CompetitionsController, TaekwondoPoomsaeController],
+  providers: [
+    CompetitionsService,
+    TableTennisService,
+    TaekwondoKyoruguiService,
+    TaekwondoPoomsaeService,
+  ],
+  exports: [CompetitionsService],
 })
 export class CompetitionsModule {}

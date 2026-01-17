@@ -34,8 +34,43 @@ export class CompetitionsService {
   // ==================== PHASES ====================
 
   async createPhase(createDto: CreatePhaseDto): Promise<Phase> {
-    const phase = this.phaseRepository.create(createDto);
-    return this.phaseRepository.save(phase);
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Crear la fase
+      const phase = this.phaseRepository.create(createDto);
+      const savedPhase = await queryRunner.manager.save(phase);
+
+      // ✅ NUEVO: Cargar la fase con sus relaciones para detectar Poomsae
+      const phaseWithRelations = await queryRunner.manager.findOne(Phase, {
+        where: { phaseId: savedPhase.phaseId },
+        relations: [
+          'eventCategory',
+          'eventCategory.category',
+          'eventCategory.category.sport',
+          'eventCategory.registrations',
+          'eventCategory.registrations.athlete',
+          'eventCategory.registrations.athlete.institution',
+        ],
+      });
+
+      // ✅ NUEVO: Si es Poomsae, crear participaciones automáticamente
+      if (phaseWithRelations && this.isPoomsaePhase(phaseWithRelations)) {
+        await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
+      }
+
+      await queryRunner.commitTransaction();
+
+      // Retornar la fase completa
+      return this.findOnePhase(savedPhase.phaseId);
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async findAllPhases(eventCategoryId?: number): Promise<Phase[]> {
@@ -649,5 +684,62 @@ export class CompetitionsService {
       victorias,
       serieCompleta: false,
     };
+  }
+
+  // ==================== TAEKWONDO POOMSAE ====================
+
+  /**
+   * Detectar si una fase es de Poomsae basándose en el nombre de la categoría
+   */
+  private isPoomsaePhase(phase: Phase): boolean {
+    const categoryName =
+      phase.eventCategory?.category?.name?.toLowerCase() || '';
+
+    return (
+      categoryName.includes('poomsae') ||
+      categoryName.includes('formas') ||
+      categoryName.includes('forma')
+    );
+  }
+
+  /**
+   * Crear participaciones para todos los atletas inscritos en Poomsae
+   */
+  private async createPoomsaeParticipations(
+    phase: Phase,
+    queryRunner: any,
+  ): Promise<void> {
+    const registrations = phase.eventCategory?.registrations || [];
+
+    if (registrations.length === 0) {
+      console.log(
+        `⚠️  Fase ${phase.phaseId} de Poomsae creada sin atletas inscritos`,
+      );
+      return;
+    }
+
+    // Crear un match único para la fase de Poomsae
+    const match = queryRunner.manager.create(Match, {
+      phaseId: phase.phaseId,
+      matchNumber: 1,
+      round: 'Final',
+      status: MatchStatus.EN_CURSO,
+    });
+
+    const savedMatch = await queryRunner.manager.save(match);
+
+    // Crear una participación por cada atleta inscrito
+    for (const registration of registrations) {
+      const participation = queryRunner.manager.create(Participation, {
+        matchId: savedMatch.matchId,
+        registrationId: registration.registrationId,
+      });
+
+      await queryRunner.manager.save(participation);
+    }
+
+    console.log(
+      `✅ Creadas ${registrations.length} participaciones para Poomsae en fase ${phase.phaseId}`,
+    );
   }
 }
