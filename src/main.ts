@@ -1,5 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express'; // ✅ AGREGAR
+import { join } from 'path'; // ✅ AGREGAR
 import { AppModule } from './app.module';
 
 function getCorsOrigins() {
@@ -11,11 +13,18 @@ function getCorsOrigins() {
 }
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // ✅ CAMBIAR: Agregar tipo NestExpressApplication
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const origins = getCorsOrigins();
 
-  // ✨ AGREGAR ESTA LÍNEA ✨
+  // Prefijo global para rutas API
   app.setGlobalPrefix('api');
+
+  // ✅ AGREGAR: Servir archivos estáticos ANTES del prefijo global
+  // Los archivos estáticos NO tendrán el prefijo 'api'
+  app.useStaticAssets(join(__dirname, '..', 'uploads'), {
+    prefix: '/uploads/',
+  });
 
   app.useGlobalPipes(
     new ValidationPipe({
@@ -40,7 +49,6 @@ async function bootstrap() {
 
   await app.listen(3000);
 
-  // Opcional: agregar logs
-  console.log('🚀 Server running on http://localhost:3000/api');
+  console.log('Server running on http://localhost:3000');
 }
 bootstrap();

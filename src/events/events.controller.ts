@@ -7,6 +7,9 @@ import {
   Param,
   Delete,
   Query,
+  UseInterceptors,      
+  UploadedFile,         
+  BadRequestException,
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
@@ -19,16 +22,18 @@ import {
   CreateRegistrationDto,
   BulkRegisterDto,
 } from './dto';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UploadService, multerConfig } from '../common/services/upload.service';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EventsController {
-  constructor(private readonly eventsService: EventsService) {}
+  constructor(private readonly eventsService: EventsService, private readonly uploadService: UploadService,) {}
 
   // ==================== EVENTS ====================
 
@@ -145,5 +150,27 @@ export class EventsController {
   @Roles(UserRole.ADMIN)
   removeEvent(@Param('id', ParseIntPipe) id: number) {
     return this.eventsService.removeEvent(id);
+  }
+  @Post(':id/upload-logo')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @UseInterceptors(FileInterceptor('file', multerConfig('events')))
+  async uploadEventLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const logoUrl = this.uploadService.getFileUrl(file.filename, 'events');
+
+    // Actualizar el evento con la nueva URL
+    await this.eventsService.updateEvent(id, { logoUrl });
+
+    return {
+      message: 'Logo subido exitosamente',
+      logoUrl,
+      filename: file.filename,
+    };
   }
 }

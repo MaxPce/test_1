@@ -9,7 +9,11 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express'; 
 import { InstitutionsService } from './institutions.service';
 import {
   CreateInstitutionDto,
@@ -25,11 +29,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UploadService, multerConfig } from '../common/services/upload.service'; // ✅ AGREGAR
 
 @Controller('institutions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InstitutionsController {
-  constructor(private readonly institutionsService: InstitutionsService) {}
+  constructor(
+    private readonly institutionsService: InstitutionsService,
+    private readonly uploadService: UploadService, // ✅ AGREGAR
+  ) {}
 
   // ==================== INSTITUTIONS ====================
 
@@ -81,6 +89,29 @@ export class InstitutionsController {
   @Roles(UserRole.ADMIN)
   removeAthlete(@Param('id', ParseIntPipe) id: number) {
     return this.institutionsService.removeAthlete(id);
+  }
+
+  @Post('athletes/:id/upload-photo')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @UseInterceptors(FileInterceptor('file', multerConfig('athletes')))
+  async uploadAthletePhoto(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const photoUrl = this.uploadService.getFileUrl(file.filename, 'athletes');
+
+    // Actualizar el atleta con la nueva URL
+    await this.institutionsService.updateAthlete(id, { photoUrl });
+
+    return {
+      message: 'Foto subida exitosamente',
+      photoUrl,
+      filename: file.filename,
+    };
   }
 
   // ==================== TEAMS (ANTES DE :id) ====================
@@ -183,5 +214,27 @@ export class InstitutionsController {
   @Roles(UserRole.ADMIN)
   removeInstitution(@Param('id', ParseIntPipe) id: number) {
     return this.institutionsService.removeInstitution(id);
+  }
+
+  @Post(':id/upload-logo')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @UseInterceptors(FileInterceptor('file', multerConfig('institutions')))
+  async uploadInstitutionLogo(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const logoUrl = this.uploadService.getFileUrl(file.filename, 'institutions');
+
+    await this.institutionsService.updateInstitution(id, { logoUrl });
+
+    return {
+      message: 'Logo subido exitosamente',
+      logoUrl,
+      filename: file.filename,
+    };
   }
 }
