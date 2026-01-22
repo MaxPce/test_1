@@ -9,6 +9,8 @@ import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
 import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
 import { TaekwondoPoomsaeController } from './taekwondo-poomsae.controller';
 import { TaekwondoKyoruguiController } from './taekwondo-kyorugui.controller';
+import { JudoController } from './judo.controller';
+import { JudoService } from './judo.service';
 
 import {
   Match,
@@ -36,12 +38,14 @@ import {
     CompetitionsController,
     TaekwondoPoomsaeController,
     TaekwondoKyoruguiController,
+    JudoController,
   ],
   providers: [
     CompetitionsService,
     TableTennisService,
     TaekwondoKyoruguiService,
     TaekwondoPoomsaeService,
+    JudoService,
   ],
   exports: [CompetitionsService],
 })
