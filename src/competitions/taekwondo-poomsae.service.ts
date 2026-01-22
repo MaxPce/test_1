@@ -80,7 +80,7 @@ export class TaekwondoPoomsaeService {
       throw new NotFoundException(`Phase ${phaseId} no encontrada`);
     }
 
-    // ✅ Obtener participaciones (ya deberían existir si se creó la fase correctamente)
+    // Obtener participaciones
     const participations = phase.matches
       .flatMap((match) => match.participations || [])
       .filter((p) => p !== null);
@@ -100,23 +100,20 @@ export class TaekwondoPoomsaeService {
         (s) => s.participationId === participation.participationId,
       );
       const athlete = participation.registration?.athlete;
+      const institution = athlete?.institution;
 
       return {
         participationId: participation.participationId,
         athleteName: athlete?.name || 'Sin nombre',
-        institution: athlete?.institution?.name || 'Sin institución',
+        athletePhoto: athlete?.photoUrl || null,
+        institution: institution?.name || 'Sin institución',
+        institutionLogo: institution?.logoUrl || null,
         gender: athlete?.gender || '-',
         accuracy: score?.accuracy || null,
         presentation: score?.presentation || null,
         total: score?.total || null,
         rank: score?.rank || null,
       };
-    });
-
-    results.sort((a, b) => {
-      if (a.total === null) return 1;
-      if (b.total === null) return -1;
-      return b.total - a.total;
     });
 
     return results;
