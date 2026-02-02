@@ -72,8 +72,7 @@ export class Match {
   })
   participant2Score?: number;
 
-  // ======= NUEVOS CAMPOS PARA MEJOR DE 3 =======
-
+  // ======= CAMPOS PARA MEJOR DE 3 =======
   @Column({
     name: 'series_id',
     nullable: true,
@@ -94,8 +93,6 @@ export class Match {
     comment: 'Ganador de toda la serie (se actualiza al finalizar)',
   })
   seriesWinnerRegistrationId: number;
-
-  // ============================================
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

@@ -1,4 +1,4 @@
-import { IsNumber, IsArray, IsOptional, IsEnum } from 'class-validator';
+import { IsNumber, IsArray, IsOptional, IsBoolean } from 'class-validator';
 
 export class GenerateBracketDto {
   @IsNumber()
@@ -9,6 +9,6 @@ export class GenerateBracketDto {
   registrationIds: number[];
 
   @IsOptional()
-  @IsEnum(['single_elimination', 'double_elimination'])
-  bracketType?: string;
+  @IsBoolean()
+  includeThirdPlace?: boolean;
 }

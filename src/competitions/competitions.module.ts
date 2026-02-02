@@ -11,6 +11,7 @@ import { TaekwondoPoomsaeController } from './taekwondo-poomsae.controller';
 import { TaekwondoKyoruguiController } from './taekwondo-kyorugui.controller';
 import { JudoController } from './judo.controller';
 import { JudoService } from './judo.service';
+import { BracketService } from './bracket.service';
 
 import {
   Match,
@@ -46,7 +47,8 @@ import {
     TaekwondoKyoruguiService,
     TaekwondoPoomsaeService,
     JudoService,
+    BracketService,
   ],
-  exports: [CompetitionsService],
+  exports: [CompetitionsService, BracketService],
 })
 export class CompetitionsModule {}

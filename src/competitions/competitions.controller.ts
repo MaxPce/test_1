@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { CompetitionsService } from './competitions.service';
 import { TableTennisService } from './table-tennis.service';
+import { BracketService } from './bracket.service';
 import {
   CreatePhaseDto,
   UpdatePhaseDto,
@@ -23,6 +24,7 @@ import {
   InitializeRoundRobinDto,
   SetMatchLineupDto,
   UpdateMatchGameDto,
+  AdvanceWinnerDto,
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -43,6 +45,7 @@ export class CompetitionsController {
     private readonly tableTennisService: TableTennisService,
     private readonly taekwondoKyoruguiService: TaekwondoKyoruguiService,
     private readonly taekwondoPoomsaeService: TaekwondoPoomsaeService,
+    private readonly bracketService: BracketService,
   ) {}
 
   // ==================== PHASES ====================
@@ -352,5 +355,55 @@ export class CompetitionsController {
     @Param('participationId', ParseIntPipe) participationId: number,
   ) {
     return this.taekwondoPoomsaeService.getParticipationScore(participationId);
+  }
+  // ==================== ENDPOINTS DE BRACKET ====================
+
+  /**
+   * Generar bracket completo con tercer lugar
+   */
+  @Post('brackets/generate-complete')
+  async generateCompleteBracket(@Body() dto: GenerateBracketDto) {
+    return this.bracketService.generateCompleteBracket(dto);
+  }
+
+  /**
+   * Avanzar ganador automáticamente
+   */
+  @Post('matches/advance-winner')
+  async advanceWinner(@Body() dto: AdvanceWinnerDto) {
+    return this.bracketService.advanceWinner(dto);
+  }
+
+  /**
+   * Obtener estructura completa del bracket
+   */
+  @Get('brackets/:phaseId/structure')
+  async getBracketStructure(@Param('phaseId') phaseId: string) {
+    return this.bracketService.getBracketStructure(+phaseId);
+  }
+
+  /**
+   * Verificar si el bracket está completo
+   */
+  @Get('brackets/:phaseId/is-complete')
+  async isBracketComplete(@Param('phaseId') phaseId: string) {
+    const isComplete = await this.bracketService.isBracketComplete(+phaseId);
+    return { phaseId: +phaseId, isComplete };
+  }
+
+  /**
+   * Obtener campeón del bracket
+   */
+  @Get('brackets/:phaseId/champion')
+  async getChampion(@Param('phaseId') phaseId: string) {
+    return this.bracketService.getChampion(+phaseId);
+  }
+
+  /**
+   * Obtener tercer lugar
+   */
+  @Get('brackets/:phaseId/third-place')
+  async getThirdPlace(@Param('phaseId') phaseId: string) {
+    return this.bracketService.getThirdPlace(+phaseId);
   }
 }
