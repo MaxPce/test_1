@@ -56,8 +56,12 @@ export class CompetitionsService {
         ],
       });
 
-      // ✅ NUEVO: Si es Poomsae, crear participaciones automáticamente
-      if (phaseWithRelations && this.isPoomsaePhase(phaseWithRelations)) {
+      //  Si es Poomsae Y la fase es de GRUPO, crear participaciones automáticamente
+      if (
+        phaseWithRelations &&
+        this.isPoomsaePhase(phaseWithRelations) &&
+        phaseWithRelations.type === PhaseType.GRUPO
+      ) {
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
       }
 
