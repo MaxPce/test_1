@@ -1,5 +1,3 @@
-// src/competitions/competitions.module.ts
-
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CompetitionsController } from './competitions.controller';
@@ -49,6 +47,6 @@ import {
     JudoService,
     BracketService,
   ],
-  exports: [CompetitionsService, BracketService],
+  exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService],
 })
 export class CompetitionsModule {}
