@@ -1,42 +1,89 @@
-// src/competitions/taekwondo-kyorugui.controller.ts
-
 import {
   Controller,
   Get,
   Patch,
+  Post,
+  Delete,
   Param,
   Body,
   ParseIntPipe,
 } from '@nestjs/common';
 import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
-import { UpdateKyoruguiScoreDto } from './dto/update-kyorugui-score.dto';
+import { 
+  UpdateKyoruguiRoundsDto, 
+  UpdateSingleRoundDto 
+} from './dto/update-kyorugui-round.dto';
 
 @Controller('competitions/taekwondo/kyorugui')
 export class TaekwondoKyoruguiController {
   constructor(private readonly kyoruguiService: TaekwondoKyoruguiService) {}
 
-  // PATCH /competitions/taekwondo/kyorugui/matches/:matchId/score
-  @Patch('matches/:matchId/score')
-  async updateMatchScore(
-    @Param('matchId', ParseIntPipe) matchId: number,
-    @Body() updateDto: UpdateKyoruguiScoreDto,
-  ) {
-    console.log('🥋 Actualizando score de Kyorugui:', {
-      matchId,
-      participant1Score: updateDto.participant1Score,
-      participant2Score: updateDto.participant2Score,
-    });
+  // ========== NUEVOS ENDPOINTS PARA ROUNDS ==========
 
-    return await this.kyoruguiService.updateMatchScore(matchId, updateDto);
+  /**
+   * POST /competitions/taekwondo/kyorugui/matches/:matchId/rounds/single
+   * Actualizar un solo round
+   */
+  @Post('matches/:matchId/rounds/single')
+  async updateSingleRound(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() dto: UpdateSingleRoundDto,
+  ) {
+
+    return await this.kyoruguiService.updateSingleRound(matchId, dto);
   }
 
-  // GET /competitions/taekwondo/kyorugui/phases/:phaseId/bracket
+  /**
+   * POST /competitions/taekwondo/kyorugui/matches/:matchId/rounds
+   * Actualizar múltiples rounds a la vez
+   */
+  @Post('matches/:matchId/rounds')
+  async updateRounds(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() dto: UpdateKyoruguiRoundsDto,
+  ) {
+    return await this.kyoruguiService.updateRounds(matchId, dto);
+  }
+
+  /**
+   * GET /competitions/taekwondo/kyorugui/matches/:matchId/rounds
+   * Obtener todos los rounds de un match
+   */
+  @Get('matches/:matchId/rounds')
+  async getMatchRounds(@Param('matchId', ParseIntPipe) matchId: number) {
+    return await this.kyoruguiService.getMatchRounds(matchId);
+  }
+
+  /**
+   * DELETE /competitions/taekwondo/kyorugui/matches/:matchId/rounds/:roundNumber
+   * Eliminar un round específico
+   */
+  @Delete('matches/:matchId/rounds/:roundNumber')
+  async deleteRound(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Param('roundNumber', ParseIntPipe) roundNumber: number,
+  ) {
+    await this.kyoruguiService.deleteRound(matchId, roundNumber);
+    return { 
+      message: `Round ${roundNumber} eliminado exitosamente` 
+    };
+  }
+
+  // ========== ENDPOINTS EXISTENTES (Mantener compatibilidad) ==========
+
+  /**
+   * GET /competitions/taekwondo/kyorugui/phases/:phaseId/bracket
+   * Obtener bracket con scores
+   */
   @Get('phases/:phaseId/bracket')
   async getBracketWithScores(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return await this.kyoruguiService.getBracketWithScores(phaseId);
   }
 
-  // GET /competitions/taekwondo/kyorugui/matches/:matchId
+  /**
+   * GET /competitions/taekwondo/kyorugui/matches/:matchId
+   * Obtener detalles del match (ahora incluye rounds)
+   */
   @Get('matches/:matchId')
   async getMatchDetails(@Param('matchId', ParseIntPipe) matchId: number) {
     return await this.kyoruguiService.getMatchDetails(matchId);

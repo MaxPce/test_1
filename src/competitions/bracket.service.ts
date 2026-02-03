@@ -308,8 +308,8 @@ export class BracketService {
   }
 
   /**
-   * Avanza un ganador al siguiente match
-   */
+ * Avanza un ganador al siguiente match
+ */
   private async advanceToNextMatch(
     queryRunner: any,
     currentMatch: Match,
@@ -327,32 +327,49 @@ export class BracketService {
 
     if (!nextMatch) return null;
 
-    // Si el ganador cambió, eliminar al antiguo del siguiente match
-    if (oldWinnerId && oldWinnerId !== winnerId) {
-      const oldParticipation = nextMatch.participations.find(
-        (p) => p.registrationId === oldWinnerId,
-      );
+    // ✅ CORRECCIÓN: Obtener TODOS los participantes del match actual
+    const currentMatchParticipants = await queryRunner.manager.find(Participation, {
+      where: { matchId: currentMatch.matchId },
+    });
 
-      if (oldParticipation) {
-        await queryRunner.manager.delete(Participation, {
-          participationId: oldParticipation.participationId,
-        });
+    const currentMatchRegistrationIds = currentMatchParticipants.map(
+      (p) => p.registrationId,
+    );
 
-        console.log(
-          `Eliminado participante ${oldWinnerId} del match ${nextMatch.matchId}`,
+    // ✅ ELIMINAR TODOS los participantes del match actual que estén en el siguiente match
+    // Esto previene la sobreposición de participantes
+    for (const regId of currentMatchRegistrationIds) {
+      if (regId) {
+        const existingParticipation = nextMatch.participations.find(
+          (p) => p.registrationId === regId,
         );
+
+        if (existingParticipation) {
+          await queryRunner.manager.delete(Participation, {
+            participationId: existingParticipation.participationId,
+          });
+
+          console.log(
+            `🗑️ Eliminado participante ${regId} del match ${nextMatch.matchId} (limpieza preventiva)`,
+          );
+        }
       }
     }
 
-    // Verificar si el nuevo ganador ya está participando
-    const existingParticipation = nextMatch.participations.find(
+    // Recargar participaciones después de la limpieza
+    const refreshedParticipations = await queryRunner.manager.find(Participation, {
+      where: { matchId: nextMatch.matchId },
+    });
+
+    // ✅ Verificar si el nuevo ganador ya está participando
+    const winnerAlreadyExists = refreshedParticipations.some(
       (p) => p.registrationId === winnerId,
     );
 
-    if (!existingParticipation) {
+    if (!winnerAlreadyExists) {
       // Determinar corner basado en cuántos participantes hay
       const corner =
-        nextMatch.participations.length === 0 ? Corner.BLUE : Corner.WHITE;
+        refreshedParticipations.length === 0 ? Corner.BLUE : Corner.WHITE;
 
       await queryRunner.manager.save(Participation, {
         matchId: nextMatch.matchId,
@@ -360,11 +377,29 @@ export class BracketService {
         corner,
       });
 
-      console.log(`Agregado ganador ${winnerId} al match ${nextMatch.matchId}`);
+      console.log(
+        `✅ Agregado ganador ${winnerId} al match ${nextMatch.matchId} (corner: ${corner})`,
+      );
+    } else {
+      console.log(
+        `ℹ️ Ganador ${winnerId} ya está en el match ${nextMatch.matchId}`,
+      );
+    }
+
+    // Limpiar el ganador del match de destino si había uno previo
+    if (nextMatch.winnerRegistrationId) {
+      nextMatch.winnerRegistrationId = undefined;
+      nextMatch.status = MatchStatus.PROGRAMADO;
+      await queryRunner.manager.save(nextMatch);
+      
+      console.log(
+        `🔄 Reseteado estado del match ${nextMatch.matchId} (había ganador previo)`,
+      );
     }
 
     return nextMatch;
   }
+
 
   /**
    * Avanza automáticamente un ganador (usado para BYEs)

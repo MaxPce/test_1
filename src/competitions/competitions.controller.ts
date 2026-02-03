@@ -304,30 +304,7 @@ export class CompetitionsController {
     return this.tableTennisService.reopenMatch(matchId);
   }
 
-  // ===== KYORUGUI ENDPOINTS =====
-
-  @Patch('matches/:matchId/kyorugui-score')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async updateKyoruguiScore(
-    @Param('matchId', ParseIntPipe) matchId: number,
-    @Body() updateDto: UpdateKyoruguiScoreDto,
-  ) {
-    return this.taekwondoKyoruguiService.updateMatchScore(matchId, updateDto);
-  }
-
-  @Get('matches/:matchId/kyorugui-details')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async getKyoruguiMatchDetails(
-    @Param('matchId', ParseIntPipe) matchId: number,
-  ) {
-    return this.taekwondoKyoruguiService.getMatchDetails(matchId);
-  }
-
-  @Get('phases/:phaseId/kyorugui-bracket')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async getKyoruguiBracket(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.taekwondoKyoruguiService.getBracketWithScores(phaseId);
-  }
+  
 
   // ===== POOMSAE ENDPOINTS =====
 
