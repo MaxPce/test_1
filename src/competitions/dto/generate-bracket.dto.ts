@@ -4,11 +4,16 @@ export class GenerateBracketDto {
   @IsNumber()
   phaseId: number;
 
+  @IsOptional()
   @IsArray()
   @IsNumber({}, { each: true })
-  registrationIds: number[];
+  registrationIds?: number[];
 
   @IsOptional()
   @IsBoolean()
   includeThirdPlace?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  bracketSize?: number;
 }

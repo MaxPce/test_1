@@ -34,21 +34,33 @@ export class BracketService {
     await queryRunner.startTransaction();
 
     try {
-      const registrations = dto.registrationIds;
-      const numParticipants = registrations.length;
+      const registrations = dto.registrationIds || [];
+      const isEmptyBracket = registrations.length === 0;
 
-      if (numParticipants < 2) {
-        throw new BadRequestException('Se necesitan al menos 2 participantes');
+      let numParticipants: number;
+
+      if (isEmptyBracket) {
+        if (!dto.bracketSize) {
+          throw new BadRequestException(
+            'Para bracket vacío, especifique bracketSize (8, 16, 32)',
+          );
+        }
+        numParticipants = dto.bracketSize;
+      } else {
+        numParticipants = registrations.length;
+        if (numParticipants < 2) {
+          throw new BadRequestException(
+            'Se necesitan al menos 2 participantes',
+          );
+        }
       }
 
-      // Calcular estructura del bracket
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const totalRounds = Math.log2(nextPowerOf2);
 
       const mainBracket: Match[] = [];
       let currentMatchNumber = 1;
 
-      // Generar todas las rondas
       for (let round = 0; round < totalRounds; round++) {
         const matchesInRound = nextPowerOf2 / Math.pow(2, round + 1);
         const roundName = this.getRoundName(matchesInRound);
@@ -64,8 +76,7 @@ export class BracketService {
           const savedMatch = await queryRunner.manager.save(match);
           mainBracket.push(savedMatch);
 
-          // Solo asignar participantes en la PRIMERA ronda
-          if (round === 0) {
+          if (round === 0 && !isEmptyBracket) {
             await this.assignFirstRoundParticipants(
               queryRunner,
               savedMatch,
@@ -79,13 +90,12 @@ export class BracketService {
         }
       }
 
-      // Generar match de tercer lugar si está habilitado
       let thirdPlaceMatch: Match | null = null;
 
       if (dto.includeThirdPlace) {
         thirdPlaceMatch = queryRunner.manager.create(Match, {
           phaseId: dto.phaseId,
-          matchNumber: 9999, // Número especial para tercer lugar
+          matchNumber: 9999,
           round: 'tercer_lugar',
           status: MatchStatus.PROGRAMADO,
         });
@@ -95,13 +105,13 @@ export class BracketService {
 
       await queryRunner.commitTransaction();
 
-      // Calcular información del bracket
       const bracketInfo = {
-        totalParticipants: numParticipants,
+        totalParticipants: isEmptyBracket ? 0 : numParticipants,
         totalSlots: nextPowerOf2,
         totalRounds: totalRounds,
         hasThirdPlace: dto.includeThirdPlace,
-        byeCount: nextPowerOf2 - numParticipants,
+        byeCount: isEmptyBracket ? 0 : nextPowerOf2 - numParticipants,
+        isEmpty: isEmptyBracket,
       };
 
       return {
@@ -203,6 +213,11 @@ export class BracketService {
         );
       }
 
+      // Guardar el antiguo ganador ANTES de actualizar
+      const oldWinnerId = match.winnerRegistrationId;
+      const winnerChanged =
+        oldWinnerId && oldWinnerId !== dto.winnerRegistrationId;
+
       // Actualizar el match actual
       match.winnerRegistrationId = dto.winnerRegistrationId;
       match.status = MatchStatus.FINALIZADO;
@@ -238,9 +253,7 @@ export class BracketService {
       });
 
       let nextMatch: Match | null = null;
-
       let thirdPlaceMatch: Match | null = null;
-
       let message = 'Match finalizado correctamente';
 
       // Calcular el siguiente match
@@ -256,6 +269,7 @@ export class BracketService {
           match,
           dto.winnerRegistrationId,
           nextMatchNumber,
+          winnerChanged ? oldWinnerId : undefined,
         );
 
         if (nextMatch) {
@@ -301,6 +315,7 @@ export class BracketService {
     currentMatch: Match,
     winnerId: number,
     nextMatchNumber: number,
+    oldWinnerId?: number,
   ): Promise<Match | null> {
     const nextMatch = await queryRunner.manager.findOne(Match, {
       where: {
@@ -312,7 +327,24 @@ export class BracketService {
 
     if (!nextMatch) return null;
 
-    // Verificar si ya está participando
+    // Si el ganador cambió, eliminar al antiguo del siguiente match
+    if (oldWinnerId && oldWinnerId !== winnerId) {
+      const oldParticipation = nextMatch.participations.find(
+        (p) => p.registrationId === oldWinnerId,
+      );
+
+      if (oldParticipation) {
+        await queryRunner.manager.delete(Participation, {
+          participationId: oldParticipation.participationId,
+        });
+
+        console.log(
+          `Eliminado participante ${oldWinnerId} del match ${nextMatch.matchId}`,
+        );
+      }
+    }
+
+    // Verificar si el nuevo ganador ya está participando
     const existingParticipation = nextMatch.participations.find(
       (p) => p.registrationId === winnerId,
     );
@@ -327,6 +359,8 @@ export class BracketService {
         registrationId: winnerId,
         corner,
       });
+
+      console.log(`Agregado ganador ${winnerId} al match ${nextMatch.matchId}`);
     }
 
     return nextMatch;

@@ -289,7 +289,7 @@ export class CompetitionsService {
         );
       }
 
-      const registrations = dto.registrationIds;
+      const registrations = dto.registrationIds || [];
       const numParticipants = registrations.length;
 
       // Calcular número de matches de primera ronda
