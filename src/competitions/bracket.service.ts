@@ -207,11 +207,26 @@ export class BracketService {
       match.winnerRegistrationId = dto.winnerRegistrationId;
       match.status = MatchStatus.FINALIZADO;
 
+      // Guardar scores totales
       if (dto.participant1Score !== undefined) {
         match.participant1Score = dto.participant1Score;
       }
       if (dto.participant2Score !== undefined) {
         match.participant2Score = dto.participant2Score;
+      }
+
+      // Guardar detalles de accuracy y presentation (Poomsae)
+      if (dto.participant1Accuracy !== undefined) {
+        match.participant1Accuracy = dto.participant1Accuracy;
+      }
+      if (dto.participant1Presentation !== undefined) {
+        match.participant1Presentation = dto.participant1Presentation;
+      }
+      if (dto.participant2Accuracy !== undefined) {
+        match.participant2Accuracy = dto.participant2Accuracy;
+      }
+      if (dto.participant2Presentation !== undefined) {
+        match.participant2Presentation = dto.participant2Presentation;
       }
 
       await queryRunner.manager.save(match);

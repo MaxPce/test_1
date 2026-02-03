@@ -60,17 +60,63 @@ export class Match {
 
   @Column({
     name: 'participant1_score',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
     nullable: true,
-    comment: 'Puntaje del participante 1',
+    comment: 'Puntaje total del participante 1',
   })
   participant1Score?: number;
 
   @Column({
-    name: 'participant2_score',
+    name: 'participant1_accuracy',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
     nullable: true,
-    comment: 'Puntaje del participante 2',
+    comment: 'Accuracy del participante 1 (Poomsae)',
+  })
+  participant1Accuracy?: number;
+
+  @Column({
+    name: 'participant1_presentation',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    comment: 'Presentation del participante 1 (Poomsae)',
+  })
+  participant1Presentation?: number;
+
+  @Column({
+    name: 'participant2_score',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    comment: 'Puntaje total del participante 2',
   })
   participant2Score?: number;
+
+  @Column({
+    name: 'participant2_accuracy',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    comment: 'Accuracy del participante 2 (Poomsae)',
+  })
+  participant2Accuracy?: number;
+
+  @Column({
+    name: 'participant2_presentation',
+    type: 'decimal',
+    precision: 5,
+    scale: 2,
+    nullable: true,
+    comment: 'Presentation del participante 2 (Poomsae)',
+  })
+  participant2Presentation?: number;
 
   // ======= CAMPOS PARA MEJOR DE 3 =======
   @Column({

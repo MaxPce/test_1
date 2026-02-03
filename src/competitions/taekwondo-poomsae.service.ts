@@ -221,7 +221,7 @@ export class TaekwondoPoomsaeService {
       );
     }
 
-    // 8. Actualizar el match con participant1_score y participant2_score
+    // 8. Actualizar el match con participant1_score y participant2_score (y detalles)
     const participant1 = participations[0];
     const participant2 = participations[1];
 
@@ -232,8 +232,15 @@ export class TaekwondoPoomsaeService {
       (s) => s.participationId === participant2.participationId,
     );
 
+    // Guardar totales
     match.participant1Score = participant1Score?.total || 0;
     match.participant2Score = participant2Score?.total || 0;
+
+    // Guardar detalles de accuracy y presentation
+    match.participant1Accuracy = participant1Score?.accuracy || 0;
+    match.participant1Presentation = participant1Score?.presentation || 0;
+    match.participant2Accuracy = participant2Score?.accuracy || 0;
+    match.participant2Presentation = participant2Score?.presentation || 0;
 
     await this.matchRepository.save(match);
 

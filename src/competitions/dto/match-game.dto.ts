@@ -10,7 +10,6 @@ import {
 import { Type } from 'class-transformer';
 import { GameStatus } from '../entities/match-game.entity';
 
-// ✅ AGREGAR: DTO para sets (solo para tenis de mesa)
 export class GameSetDto {
   @IsNumber()
   @Min(1)
