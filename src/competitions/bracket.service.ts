@@ -95,7 +95,7 @@ export class BracketService {
       if (dto.includeThirdPlace) {
         thirdPlaceMatch = queryRunner.manager.create(Match, {
           phaseId: dto.phaseId,
-          matchNumber: 9999,
+          matchNumber: currentMatchNumber,
           round: 'tercer_lugar',
           status: MatchStatus.PROGRAMADO,
         });
@@ -415,33 +415,47 @@ export class BracketService {
 
     if (!thirdPlaceMatch) return null;
 
-    // Encontrar al perdedor
+    // Encontrar al perdedor actual
     const loserParticipation = semifinalMatch.participations.find(
       (p) => p.registrationId !== winnerId,
     );
 
     if (!loserParticipation) return null;
 
-    // Verificar si ya está participando
-    const existingParticipation = thirdPlaceMatch.participations.find(
-      (p) => p.registrationId === loserParticipation.registrationId,
+    const semifinalRegistrationIds = semifinalMatch.participations.map(
+      (p) => p.registrationId,
     );
 
-    if (!existingParticipation) {
-      const corner =
-        thirdPlaceMatch.participations.length === 0
-          ? Corner.BLUE
-          : Corner.WHITE;
+    // (esto incluye al ganador anterior y al perdedor anterior)
+    await queryRunner.manager
+      .createQueryBuilder()
+      .delete()
+      .from(Participation)
+      .where('matchId = :matchId', { matchId: thirdPlaceMatch.matchId })
+      .andWhere('registrationId IN (:...ids)', { ids: semifinalRegistrationIds })
+      .execute();
 
-      await queryRunner.manager.save(Participation, {
-        matchId: thirdPlaceMatch.matchId,
-        registrationId: loserParticipation.registrationId,
-        corner,
-      });
-    }
+    console.log(
+      `Eliminados participantes de semifinal ${semifinalMatch.matchId} del tercer lugar`,
+    );
+
+    const currentParticipations = await queryRunner.manager.find(Participation, {
+      where: { matchId: thirdPlaceMatch.matchId },
+    });
+
+    // Determinar corner basado en cuántos quedan
+    const corner = currentParticipations.length === 0 ? Corner.BLUE : Corner.WHITE;
+
+    // Insertar al nuevo perdedor
+    await queryRunner.manager.save(Participation, {
+      matchId: thirdPlaceMatch.matchId,
+      registrationId: loserParticipation.registrationId,
+      corner,
+    });
 
     return thirdPlaceMatch;
   }
+
 
   // ==================== CÁLCULOS Y UTILIDADES ====================
 

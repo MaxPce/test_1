@@ -277,6 +277,8 @@ export class TaekwondoPoomsaeService {
         'participations.registration',
         'participations.registration.athlete',
         'participations.registration.athlete.institution',
+        'participations.registration.team',            
+        'participations.registration.team.institution'
       ],
     });
 
@@ -306,15 +308,29 @@ export class TaekwondoPoomsaeService {
       const score = scores.find(
         (s) => s.participationId === participation.participationId,
       );
-      const athlete = participation.registration?.athlete;
-      const institution = athlete?.institution;
+      
+      const reg = participation.registration;
+      const isTeam = !!reg?.team;
+      
+      const name = isTeam
+        ? reg.team.name
+        : reg?.athlete?.name || 'Sin nombre';
+      
+      const photoUrl = isTeam
+        ? null
+        : reg?.athlete?.photoUrl || null;
+      
+      const institution = isTeam
+        ? reg.team.institution
+        : reg?.athlete?.institution;
 
       return {
         participationId: participation.participationId,
         registrationId: participation.registrationId,
         corner: participation.corner,
-        athleteName: athlete?.name || 'Sin nombre',
-        athletePhoto: athlete?.photoUrl || null,
+        participantName: name, 
+        isTeam: isTeam,        
+        participantPhoto: photoUrl,  
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
         accuracy: score?.accuracy || null,
@@ -323,6 +339,7 @@ export class TaekwondoPoomsaeService {
         isWinner: match.winnerRegistrationId === participation.registrationId,
       };
     });
+
 
     return {
       matchId,
@@ -349,6 +366,8 @@ export class TaekwondoPoomsaeService {
         'matches.participations.registration',
         'matches.participations.registration.athlete',
         'matches.participations.registration.athlete.institution',
+        'matches.participations.registration.team',
+        'matches.participations.registration.team.institution',
       ],
     });
 
@@ -375,22 +394,41 @@ export class TaekwondoPoomsaeService {
       const score = scores.find(
         (s) => s.participationId === participation.participationId,
       );
-      const athlete = participation.registration?.athlete;
-      const institution = athlete?.institution;
+      
+      const reg = participation.registration;
+      const isTeam = !!reg?.team;
+      
+      const name = isTeam
+        ? reg.team.name
+        : reg?.athlete?.name || 'Sin nombre';
+      
+      const photoUrl = isTeam
+        ? null
+        : reg?.athlete?.photoUrl || null;
+      
+      const institution = isTeam
+        ? reg.team.institution
+        : reg?.athlete?.institution;
+      
+      const gender = isTeam
+        ? 'Equipo'
+        : reg?.athlete?.gender || '-';
 
       return {
         participationId: participation.participationId,
-        athleteName: athlete?.name || 'Sin nombre',
-        athletePhoto: athlete?.photoUrl || null,
+        participantName: name,        
+        isTeam: isTeam,              
+        participantPhoto: photoUrl, 
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
-        gender: athlete?.gender || '-',
+        gender: gender,
         accuracy: score?.accuracy || null,
         presentation: score?.presentation || null,
         total: score?.total || null,
         rank: score?.rank || null,
       };
     });
+
 
     return results;
   }

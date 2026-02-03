@@ -118,7 +118,6 @@ export class Match {
   })
   participant2Presentation?: number;
 
-  // ======= CAMPOS PARA MEJOR DE 3 =======
   @Column({
     name: 'series_id',
     nullable: true,
@@ -129,14 +128,13 @@ export class Match {
   @Column({
     name: 'series_match_number',
     nullable: true,
-    comment: 'Número del match dentro de la serie (1, 2 o 3)',
   })
   seriesMatchNumber: number;
 
   @Column({
     name: 'series_winner_registration_id',
     nullable: true,
-    comment: 'Ganador de toda la serie (se actualiza al finalizar)',
+    comment: 'Ganador de toda la serie',
   })
   seriesWinnerRegistrationId: number;
 
