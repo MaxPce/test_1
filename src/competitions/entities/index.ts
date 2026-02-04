@@ -6,3 +6,4 @@ export * from './match-lineup.entity';
 export * from './match-game.entity';
 export * from './poomsae-score.entity';
 export * from './individual-score.entity';
+

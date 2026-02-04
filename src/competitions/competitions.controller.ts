@@ -383,4 +383,19 @@ export class CompetitionsController {
   async getThirdPlace(@Param('phaseId') phaseId: string) {
     return this.bracketService.getThirdPlace(+phaseId);
   }
+
+  @Patch('registrations/:id/seed')
+  updateRegistrationSeed(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: { seedNumber: number | null },
+  ) {
+    return this.competitionsService.updateRegistrationSeed(id, dto.seedNumber);
+  }
+
+  @Post('phases/:id/process-byes')
+    processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
+      return this.competitionsService.processPhaseByesAutomatically(phaseId);
+    }
+
+
 }

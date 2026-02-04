@@ -41,8 +41,8 @@ export class Registration {
   })
   teamId: number;
 
-  @Column({ name: 'seed_number', nullable: true, comment: 'Cabeza de serie' })
-  seedNumber: number;
+  @Column({ type: 'int', nullable: true, name: 'seed_number' }) 
+  seedNumber: number | null;
 
   @ManyToOne(
     () => EventCategory,

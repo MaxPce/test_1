@@ -4,8 +4,9 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, Not } from 'typeorm';
 import { Phase, Match, Participation, Standing } from './entities';
+import { Registration } from '../events/entities/registration.entity';
 import {
   CreatePhaseDto,
   UpdatePhaseDto,
@@ -16,6 +17,7 @@ import {
   InitializeRoundRobinDto,
 } from './dto';
 import { PhaseType, MatchStatus, Corner } from '../common/enums';
+import { BracketService } from './bracket.service';
 
 @Injectable()
 export class CompetitionsService {
@@ -28,7 +30,10 @@ export class CompetitionsService {
     private participationRepository: Repository<Participation>,
     @InjectRepository(Standing)
     private standingRepository: Repository<Standing>,
+    @InjectRepository(Registration) 
+    private registrationRepository: Repository<Registration>,
     private dataSource: DataSource,
+    private bracketService: BracketService,
   ) {}
 
   // ==================== PHASES ====================
@@ -746,4 +751,117 @@ export class CompetitionsService {
       `✅ Creadas ${registrations.length} participaciones para Poomsae en fase ${phase.phaseId}`,
     );
   }
+
+  async updateRegistrationSeed(
+    registrationId: number,
+    seedNumber: number | null,
+  ): Promise<Registration> {
+    const registration = await this.registrationRepository.findOne({
+      where: { registrationId },
+    });
+
+    if (!registration) {
+      throw new NotFoundException(
+        `Registration ${registrationId} no encontrada`,
+      );
+    }
+
+    // Validar que no haya seed duplicado en la misma categoría
+    if (seedNumber !== null) {
+      const duplicate = await this.registrationRepository.findOne({
+        where: {
+          eventCategoryId: registration.eventCategoryId,
+          seedNumber,
+          registrationId: Not(registrationId),
+        },
+      });
+
+      if (duplicate) {
+        throw new BadRequestException(
+          `El seed ${seedNumber} ya está asignado a otro participante en esta categoría`,
+        );
+      }
+    }
+
+    registration.seedNumber = seedNumber;
+    return await this.registrationRepository.save(registration);
+  }
+
+  /**
+ * Procesa automáticamente todos los BYEs de una fase
+ * Avanza participantes que están solos en un match
+ */
+  async processPhaseByesAutomatically(phaseId: number): Promise<{
+    processed: number;
+    message: string;
+  }> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Obtener todos los matches de la fase
+      const matches = await queryRunner.manager.find(Match, {
+        where: { phaseId },
+        relations: ['participations', 'participations.registration'],
+        order: { matchNumber: 'ASC' },
+      });
+
+      let processedCount = 0;
+
+      for (const match of matches) {
+        // Solo procesar si:
+        // 1. Tiene exactamente 1 participación
+        // 2. No tiene ganador asignado
+        // 3. No está finalizado
+        if (
+          match.participations.length === 1 &&
+          !match.winnerRegistrationId &&
+          match.status !== MatchStatus.FINALIZADO
+        ) {
+          const winner = match.participations[0];
+          
+          // ✅ Fix: Verificar que registrationId no sea null
+          if (!winner.registrationId) {
+            console.warn(`⚠️ Match #${match.matchNumber} tiene una participación sin registrationId`);
+            continue;
+          }
+
+          // Marcar como finalizado y asignar ganador
+          match.winnerRegistrationId = winner.registrationId;
+          match.status = MatchStatus.FINALIZADO;
+          await queryRunner.manager.save(match);
+
+          console.log(
+            `✅ BYE procesado: Match #${match.matchNumber} - Registration ${winner.registrationId} avanza`,
+          );
+
+          // ✅ Fix: Llamar al método desde BracketService
+          await this.bracketService['autoAdvanceWinner'](
+            queryRunner,
+            match,
+            winner.registrationId,
+            matches,
+          );
+
+          processedCount++;
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      return {
+        processed: processedCount,
+        message: `${processedCount} BYE${processedCount !== 1 ? 's' : ''} procesado${processedCount !== 1 ? 's' : ''} correctamente`,
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+
+
 }

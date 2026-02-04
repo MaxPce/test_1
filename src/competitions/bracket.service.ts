@@ -22,8 +22,8 @@ export class BracketService {
   // ==================== GENERACIÓN DE BRACKET COMPLETO ====================
 
   /**
-   * Genera un bracket completo de eliminación usando solo matchNumber para las conexiones
-   */
+ * Genera un bracket completo de eliminación usando seeding
+ */
   async generateCompleteBracket(dto: GenerateBracketDto): Promise<{
     mainBracket: Match[];
     thirdPlaceMatch: Match | null;
@@ -55,12 +55,43 @@ export class BracketService {
         }
       }
 
+      // ✅ NUEVO: Calcular bracket size (próxima potencia de 2)
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const totalRounds = Math.log2(nextPowerOf2);
+      const numByes = nextPowerOf2 - numParticipants;
+
+      console.log(`📊 Bracket Info: ${numParticipants} participantes, ${nextPowerOf2} slots, ${numByes} BYEs`);
+
+      // ✅ NUEVO: Obtener registrations con seed_number
+      let seededRegistrations: Array<{ registrationId: number; seedNumber: number | null }> = [];
+      
+      if (!isEmptyBracket) {
+        const registrationEntities = await queryRunner.manager
+          .createQueryBuilder()
+          .select(['registration.registrationId', 'registration.seedNumber'])
+          .from('registrations', 'registration')
+          .where('registration.registrationId IN (:...ids)', { ids: registrations })
+          .getRawMany();
+
+        // Ordenar por seed_number (nulls al final)
+        seededRegistrations = registrationEntities
+          .map((r) => ({
+            registrationId: r.registration_registration_id,
+            seedNumber: r.registration_seed_number,
+          }))
+          .sort((a, b) => {
+            if (a.seedNumber === null) return 1;
+            if (b.seedNumber === null) return -1;
+            return a.seedNumber - b.seedNumber;
+          });
+
+        console.log('🎯 Seeded Registrations:', seededRegistrations);
+      }
 
       const mainBracket: Match[] = [];
       let currentMatchNumber = 1;
 
+      // ✅ NUEVO: Generar matches por ronda con distribución de seeding
       for (let round = 0; round < totalRounds; round++) {
         const matchesInRound = nextPowerOf2 / Math.pow(2, round + 1);
         const roundName = this.getRoundName(matchesInRound);
@@ -76,12 +107,14 @@ export class BracketService {
           const savedMatch = await queryRunner.manager.save(match);
           mainBracket.push(savedMatch);
 
+          // Solo asignar participantes en la primera ronda
           if (round === 0 && !isEmptyBracket) {
-            await this.assignFirstRoundParticipants(
+            await this.assignFirstRoundParticipantsWithSeeding(
               queryRunner,
               savedMatch,
-              registrations,
+              seededRegistrations,
               i,
+              nextPowerOf2,
               mainBracket,
             );
           }
@@ -90,6 +123,7 @@ export class BracketService {
         }
       }
 
+      // Tercer lugar
       let thirdPlaceMatch: Match | null = null;
 
       if (dto.includeThirdPlace) {
@@ -110,7 +144,7 @@ export class BracketService {
         totalSlots: nextPowerOf2,
         totalRounds: totalRounds,
         hasThirdPlace: dto.includeThirdPlace,
-        byeCount: isEmptyBracket ? 0 : nextPowerOf2 - numParticipants,
+        byeCount: isEmptyBracket ? 0 : numByes,
         isEmpty: isEmptyBracket,
       };
 
@@ -127,55 +161,71 @@ export class BracketService {
     }
   }
 
+
   /**
-   * Asigna participantes a la primera ronda y maneja BYEs
-   */
-  private async assignFirstRoundParticipants(
+ * Asigna participantes a la primera ronda usando seeding estándar de torneos
+ * Distribución: Seed #1 y #2 van a lados opuestos del bracket
+ */
+  private async assignFirstRoundParticipantsWithSeeding(
     queryRunner: any,
     match: Match,
-    registrations: number[],
+    seededRegistrations: Array<{ registrationId: number; seedNumber: number | null }>,
     matchIndex: number,
+    bracketSize: number,
     allMatches: Match[],
   ): Promise<void> {
-    const participant1Index = matchIndex * 2;
-    const participant2Index = matchIndex * 2 + 1;
-
-    // Participante 1
-    if (participant1Index < registrations.length) {
+    // Distribución estándar de seeding con bracket de potencia de 2
+    // Usa la fórmula: participant[i] enfrenta a participant[bracketSize - 1 - i]
+    // Pero ajustado para que #1 y #2 queden en lados opuestos
+    
+    const numFirstRoundMatches = bracketSize / 2;
+    
+    // Mapeo de posiciones estándar de torneos
+    // Esto asegura que los mejores seeds estén distribuidos correctamente
+    const seedPairings = [
+      [0, bracketSize - 1],  // Match 0: Seed #1 vs Seed #8 (o BYE)
+      [numFirstRoundMatches - 1, numFirstRoundMatches],  // Match 1: Seed #4 vs Seed #5
+      [numFirstRoundMatches - 2, numFirstRoundMatches + 1],  // Match 2: Seed #3 vs Seed #6
+      [1, bracketSize - 2],  // Match 3: Seed #2 vs Seed #7 (o BYE)
+    ];
+    
+    // Para brackets de 8, usar el pairing estándar
+    let seed1Index: number;
+    let seed2Index: number;
+    
+    if (bracketSize === 8 && matchIndex < 4) {
+      [seed1Index, seed2Index] = seedPairings[matchIndex];
+    } else {
+      // Fallback para otros tamaños de bracket
+      seed1Index = matchIndex;
+      seed2Index = bracketSize - 1 - matchIndex;
+    }
+    
+    const participant1 = seededRegistrations[seed1Index] || null;
+    const participant2 = seededRegistrations[seed2Index] || null;
+    
+    // Participante 1 (seed bajo)
+    if (participant1) {
       await queryRunner.manager.save(Participation, {
         matchId: match.matchId,
-        registrationId: registrations[participant1Index],
+        registrationId: participant1.registrationId,
         corner: Corner.BLUE,
       });
     }
 
-    // Participante 2
-    if (participant2Index < registrations.length) {
+    // Participante 2 (seed alto)
+    if (participant2) {
       await queryRunner.manager.save(Participation, {
         matchId: match.matchId,
-        registrationId: registrations[participant2Index],
+        registrationId: participant2.registrationId,
         corner: Corner.WHITE,
       });
     }
 
-    // BYE automático: si solo hay un participante, avanza directo
-    if (
-      participant1Index < registrations.length &&
-      participant2Index >= registrations.length
-    ) {
-      match.winnerRegistrationId = registrations[participant1Index];
-      match.status = MatchStatus.FINALIZADO;
-      await queryRunner.manager.save(match);
-
-      // Avanzar automáticamente a la siguiente ronda
-      await this.autoAdvanceWinner(
-        queryRunner,
-        match,
-        registrations[participant1Index],
-        allMatches,
-      );
-    }
+    
   }
+
+
 
   // ==================== AVANCE DE GANADORES ====================
 
