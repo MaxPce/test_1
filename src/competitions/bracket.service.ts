@@ -361,7 +361,7 @@ export class BracketService {
       where: { matchId: nextMatch.matchId },
     });
 
-    // ✅ Verificar si el nuevo ganador ya está participando
+    // Verificar si el nuevo ganador ya está participando
     const winnerAlreadyExists = refreshedParticipations.some(
       (p) => p.registrationId === winnerId,
     );
