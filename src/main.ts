@@ -1,7 +1,7 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { NestExpressApplication } from '@nestjs/platform-express'; // ✅ AGREGAR
-import { join } from 'path'; // ✅ AGREGAR
+import { NestExpressApplication } from '@nestjs/platform-express'; 
+import { join } from 'path'; 
 import { AppModule } from './app.module';
 
 function getCorsOrigins() {
@@ -13,15 +13,11 @@ function getCorsOrigins() {
 }
 
 async function bootstrap() {
-  // ✅ CAMBIAR: Agregar tipo NestExpressApplication
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const origins = getCorsOrigins();
 
-  // Prefijo global para rutas API
   app.setGlobalPrefix('api');
 
-  // ✅ AGREGAR: Servir archivos estáticos ANTES del prefijo global
-  // Los archivos estáticos NO tendrán el prefijo 'api'
   app.useStaticAssets(join(__dirname, '..', 'uploads'), {
     prefix: '/uploads/',
   });

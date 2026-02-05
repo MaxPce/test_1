@@ -45,7 +45,6 @@ export class TableTennisService {
       throw new NotFoundException('Match no encontrado');
     }
 
-    // ✅ VALIDACIÓN CRÍTICA: Solo para tenis de mesa
     const sportName =
       match.phase?.eventCategory?.category?.sport?.name?.toLowerCase() || '';
     if (
@@ -90,11 +89,11 @@ export class TableTennisService {
           firstParticipation.registration.team?.members?.length || 0;
 
         if (teamSize === 2) {
-          return 'doubles'; // ✅ Dobles: equipo de 2
+          return 'doubles'; 
         }
 
         if (teamSize >= 3) {
-          return 'team'; // ✅ Equipos: 3 o más
+          return 'team';
         }
       }
     }
@@ -416,25 +415,23 @@ export class TableTennisService {
   async updateGameResult(gameId: number, dto: UpdateMatchGameDto) {
     const game = await this.gameRepository.findOne({
       where: { gameId },
-      relations: ['player1', 'player2', 'match'], // ✅ AGREGAR relación 'match'
+      relations: ['player1', 'player2', 'match'], 
     });
 
     if (!game) {
       throw new NotFoundException('Juego no encontrado');
     }
 
-    // ✅ NUEVO: Si el match está finalizado, reabrirlo automáticamente
     if (game.match.status === 'finalizado') {
       game.match.status = 'en_curso' as any;
       game.match.winnerRegistrationId = undefined;
       await this.matchRepository.save(game.match);
 
       console.log(
-        `✅ Match ${game.match.matchId} reabierto automáticamente para permitir edición del juego ${gameId}`,
+        `Match ${game.match.matchId} reabierto automáticamente para permitir edición del juego ${gameId}`,
       );
     }
 
-    // ✅ CASO 1: Si se envían sets (TENIS DE MESA)
     if (dto.sets && dto.sets.length > 0) {
       // Validar que no haya más de 5 sets
       if (dto.sets.length > 5) {
@@ -485,7 +482,7 @@ export class TableTennisService {
       }
     }
 
-    // ✅ CASO 2: Actualización manual de scores (OTROS DEPORTES)
+    // Actualización manual de scores (OTROS DEPORTES)
     if (dto.score1 !== undefined) game.score1 = dto.score1;
     if (dto.score2 !== undefined) game.score2 = dto.score2;
     if (dto.status !== undefined) game.status = dto.status;
@@ -505,7 +502,7 @@ export class TableTennisService {
 
     const savedGame = await this.gameRepository.save(game);
 
-    // ✅ NUEVO: Cambiar match a "en_curso" si estaba programado
+    // Cambiar match a "en_curso" si estaba programado
     if (game.match.status === 'programado') {
       game.match.status = 'en_curso' as any;
       await this.matchRepository.save(game.match);
@@ -542,7 +539,6 @@ export class TableTennisService {
   async calculateMatchResult(matchId: number) {
     const games = await this.getMatchGames(matchId);
 
-    // ✅ Detectar modalidad
     const modality = await this.detectMatchModality(matchId);
 
     if (modality === 'team') {
@@ -578,7 +574,7 @@ export class TableTennisService {
 
     const game = games[0]; // Solo hay 1 juego
 
-    // ✅ CAMBIO: Solo contar como "win" si el juego está COMPLETADO
+    // Solo contar como "win" si el juego está COMPLETADO
     let team1Wins = 0;
     let team2Wins = 0;
 
@@ -699,7 +695,7 @@ export class TableTennisService {
     const lineups = await this.getMatchLineups(matchId);
     const games = await this.getMatchGames(matchId);
 
-    // ✅ Calcular resultado solo si hay juegos
+    // Calcular resultado solo si hay juegos
     const result =
       games.length > 0 ? await this.calculateMatchResult(matchId) : null;
 
@@ -734,7 +730,7 @@ export class TableTennisService {
       );
     }
 
-    // ✅ CAMBIO: Asegurarse de que registrationId no sea null
+    // Asegurarse de que registrationId no sea null
     if (!result.winner.registrationId) {
       throw new BadRequestException(
         'El ganador no tiene un registrationId válido',
@@ -743,7 +739,7 @@ export class TableTennisService {
 
     // Actualizar match
     match.status = 'finalizado' as any;
-    match.winnerRegistrationId = result.winner.registrationId; // ✅ Ahora TypeScript sabe que no es null
+    match.winnerRegistrationId = result.winner.registrationId; 
 
     await this.matchRepository.save(match);
 
@@ -772,7 +768,7 @@ export class TableTennisService {
 
     // Cambiar status a en_curso
     match.status = 'en_curso' as any;
-    match.winnerRegistrationId = undefined; // Limpiar ganador
+    match.winnerRegistrationId = undefined; 
 
     await this.matchRepository.save(match);
 

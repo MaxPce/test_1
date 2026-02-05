@@ -67,7 +67,6 @@ export class TaekwondoKyoruguiService {
     }
 
     if (!round) {
-      // ✅ CORRECCIÓN: Crear el objeto sin usar repository.create()
       round = new MatchGame();
       round.matchId = matchId;
       round.gameNumber = dto.roundNumber;
@@ -170,7 +169,7 @@ export class TaekwondoKyoruguiService {
       order: { gameNumber: 'ASC' },
     });
 
-    // ✅ CORRECCIÓN: Validar registrationId antes de usar
+    // Validar registrationId antes de usar
     const participant1RegId = match.participations[0]?.registrationId;
     const participant2RegId = match.participations[1]?.registrationId;
 
@@ -194,7 +193,7 @@ export class TaekwondoKyoruguiService {
     match.participant1Score = participant1Rounds;
     match.participant2Score = participant2Rounds;
 
-    // ✅ CORRECCIÓN: Asignar correctamente con tipos validados
+    // Asignar correctamente con tipos validados
     if (participant1Rounds >= 2) {
       match.winnerRegistrationId = participant1RegId; // Ahora es number, no number | null
       match.status = MatchStatus.FINALIZADO;

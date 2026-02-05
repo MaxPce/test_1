@@ -21,7 +21,7 @@ export class Result {
   participationId: number;
 
   @Column({
-    type: 'int', // ✅ Especificar tipo explícitamente
+    type: 'int', 
     name: 'score_value',
     nullable: true,
     comment: 'Puntos en combate o general',
@@ -29,7 +29,7 @@ export class Result {
   scoreValue: number | null;
 
   @Column({
-    type: 'int', // ✅ Especificar tipo explícitamente
+    type: 'int', 
     name: 'rank_position',
     nullable: true,
     comment: 'Posición final: 1,2,3',

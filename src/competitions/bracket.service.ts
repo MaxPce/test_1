@@ -377,7 +377,7 @@ export class BracketService {
 
     if (!nextMatch) return null;
 
-    // ✅ CORRECCIÓN: Obtener TODOS los participantes del match actual
+    //Obtener TODOS los participantes del match actual
     const currentMatchParticipants = await queryRunner.manager.find(Participation, {
       where: { matchId: currentMatch.matchId },
     });
@@ -386,7 +386,7 @@ export class BracketService {
       (p) => p.registrationId,
     );
 
-    // ✅ ELIMINAR TODOS los participantes del match actual que estén en el siguiente match
+    // Eliminar los participantes del match actual que estén en el siguiente match
     // Esto previene la sobreposición de participantes
     for (const regId of currentMatchRegistrationIds) {
       if (regId) {
@@ -427,12 +427,10 @@ export class BracketService {
         corner,
       });
 
-      console.log(
-        `✅ Agregado ganador ${winnerId} al match ${nextMatch.matchId} (corner: ${corner})`,
-      );
+      
     } else {
       console.log(
-        `ℹ️ Ganador ${winnerId} ya está en el match ${nextMatch.matchId}`,
+        `Ganador ${winnerId} ya está en el match ${nextMatch.matchId}`,
       );
     }
 
@@ -443,7 +441,7 @@ export class BracketService {
       await queryRunner.manager.save(nextMatch);
       
       console.log(
-        `🔄 Reseteado estado del match ${nextMatch.matchId} (había ganador previo)`,
+        `Reseteado estado del match ${nextMatch.matchId} (había ganador previo)`,
       );
     }
 

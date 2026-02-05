@@ -48,7 +48,7 @@ export class CompetitionsService {
       const phase = this.phaseRepository.create(createDto);
       const savedPhase = await queryRunner.manager.save(phase);
 
-      // ✅ NUEVO: Cargar la fase con sus relaciones para detectar Poomsae
+      // Cargar la fase con sus relaciones para detectar Poomsae
       const phaseWithRelations = await queryRunner.manager.findOne(Phase, {
         where: { phaseId: savedPhase.phaseId },
         relations: [
@@ -722,7 +722,7 @@ export class CompetitionsService {
 
     if (registrations.length === 0) {
       console.log(
-        `⚠️  Fase ${phase.phaseId} de Poomsae creada sin atletas inscritos`,
+        `Fase ${phase.phaseId} de Poomsae creada sin atletas inscritos`,
       );
       return;
     }

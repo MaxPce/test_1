@@ -394,7 +394,7 @@ export class ResultsService {
       }
       result.recordedBy = adminId;
     } else {
-      // Crear nuevo (✅ CORRECCIÓN AQUÍ)
+      
       result = this.resultRepository.create({
         participationId: dto.participationId,
         scoreValue: dto.scoreValue,
@@ -536,7 +536,7 @@ export class ResultsService {
       result.timeValue = cleanTime;
       result.notes = isDQ
         ? `DQ - ${dto.notes || 'Descalificado'}`
-        : dto.notes || null; // ✅ Convertir undefined a null
+        : dto.notes || null; 
       result.recordedBy = userId;
     } else {
       // Crear nuevo resultado
@@ -545,7 +545,7 @@ export class ResultsService {
         timeValue: cleanTime,
         notes: isDQ
           ? `DQ - ${dto.notes || 'Descalificado'}`
-          : dto.notes || null, // ✅ Convertir undefined a null
+          : dto.notes || null, 
         recordedBy: userId,
         rankPosition: null,
         isWinner: false,

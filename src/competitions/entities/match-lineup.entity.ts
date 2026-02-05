@@ -40,7 +40,7 @@ export class MatchLineup {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  // Relaciones
+  
   @ManyToOne(() => Participation, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'participation_id' })
   participation: Participation;

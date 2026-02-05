@@ -22,7 +22,6 @@ export class AuthService {
   ) {}
 
   async register(registerDto: RegisterDto) {
-    // Verificar si el usuario ya existe
     const existingUser = await this.usersRepository.findOne({
       where: [{ username: registerDto.username }, { email: registerDto.email }],
     });
@@ -36,7 +35,6 @@ export class AuthService {
       }
     }
 
-    // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
     // Crear usuario
@@ -50,7 +48,6 @@ export class AuthService {
 
     await this.usersRepository.save(user);
 
-    // Retornar sin la contraseña
     const { password, ...result } = user;
     return {
       message: 'Usuario registrado exitosamente',

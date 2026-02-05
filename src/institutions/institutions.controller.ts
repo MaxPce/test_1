@@ -29,14 +29,14 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
-import { UploadService, multerConfig } from '../common/services/upload.service'; // ✅ AGREGAR
+import { UploadService, multerConfig } from '../common/services/upload.service'; 
 
 @Controller('institutions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InstitutionsController {
   constructor(
     private readonly institutionsService: InstitutionsService,
-    private readonly uploadService: UploadService, // ✅ AGREGAR
+    private readonly uploadService: UploadService, 
   ) {}
 
   // ==================== INSTITUTIONS ====================

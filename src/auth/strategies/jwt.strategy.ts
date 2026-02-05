@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { User } from '../entities/user.entity';
-import type { AuthUser } from '../../common/interfaces/auth-user.interface'; // ✅ import type
+import type { AuthUser } from '../../common/interfaces/auth-user.interface'; 
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -14,7 +14,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     @InjectRepository(User)
     private usersRepository: Repository<User>,
   ) {
-    const secret = configService.get<string>('JWT_SECRET'); // ✅ Extraer primero
+    const secret = configService.get<string>('JWT_SECRET');
 
     if (!secret) {
       throw new Error('JWT_SECRET no está configurado');
@@ -23,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
-      secretOrKey: secret, // ✅ Usar variable con tipo garantizado
+      secretOrKey: secret, 
     });
   }
 

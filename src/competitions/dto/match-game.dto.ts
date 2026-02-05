@@ -45,14 +45,12 @@ export class CreateMatchGameDto {
 }
 
 export class UpdateMatchGameDto {
-  // ✅ AGREGAR: Campo opcional para sets (solo tenis de mesa)
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => GameSetDto)
   sets?: GameSetDto[];
 
-  // Mantener campos existentes para compatibilidad con otros deportes
   @IsOptional()
   @IsNumber()
   @Min(0)

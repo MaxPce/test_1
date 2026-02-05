@@ -164,7 +164,6 @@ export class EventsController {
 
     const logoUrl = this.uploadService.getFileUrl(file.filename, 'events');
 
-    // Actualizar el evento con la nueva URL
     await this.eventsService.updateEvent(id, { logoUrl });
 
     return {
