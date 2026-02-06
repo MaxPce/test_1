@@ -9,7 +9,11 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { SportsService } from './sports.service';
 import {
   CreateSportTypeDto,
@@ -24,11 +28,15 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { UploadService, multerConfig } from '../common/services/upload.service';
 
 @Controller('sports')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class SportsController {
-  constructor(private readonly sportsService: SportsService) {}
+  constructor(
+    private readonly sportsService: SportsService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   // ==================== SPORT TYPES ====================
 
@@ -138,5 +146,28 @@ export class SportsController {
   @Roles(UserRole.ADMIN)
   removeSport(@Param('id', ParseIntPipe) id: number) {
     return this.sportsService.removeSport(id);
+  }
+
+  // ==================== UPLOAD ICON ====================
+  @Post(':id/upload-icon')
+  @Roles(UserRole.ADMIN)
+  @UseInterceptors(FileInterceptor('file', multerConfig('sports')))
+  async uploadSportIcon(
+    @Param('id', ParseIntPipe) id: number,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) {
+      throw new BadRequestException('No se proporcionó ningún archivo');
+    }
+
+    const iconUrl = this.uploadService.getFileUrl(file.filename, 'sports');
+
+    await this.sportsService.updateSport(id, { iconUrl });
+
+    return {
+      message: 'Icono subido exitosamente',
+      iconUrl,
+      filename: file.filename,
+    };
   }
 }
