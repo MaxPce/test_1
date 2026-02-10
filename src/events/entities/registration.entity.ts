@@ -6,6 +6,7 @@ import {
   JoinColumn,
   Index,
   Check,
+  DeleteDateColumn,
 } from 'typeorm';
 import { EventCategory } from './event-category.entity';
 import { Athlete } from '../../institutions/entities/athlete.entity';
@@ -44,12 +45,20 @@ export class Registration {
   @Column({ type: 'int', nullable: true, name: 'seed_number' }) 
   seedNumber: number | null;
 
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
+
   @ManyToOne(
     () => EventCategory,
     (eventCategory) => eventCategory.registrations,
   )
   @JoinColumn({ name: 'event_category_id' })
   eventCategory: EventCategory;
+
+
 
   @ManyToOne(() => Athlete)
   @JoinColumn({ name: 'athlete_id' })

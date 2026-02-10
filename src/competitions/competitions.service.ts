@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not } from 'typeorm';
+import { Repository, DataSource, Not, IsNull } from 'typeorm';
 import { Phase, Match, Participation, Standing } from './entities';
 import { Registration } from '../events/entities/registration.entity';
 import {
@@ -30,7 +30,7 @@ export class CompetitionsService {
     private participationRepository: Repository<Participation>,
     @InjectRepository(Standing)
     private standingRepository: Repository<Standing>,
-    @InjectRepository(Registration) 
+    @InjectRepository(Registration)
     private registrationRepository: Repository<Registration>,
     private dataSource: DataSource,
     private bracketService: BracketService,
@@ -44,11 +44,9 @@ export class CompetitionsService {
     await queryRunner.startTransaction();
 
     try {
-      // Crear la fase
       const phase = this.phaseRepository.create(createDto);
       const savedPhase = await queryRunner.manager.save(phase);
 
-      // Cargar la fase con sus relaciones para detectar Poomsae
       const phaseWithRelations = await queryRunner.manager.findOne(Phase, {
         where: { phaseId: savedPhase.phaseId },
         relations: [
@@ -61,7 +59,6 @@ export class CompetitionsService {
         ],
       });
 
-      //  Si es Poomsae Y la fase es de GRUPO, crear participaciones automáticamente
       if (
         phaseWithRelations &&
         this.isPoomsaePhase(phaseWithRelations) &&
@@ -72,7 +69,6 @@ export class CompetitionsService {
 
       await queryRunner.commitTransaction();
 
-      // Retornar la fase completa
       return this.findOnePhase(savedPhase.phaseId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -92,7 +88,8 @@ export class CompetitionsService {
       .leftJoinAndSelect('registration.athlete', 'athlete')
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
       .leftJoinAndSelect('registration.team', 'team')
-      .leftJoinAndSelect('team.institution', 'teamInstitution');
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .where('phase.deletedAt IS NULL');
 
     if (eventCategoryId) {
       queryBuilder.andWhere('phase.eventCategoryId = :eventCategoryId', {
@@ -123,6 +120,7 @@ export class CompetitionsService {
         'standings.registration.team',
         'standings.registration.team.institution',
       ],
+      withDeleted: false,
     });
 
     if (!phase) {
@@ -138,15 +136,68 @@ export class CompetitionsService {
     return this.phaseRepository.save(phase);
   }
 
-  async removePhase(id: number): Promise<void> {
+  async removePhase(id: number, userId?: number): Promise<void> {
     const phase = await this.findOnePhase(id);
+
+    await this.phaseRepository.softRemove(phase);
+
+    if (userId) {
+      await this.phaseRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restorePhase(id: number): Promise<Phase> {
+    const phase = await this.phaseRepository.findOne({
+      where: { phaseId: id },
+      withDeleted: true,
+    });
+
+    if (!phase) {
+      throw new NotFoundException(`Fase con ID ${id} no encontrada`);
+    }
+
+    if (!phase.deletedAt) {
+      throw new BadRequestException('La fase no está eliminada');
+    }
+
+    await this.phaseRepository.restore(id);
+    await this.phaseRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('phaseId = :id', { id })
+      .execute();
+
+    return this.findOnePhase(id);
+  }
+
+
+  async findDeletedPhases(): Promise<Phase[]> {
+    return this.phaseRepository
+      .createQueryBuilder('phase')
+      .leftJoinAndSelect('phase.eventCategory', 'eventCategory')
+      .leftJoinAndSelect('phase.matches', 'matches')
+      .where('phase.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeletePhase(id: number): Promise<void> {
+    const phase = await this.phaseRepository.findOne({
+      where: { phaseId: id },
+      withDeleted: true,
+    });
+
+    if (!phase) {
+      throw new NotFoundException(`Fase con ID ${id} no encontrada`);
+    }
+
     await this.phaseRepository.remove(phase);
   }
 
   // ==================== MATCHES ====================
 
   async createMatch(createDto: CreateMatchDto): Promise<Match> {
-    // Verificar que la fase existe
     await this.findOnePhase(createDto.phaseId);
 
     const match = this.matchRepository.create(createDto);
@@ -169,7 +220,8 @@ export class CompetitionsService {
       .leftJoinAndSelect('team.members', 'teamMembers')
       .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .leftJoinAndSelect('memberAthlete.institution', 'memberInstitution')
-      .leftJoinAndSelect('match.winner', 'winner');
+      .leftJoinAndSelect('match.winner', 'winner')
+      .where('match.deletedAt IS NULL');
 
     if (phaseId) {
       queryBuilder.andWhere('match.phaseId = :phaseId', { phaseId });
@@ -204,6 +256,7 @@ export class CompetitionsService {
         'participations.registration.team.members.athlete.institution',
         'winner',
       ],
+      withDeleted: false,
     });
 
     if (!match) {
@@ -219,8 +272,62 @@ export class CompetitionsService {
     return this.matchRepository.save(match);
   }
 
-  async removeMatch(id: number): Promise<void> {
+  async removeMatch(id: number, userId?: number): Promise<void> {
     const match = await this.findOneMatch(id);
+
+    await this.matchRepository.softRemove(match);
+
+    if (userId) {
+      await this.matchRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreMatch(id: number): Promise<Match> {
+    const match = await this.matchRepository.findOne({
+      where: { matchId: id },
+      withDeleted: true,
+    });
+
+    if (!match) {
+      throw new NotFoundException(`Match con ID ${id} no encontrado`);
+    }
+
+    if (!match.deletedAt) {
+      throw new BadRequestException('El match no está eliminado');
+    }
+
+    await this.matchRepository.restore(id);
+    await this.matchRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('matchId = :id', { id })
+      .execute();
+
+    return this.findOneMatch(id);
+  }
+
+
+  async findDeletedMatches(): Promise<Match[]> {
+    return this.matchRepository
+      .createQueryBuilder('match')
+      .leftJoinAndSelect('match.phase', 'phase')
+      .leftJoinAndSelect('match.participations', 'participations')
+      .where('match.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteMatch(id: number): Promise<void> {
+    const match = await this.matchRepository.findOne({
+      where: { matchId: id },
+      withDeleted: true,
+    });
+
+    if (!match) {
+      throw new NotFoundException(`Match con ID ${id} no encontrado`);
+    }
+
     await this.matchRepository.remove(match);
   }
 
@@ -229,10 +336,8 @@ export class CompetitionsService {
   async createParticipation(
     createDto: CreateParticipationDto,
   ): Promise<Participation> {
-    // Verificar que el match existe
     await this.findOneMatch(createDto.matchId);
 
-    // Verificar que no esté ya participando
     const existing = await this.participationRepository.findOne({
       where: {
         matchId: createDto.matchId,
@@ -297,14 +402,12 @@ export class CompetitionsService {
       const registrations = dto.registrationIds || [];
       const numParticipants = registrations.length;
 
-      // Calcular número de matches de primera ronda
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const firstRoundMatches = nextPowerOf2 / 2;
 
       const matches: Match[] = [];
       let matchNumber = 1;
 
-      // Generar primera ronda
       for (let i = 0; i < firstRoundMatches; i++) {
         const match = queryRunner.manager.create(Match, {
           phaseId: dto.phaseId,
@@ -315,7 +418,6 @@ export class CompetitionsService {
 
         const savedMatch = await queryRunner.manager.save(match);
 
-        // Asignar participantes si hay
         if (registrations[i * 2]) {
           await queryRunner.manager.save(Participation, {
             matchId: savedMatch.matchId,
@@ -376,7 +478,6 @@ export class CompetitionsService {
 
       const standings: Standing[] = [];
 
-      // Crear standings para cada registro
       for (const registrationId of dto.registrationIds) {
         const standing = queryRunner.manager.create(Standing, {
           phaseId: dto.phaseId,
@@ -395,7 +496,6 @@ export class CompetitionsService {
         standings.push(saved);
       }
 
-      // Generar todos los matches (todos contra todos)
       const registrations = dto.registrationIds;
       let matchNumber = 1;
 
@@ -409,7 +509,6 @@ export class CompetitionsService {
 
           const savedMatch = await queryRunner.manager.save(match);
 
-          // Crear participaciones
           await queryRunner.manager.save(Participation, {
             matchId: savedMatch.matchId,
             registrationId: registrations[i],
@@ -460,22 +559,20 @@ export class CompetitionsService {
     await queryRunner.startTransaction();
 
     try {
-      // Obtener todos los standings de esta fase
       const standings = await this.standingRepository.find({
         where: { phaseId },
         relations: ['registration'],
       });
 
-      // Obtener todos los partidos finalizados de esta fase
       const matches = await this.matchRepository.find({
         where: {
           phaseId,
           status: MatchStatus.FINALIZADO,
+          deletedAt: IsNull(),
         },
         relations: ['participations', 'participations.registration', 'winner'],
       });
 
-      // Resetear estadísticas
       for (const standing of standings) {
         standing.matchesPlayed = 0;
         standing.wins = 0;
@@ -487,7 +584,6 @@ export class CompetitionsService {
         standing.scoreDiff = 0;
       }
 
-      // Calcular estadísticas basadas en partidos finalizados
       for (const match of matches) {
         if (match.participations.length !== 2) continue;
 
@@ -502,48 +598,34 @@ export class CompetitionsService {
 
         if (!s1 || !s2) continue;
 
-        // Incrementar partidos jugados
         s1.matchesPlayed++;
         s2.matchesPlayed++;
 
-        // Si hay ganador
         if (match.winnerRegistrationId) {
           if (match.winnerRegistrationId === p1.registrationId) {
-            // p1 ganó
             s1.wins++;
             s1.points += 3;
             s2.losses++;
           } else if (match.winnerRegistrationId === p2.registrationId) {
-            // p2 ganó
             s2.wins++;
             s2.points += 3;
             s1.losses++;
           }
         } else {
-          // Empate (si no hay ganador)
-          s1.draws++;
-          s2.draws++;
-          s1.points += 1;
-          s2.points += 1;
+          
         }
-
-        // Si tienes marcadores en el match, actualiza scoreFor/scoreAgainst
-        // Por ahora dejamos en 0 si no hay campo de marcador
       }
 
-      // Calcular diferencia de goles/puntos
       for (const standing of standings) {
         standing.scoreDiff = standing.scoreFor - standing.scoreAgainst;
       }
 
-      // Ordenar por puntos, diferencia, goles a favor
       standings.sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         if (b.scoreDiff !== a.scoreDiff) return b.scoreDiff - a.scoreDiff;
         return b.scoreFor - a.scoreFor;
       });
 
-      // Asignar posiciones
       let currentRank = 1;
       for (const standing of standings) {
         standing.rankPosition = currentRank++;
@@ -598,7 +680,6 @@ export class CompetitionsService {
         const savedMatch = await queryRunner.manager.save(match);
         matches.push(savedMatch);
 
-        // Crear participaciones para cada partido
         const participations = registrationIds.map((regId, index) =>
           queryRunner.manager.create(Participation, {
             matchId: savedMatch.matchId,
@@ -641,12 +722,10 @@ export class CompetitionsService {
       throw new BadRequestException('Este partido no es de tipo Mejor de 3');
     }
 
-    // Actualizar el resultado del partido actual
     match.winnerRegistrationId = winnerRegistrationId;
     match.status = MatchStatus.FINALIZADO;
     await this.matchRepository.save(match);
 
-    // Contar victorias de cada participante
     const allMatches = await this.matchRepository.find({
       where: { phaseId: match.phaseId, status: MatchStatus.FINALIZADO },
     });
@@ -659,7 +738,6 @@ export class CompetitionsService {
       }
     });
 
-    // Verificar si alguien ya ganó 2 partidos
     const ganadorEntry = Object.entries(victorias).find(
       ([_, wins]) => wins >= 2,
     );
@@ -667,7 +745,6 @@ export class CompetitionsService {
     if (ganadorEntry) {
       const [ganadorId] = ganadorEntry;
 
-      // Marcar partidos restantes como CANCELADOS
       const partidosPendientes = await this.matchRepository.find({
         where: {
           phaseId: match.phaseId,
@@ -697,9 +774,6 @@ export class CompetitionsService {
 
   // ==================== TAEKWONDO POOMSAE ====================
 
-  /**
-   * Detectar si una fase es de Poomsae basándose en el nombre de la categoría
-   */
   private isPoomsaePhase(phase: Phase): boolean {
     const categoryName =
       phase.eventCategory?.category?.name?.toLowerCase() || '';
@@ -711,9 +785,6 @@ export class CompetitionsService {
     );
   }
 
-  /**
-   * Crear participaciones para todos los atletas inscritos en Poomsae
-   */
   private async createPoomsaeParticipations(
     phase: Phase,
     queryRunner: any,
@@ -727,7 +798,6 @@ export class CompetitionsService {
       return;
     }
 
-    // Crear un match único para la fase de Poomsae
     const match = queryRunner.manager.create(Match, {
       phaseId: phase.phaseId,
       matchNumber: 1,
@@ -737,7 +807,6 @@ export class CompetitionsService {
 
     const savedMatch = await queryRunner.manager.save(match);
 
-    // Crear una participación por cada atleta inscrito
     for (const registration of registrations) {
       const participation = queryRunner.manager.create(Participation, {
         matchId: savedMatch.matchId,
@@ -748,7 +817,7 @@ export class CompetitionsService {
     }
 
     console.log(
-      `✅ Creadas ${registrations.length} participaciones para Poomsae en fase ${phase.phaseId}`,
+      `Creadas ${registrations.length} participaciones para Poomsae en fase ${phase.phaseId}`,
     );
   }
 
@@ -766,7 +835,6 @@ export class CompetitionsService {
       );
     }
 
-    // Validar que no haya seed duplicado en la misma categoría
     if (seedNumber !== null) {
       const duplicate = await this.registrationRepository.findOne({
         where: {
@@ -787,10 +855,6 @@ export class CompetitionsService {
     return await this.registrationRepository.save(registration);
   }
 
-  /**
- * Procesa automáticamente todos los BYEs de una fase
- * Avanza participantes que están solos en un match
- */
   async processPhaseByesAutomatically(phaseId: number): Promise<{
     processed: number;
     message: string;
@@ -800,43 +864,36 @@ export class CompetitionsService {
     await queryRunner.startTransaction();
 
     try {
-      // Obtener todos los matches de la fase
       const matches = await queryRunner.manager.find(Match, {
-        where: { phaseId },
+        where: { phaseId, deletedAt: IsNull() },
         relations: ['participations', 'participations.registration'],
         order: { matchNumber: 'ASC' },
       });
-
       let processedCount = 0;
 
       for (const match of matches) {
-        // Solo procesar si:
-        // 1. Tiene exactamente 1 participación
-        // 2. No tiene ganador asignado
-        // 3. No está finalizado
         if (
           match.participations.length === 1 &&
           !match.winnerRegistrationId &&
           match.status !== MatchStatus.FINALIZADO
         ) {
           const winner = match.participations[0];
-          
-          // ✅ Fix: Verificar que registrationId no sea null
+
           if (!winner.registrationId) {
-            console.warn(`⚠️ Match #${match.matchNumber} tiene una participación sin registrationId`);
+            console.warn(
+              `Match #${match.matchNumber} tiene una participación sin registrationId`,
+            );
             continue;
           }
 
-          // Marcar como finalizado y asignar ganador
           match.winnerRegistrationId = winner.registrationId;
           match.status = MatchStatus.FINALIZADO;
           await queryRunner.manager.save(match);
 
           console.log(
-            `✅ BYE procesado: Match #${match.matchNumber} - Registration ${winner.registrationId} avanza`,
+            `BYE procesado: Match #${match.matchNumber} - Registration ${winner.registrationId} avanza`,
           );
 
-          // ✅ Fix: Llamar al método desde BracketService
           await this.bracketService['autoAdvanceWinner'](
             queryRunner,
             match,
@@ -861,7 +918,4 @@ export class CompetitionsService {
       await queryRunner.release();
     }
   }
-
-
-
 }

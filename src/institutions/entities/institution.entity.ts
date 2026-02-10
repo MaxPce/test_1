@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn } from 'typeorm';
 import { Athlete } from './athlete.entity';
 import { Team } from './team.entity';
 
@@ -15,6 +15,12 @@ export class Institution {
 
   @Column({ length: 10, nullable: true })
   abrev: string;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @OneToMany(() => Athlete, (athlete) => athlete.institution)
   athletes: Athlete[];

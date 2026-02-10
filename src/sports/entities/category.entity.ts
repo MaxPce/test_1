@@ -5,6 +5,7 @@ import {
   ManyToOne,
   JoinColumn,
   Index,
+  DeleteDateColumn
 } from 'typeorm';
 import { Sport } from './sport.entity';
 import {
@@ -71,6 +72,12 @@ export class Category {
     default: CategoryType.INDIVIDUAL,
   })
   type: CategoryType;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @ManyToOne(() => Sport, (sport) => sport.categories)
   @JoinColumn({ name: 'sport_id' })

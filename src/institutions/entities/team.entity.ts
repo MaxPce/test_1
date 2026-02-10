@@ -6,6 +6,7 @@ import {
   OneToMany,
   JoinColumn,
   Index,
+  DeleteDateColumn
 } from 'typeorm';
 import { Institution } from './institution.entity';
 import { Category } from '../../sports/entities/category.entity';
@@ -26,6 +27,12 @@ export class Team {
 
   @Column({ name: 'category_id' })
   categoryId: number;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @ManyToOne(() => Institution, (institution) => institution.teams)
   @JoinColumn({ name: 'institution_id' })

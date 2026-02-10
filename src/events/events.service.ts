@@ -1,12 +1,10 @@
-// src/events/events.service.ts
-
 import {
   Injectable,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, IsNull } from 'typeorm';
 import { Event, EventCategory, Registration } from './entities';
 import {
   CreateEventDto,
@@ -48,11 +46,13 @@ export class EventsService {
     return this.eventRepository.save(event);
   }
 
+  // Agregar filtro de eliminados
   async findAllEvents(status?: string): Promise<Event[]> {
     const queryBuilder = this.eventRepository
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.eventCategories', 'eventCategories')
-      .leftJoinAndSelect('eventCategories.category', 'category');
+      .leftJoinAndSelect('eventCategories.category', 'category')
+      .where('event.deletedAt IS NULL'); 
 
     if (status) {
       queryBuilder.andWhere('event.status = :status', { status });
@@ -61,6 +61,7 @@ export class EventsService {
     return queryBuilder.orderBy('event.startDate', 'DESC').getMany();
   }
 
+  // Agregar withDeleted: false
   async findOneEvent(id: number): Promise<Event> {
     const event = await this.eventRepository.findOne({
       where: { eventId: id },
@@ -70,6 +71,7 @@ export class EventsService {
         'eventCategories.category.sport',
         'eventCategories.registrations',
       ],
+      withDeleted: false, 
     });
 
     if (!event) {
@@ -100,7 +102,8 @@ export class EventsService {
     return this.eventRepository.save(event);
   }
 
-  async removeEvent(id: number): Promise<void> {
+  // Cambiar a soft delete
+  async removeEvent(id: number, userId?: number): Promise<void> {
     const event = await this.findOneEvent(id);
 
     // Verificar si tiene categorías asociadas
@@ -112,6 +115,64 @@ export class EventsService {
       throw new BadRequestException(
         `No se puede eliminar el evento porque tiene ${categoriesCount} categoría(s) asociada(s)`,
       );
+    }
+
+    // SOFT DELETE
+    await this.eventRepository.softRemove(event);
+    
+    // Actualizar deletedBy
+    if (userId) {
+      await this.eventRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  // Restaurar evento eliminado
+  async restoreEvent(id: number): Promise<Event> {
+    const event = await this.eventRepository.findOne({
+      where: { eventId: id },
+      withDeleted: true,
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Evento con ID ${id} no encontrado`);
+    }
+
+    if (!event.deletedAt) {
+      throw new BadRequestException('El evento no está eliminado');
+    }
+
+    await this.eventRepository.restore(id);
+    await this.eventRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('eventId = :id', { id })
+      .execute();
+
+    return this.findOneEvent(id);
+  }
+
+
+  // Listar eventos eliminados
+  async findDeletedEvents(): Promise<Event[]> {
+    return this.eventRepository
+      .createQueryBuilder('event')
+      .leftJoinAndSelect('event.eventCategories', 'eventCategories')
+      .leftJoinAndSelect('eventCategories.category', 'category')
+      .where('event.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  // Eliminar permanentemente
+  async hardDeleteEvent(id: number): Promise<void> {
+    const event = await this.eventRepository.findOne({
+      where: { eventId: id },
+      withDeleted: true,
+    });
+
+    if (!event) {
+      throw new NotFoundException(`Evento con ID ${id} no encontrado`);
     }
 
     await this.eventRepository.remove(event);
@@ -309,6 +370,7 @@ export class EventsService {
     }
   }
 
+  // Agregar filtro de eliminados
   async findAllRegistrations(
     eventCategoryId?: number,
   ): Promise<Registration[]> {
@@ -321,7 +383,8 @@ export class EventsService {
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
       .leftJoinAndSelect('team.members', 'members')
-      .leftJoinAndSelect('members.athlete', 'memberAthlete');
+      .leftJoinAndSelect('members.athlete', 'memberAthlete')
+      .where('registration.deletedAt IS NULL'); // ← AGREGADO
 
     if (eventCategoryId) {
       queryBuilder.andWhere('registration.eventCategoryId = :eventCategoryId', {
@@ -332,6 +395,7 @@ export class EventsService {
     return queryBuilder.orderBy('registration.seedNumber', 'ASC').getMany();
   }
 
+  // Agregar withDeleted: false
   async findOneRegistration(id: number): Promise<Registration> {
     const registration = await this.registrationRepository.findOne({
       where: { registrationId: id },
@@ -345,6 +409,7 @@ export class EventsService {
         'team.members',
         'team.members.athlete',
       ],
+      withDeleted: false, 
     });
 
     if (!registration) {
@@ -363,8 +428,68 @@ export class EventsService {
     return this.registrationRepository.save(registration);
   }
 
-  async removeRegistration(id: number): Promise<void> {
+  // Cambiar a soft delete
+  async removeRegistration(id: number, userId?: number): Promise<void> {
     const registration = await this.findOneRegistration(id);
+    
+    // SOFT DELETE
+    await this.registrationRepository.softRemove(registration);
+    
+    if (userId) {
+      await this.registrationRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  // Restaurar registro eliminado
+  async restoreRegistration(id: number): Promise<Registration> {
+    const registration = await this.registrationRepository.findOne({
+      where: { registrationId: id },
+      withDeleted: true,
+    });
+
+    if (!registration) {
+      throw new NotFoundException(`Registro con ID ${id} no encontrado`);
+    }
+
+    if (!registration.deletedAt) {
+      throw new BadRequestException('El registro no está eliminado');
+    }
+
+    await this.registrationRepository.restore(id);
+    await this.registrationRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('registrationId = :id', { id })
+      .execute();
+
+    return this.findOneRegistration(id);
+  }
+
+
+  // Listar registros eliminados
+  async findDeletedRegistrations(): Promise<Registration[]> {
+    return this.registrationRepository
+      .createQueryBuilder('registration')
+      .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
+      .leftJoinAndSelect('registration.athlete', 'athlete')
+      .leftJoinAndSelect('registration.team', 'team')
+      .where('registration.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  // Eliminar registro permanentemente
+  async hardDeleteRegistration(id: number): Promise<void> {
+    const registration = await this.registrationRepository.findOne({
+      where: { registrationId: id },
+      withDeleted: true,
+    });
+
+    if (!registration) {
+      throw new NotFoundException(`Registro con ID ${id} no encontrado`);
+    }
+
     await this.registrationRepository.remove(registration);
   }
 }

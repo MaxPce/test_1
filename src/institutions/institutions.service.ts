@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { Institution, Athlete, Team, TeamMember } from './entities';
 import {
   CreateInstitutionDto,
@@ -40,6 +40,7 @@ export class InstitutionsService {
 
   async findAllInstitutions(): Promise<Institution[]> {
     return this.institutionRepository.find({
+      where: { deletedAt: IsNull() },
       relations: ['athletes', 'teams'],
       order: { name: 'ASC' },
     });
@@ -49,6 +50,7 @@ export class InstitutionsService {
     const institution = await this.institutionRepository.findOne({
       where: { institutionId: id },
       relations: ['athletes', 'teams'],
+      withDeleted: false,
     });
 
     if (!institution) {
@@ -67,12 +69,11 @@ export class InstitutionsService {
     return this.institutionRepository.save(institution);
   }
 
-  async removeInstitution(id: number): Promise<void> {
+  async removeInstitution(id: number, userId?: number): Promise<void> {
     const institution = await this.findOneInstitution(id);
 
-    // Verificar si tiene atletas
     const athletesCount = await this.athleteRepository.count({
-      where: { institutionId: id },
+      where: { institutionId: id, deletedAt: IsNull() },
     });
 
     if (athletesCount > 0) {
@@ -81,9 +82,8 @@ export class InstitutionsService {
       );
     }
 
-    // Verificar si tiene equipos
     const teamsCount = await this.teamRepository.count({
-      where: { institutionId: id },
+      where: { institutionId: id, deletedAt: IsNull() },
     });
 
     if (teamsCount > 0) {
@@ -92,13 +92,59 @@ export class InstitutionsService {
       );
     }
 
+    await this.institutionRepository.softRemove(institution);
+
+    if (userId) {
+      await this.institutionRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreInstitution(id: number): Promise<Institution> {
+    const institution = await this.institutionRepository.findOne({
+      where: { institutionId: id },
+      withDeleted: true,
+    });
+
+    if (!institution) {
+      throw new NotFoundException(`Institución con ID ${id} no encontrada`);
+    }
+
+    if (!institution.deletedAt) {
+      throw new BadRequestException('La institución no está eliminada');
+    }
+
+    await this.institutionRepository.restore(id);
+    await this.institutionRepository.update(id, { deletedBy: undefined });
+
+    return this.findOneInstitution(id);
+  }
+
+  async findDeletedInstitutions(): Promise<Institution[]> {
+    return this.institutionRepository
+      .createQueryBuilder('institution')
+      .leftJoinAndSelect('institution.athletes', 'athletes')
+      .leftJoinAndSelect('institution.teams', 'teams')
+      .where('institution.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteInstitution(id: number): Promise<void> {
+    const institution = await this.institutionRepository.findOne({
+      where: { institutionId: id },
+      withDeleted: true,
+    });
+
+    if (!institution) {
+      throw new NotFoundException(`Institución con ID ${id} no encontrada`);
+    }
+
     await this.institutionRepository.remove(institution);
   }
 
   // ==================== ATHLETES ====================
 
   async createAthlete(createDto: CreateAthleteDto): Promise<Athlete> {
-    // Verificar que la institución existe si se proporciona
     if (createDto.institutionId) {
       await this.findOneInstitution(createDto.institutionId);
     }
@@ -108,7 +154,10 @@ export class InstitutionsService {
   }
 
   async findAllAthletes(institutionId?: number): Promise<Athlete[]> {
-    const where = institutionId ? { institutionId } : {};
+    const where: any = { deletedAt: null };
+    if (institutionId) {
+      where.institutionId = institutionId;
+    }
 
     return this.athleteRepository.find({
       where,
@@ -121,6 +170,7 @@ export class InstitutionsService {
     const athlete = await this.athleteRepository.findOne({
       where: { athleteId: id },
       relations: ['institution', 'teamMemberships', 'teamMemberships.team'],
+      withDeleted: false,
     });
 
     if (!athlete) {
@@ -144,19 +194,69 @@ export class InstitutionsService {
     return this.athleteRepository.save(athlete);
   }
 
-  async removeAthlete(id: number): Promise<void> {
+  async removeAthlete(id: number, userId?: number): Promise<void> {
     const athlete = await this.findOneAthlete(id);
+
+    await this.athleteRepository.softRemove(athlete);
+
+    if (userId) {
+      await this.athleteRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreAthlete(id: number): Promise<Athlete> {
+    const athlete = await this.athleteRepository.findOne({
+      where: { athleteId: id },
+      withDeleted: true,
+    });
+
+    if (!athlete) {
+      throw new NotFoundException(`Atleta con ID ${id} no encontrado`);
+    }
+
+    if (!athlete.deletedAt) {
+      throw new BadRequestException('El atleta no está eliminado');
+    }
+
+    await this.athleteRepository.restore(id);
+    await this.athleteRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('athleteId = :id', { id })
+      .execute();
+
+
+    return this.findOneAthlete(id);
+  }
+
+  async findDeletedAthletes(): Promise<Athlete[]> {
+    return this.athleteRepository
+      .createQueryBuilder('athlete')
+      .leftJoinAndSelect('athlete.institution', 'institution')
+      .where('athlete.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteAthlete(id: number): Promise<void> {
+    const athlete = await this.athleteRepository.findOne({
+      where: { athleteId: id },
+      withDeleted: true,
+    });
+
+    if (!athlete) {
+      throw new NotFoundException(`Atleta con ID ${id} no encontrado`);
+    }
+
     await this.athleteRepository.remove(athlete);
   }
 
   // ==================== TEAMS ====================
 
   async createTeam(createDto: CreateTeamDto): Promise<Team> {
-    // Verificar que la institución existe
     await this.findOneInstitution(createDto.institutionId);
 
-    // Verificar que la categoría existe (necesitamos importar el servicio de sports)
-    // Por ahora solo validamos que el ID no sea null
     if (!createDto.categoryId) {
       throw new BadRequestException('categoryId es requerido');
     }
@@ -174,7 +274,8 @@ export class InstitutionsService {
       .leftJoinAndSelect('team.institution', 'institution')
       .leftJoinAndSelect('team.category', 'category')
       .leftJoinAndSelect('team.members', 'members')
-      .leftJoinAndSelect('members.athlete', 'athlete');
+      .leftJoinAndSelect('members.athlete', 'athlete')
+      .where('team.deletedAt IS NULL');
 
     if (institutionId) {
       queryBuilder.andWhere('team.institutionId = :institutionId', {
@@ -193,6 +294,7 @@ export class InstitutionsService {
     const team = await this.teamRepository.findOne({
       where: { teamId: id },
       relations: ['institution', 'category', 'members', 'members.athlete'],
+      withDeleted: false,
     });
 
     if (!team) {
@@ -213,8 +315,57 @@ export class InstitutionsService {
     return this.teamRepository.save(team);
   }
 
-  async removeTeam(id: number): Promise<void> {
+  async removeTeam(id: number, userId?: number): Promise<void> {
     const team = await this.findOneTeam(id);
+
+    await this.teamRepository.softRemove(team);
+
+    if (userId) {
+      await this.teamRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreTeam(id: number): Promise<Team> {
+    const team = await this.teamRepository.findOne({
+      where: { teamId: id },
+      withDeleted: true,
+    });
+
+    if (!team) {
+      throw new NotFoundException(`Equipo con ID ${id} no encontrado`);
+    }
+
+    if (!team.deletedAt) {
+      throw new BadRequestException('El equipo no está eliminado');
+    }
+
+    await this.teamRepository.restore(id);
+    await this.teamRepository.update(id, { deletedBy: undefined });
+
+    return this.findOneTeam(id);
+  }
+
+  async findDeletedTeams(): Promise<Team[]> {
+    return this.teamRepository
+      .createQueryBuilder('team')
+      .leftJoinAndSelect('team.institution', 'institution')
+      .leftJoinAndSelect('team.category', 'category')
+      .leftJoinAndSelect('team.members', 'members')
+      .where('team.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteTeam(id: number): Promise<void> {
+    const team = await this.teamRepository.findOne({
+      where: { teamId: id },
+      withDeleted: true,
+    });
+
+    if (!team) {
+      throw new NotFoundException(`Equipo con ID ${id} no encontrado`);
+    }
+
     await this.teamRepository.remove(team);
   }
 
@@ -224,13 +375,9 @@ export class InstitutionsService {
     teamId: number,
     dto: AddTeamMemberDto,
   ): Promise<TeamMember> {
-    // Verificar que el equipo existe
     await this.findOneTeam(teamId);
-
-    // Verificar que el atleta existe
     await this.findOneAthlete(dto.athleteId);
 
-    // Verificar que el atleta no esté ya en el equipo
     const existing = await this.teamMemberRepository.findOne({
       where: {
         teamId,

@@ -6,6 +6,7 @@ import {
   OneToMany,
   JoinColumn,
   Index,
+  DeleteDateColumn
 } from 'typeorm';
 import { SportType } from './sport-type.entity';
 import { Category } from './category.entity';
@@ -28,6 +29,13 @@ export class Sport {
   @ManyToOne(() => SportType, (sportType) => sportType.sports)
   @JoinColumn({ name: 'sport_type_id' })
   sportType: SportType;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
+
 
   @OneToMany(() => Category, (category) => category.sport)
   categories: Category[];

@@ -3,10 +3,11 @@ import {
   UnauthorizedException,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from './entities/user.entity';
 import { RegisterDto } from './dto/register.dto';
@@ -23,8 +24,12 @@ export class AuthService {
 
   async register(registerDto: RegisterDto) {
     const existingUser = await this.usersRepository.findOne({
-      where: [{ username: registerDto.username }, { email: registerDto.email }],
+      where: [
+        { username: registerDto.username, deletedAt: IsNull() },
+        { email: registerDto.email, deletedAt: IsNull() },
+      ],
     });
+
 
     if (existingUser) {
       if (existingUser.username === registerDto.username) {
@@ -37,7 +42,6 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(registerDto.password, 10);
 
-    // Crear usuario
     const user = this.usersRepository.create({
       username: registerDto.username,
       password: hashedPassword,
@@ -56,11 +60,11 @@ export class AuthService {
   }
 
   async login(loginDto: LoginDto) {
-    // Buscar usuario con password
     const user = await this.usersRepository
       .createQueryBuilder('user')
       .addSelect('user.password')
       .where('user.username = :username', { username: loginDto.username })
+      .andWhere('user.deletedAt IS NULL')
       .getOne();
 
     if (!user) {
@@ -71,7 +75,6 @@ export class AuthService {
       throw new UnauthorizedException('Usuario inactivo');
     }
 
-    // Verificar contraseña
     const isPasswordValid = await bcrypt.compare(
       loginDto.password,
       user.password,
@@ -81,7 +84,6 @@ export class AuthService {
       throw new UnauthorizedException('Credenciales inválidas');
     }
 
-    // Generar token
     const payload = {
       sub: user.userId,
       username: user.username,
@@ -106,13 +108,14 @@ export class AuthService {
 
   async validateUser(userId: number): Promise<User | null> {
     return this.usersRepository.findOne({
-      where: { userId, isActive: true },
+      where: { userId, isActive: true, deletedAt: IsNull() },
     });
   }
 
   async getProfile(userId: number) {
     const user = await this.usersRepository.findOne({
       where: { userId },
+      withDeleted: false,
     });
 
     if (!user) {
@@ -121,5 +124,83 @@ export class AuthService {
 
     const { password, ...result } = user;
     return result;
+  }
+
+  async findAllUsers(): Promise<User[]> {
+    return this.usersRepository.find({
+      where: { deletedAt: IsNull() },
+      order: { fullName: 'ASC' },
+    });
+  }
+
+  async findOneUser(userId: number): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { userId },
+      withDeleted: false,
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
+    }
+
+    return user;
+  }
+
+  async removeUser(userId: number, deletedByUserId?: number): Promise<void> {
+    const user = await this.findOneUser(userId);
+
+    await this.usersRepository.softRemove(user);
+
+    if (deletedByUserId) {
+      await this.usersRepository.update(userId, { deletedBy: deletedByUserId });
+    }
+  }
+
+  async restoreUser(userId: number): Promise<User> {
+    const user = await this.usersRepository.findOne({
+      where: { userId },
+      withDeleted: true,
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
+    }
+
+    if (!user.deletedAt) {
+      throw new BadRequestException('El usuario no está eliminado');
+    }
+
+    await this.usersRepository.restore(userId);
+    await this.usersRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('userId = :userId', { userId })
+      .execute();
+
+    return this.findOneUser(userId);
+  }
+
+
+
+  async findDeletedUsers(): Promise<User[]> {
+    return this.usersRepository
+      .createQueryBuilder('user')
+      .where('user.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteUser(userId: number): Promise<void> {
+    const user = await this.usersRepository.findOne({
+      where: { userId },
+      withDeleted: true,
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${userId} no encontrado`);
+    }
+
+    await this.usersRepository.remove(user);
   }
 }

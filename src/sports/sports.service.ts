@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull } from 'typeorm';
 import { SportType, Sport, Category } from './entities';
 import {
   CreateSportTypeDto,
@@ -65,9 +65,8 @@ export class SportsService {
   async removeSportType(id: number): Promise<void> {
     const sportType = await this.findOneSportType(id);
 
-    // Verificar si tiene deportes asociados
     const sportsCount = await this.sportRepository.count({
-      where: { sportTypeId: id },
+      where: { sportTypeId: id, deletedAt: IsNull() },
     });
 
     if (sportsCount > 0) {
@@ -82,7 +81,6 @@ export class SportsService {
   // ==================== SPORTS ====================
 
   async createSport(createDto: CreateSportDto): Promise<Sport> {
-    // Verificar que el sport type existe
     await this.findOneSportType(createDto.sportTypeId);
 
     const sport = this.sportRepository.create(createDto);
@@ -90,7 +88,10 @@ export class SportsService {
   }
 
   async findAllSports(sportTypeId?: number): Promise<Sport[]> {
-    const where = sportTypeId ? { sportTypeId } : {};
+    const where: any = { deletedAt: null };
+    if (sportTypeId) {
+      where.sportTypeId = sportTypeId;
+    }
 
     return this.sportRepository.find({
       where,
@@ -103,6 +104,7 @@ export class SportsService {
     const sport = await this.sportRepository.findOne({
       where: { sportId: id },
       relations: ['sportType', 'categories'],
+      withDeleted: false,
     });
 
     if (!sport) {
@@ -123,12 +125,11 @@ export class SportsService {
     return this.sportRepository.save(sport);
   }
 
-  async removeSport(id: number): Promise<void> {
+  async removeSport(id: number, userId?: number): Promise<void> {
     const sport = await this.findOneSport(id);
 
-    // Verificar si tiene categorías asociadas
     const categoriesCount = await this.categoryRepository.count({
-      where: { sportId: id },
+      where: { sportId: id, deletedAt: IsNull() },
     });
 
     if (categoriesCount > 0) {
@@ -137,18 +138,69 @@ export class SportsService {
       );
     }
 
+    await this.sportRepository.softRemove(sport);
+
+    if (userId) {
+      await this.sportRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreSport(id: number): Promise<Sport> {
+    const sport = await this.sportRepository.findOne({
+      where: { sportId: id },
+      withDeleted: true,
+    });
+
+    if (!sport) {
+      throw new NotFoundException(`Deporte con ID ${id} no encontrado`);
+    }
+
+    if (!sport.deletedAt) {
+      throw new BadRequestException('El deporte no está eliminado');
+    }
+
+    await this.sportRepository.restore(id);
+    await this.sportRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('sportId = :id', { id })
+      .execute();
+
+    return this.findOneSport(id);
+  }
+
+
+  async findDeletedSports(): Promise<Sport[]> {
+    return this.sportRepository
+      .createQueryBuilder('sport')
+      .leftJoinAndSelect('sport.sportType', 'sportType')
+      .leftJoinAndSelect('sport.categories', 'categories')
+      .where('sport.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteSport(id: number): Promise<void> {
+    const sport = await this.sportRepository.findOne({
+      where: { sportId: id },
+      withDeleted: true,
+    });
+
+    if (!sport) {
+      throw new NotFoundException(`Deporte con ID ${id} no encontrado`);
+    }
+
     await this.sportRepository.remove(sport);
   }
 
   // ==================== CATEGORIES ====================
 
   async createCategory(createDto: CreateCategoryDto): Promise<Category> {
-    // Verificar que el deporte existe si se proporciona
     if (createDto.sportId) {
       await this.findOneSport(createDto.sportId);
     }
 
-    // Validar rangos de peso
     if (createDto.weightMin && createDto.weightMax) {
       if (createDto.weightMin >= createDto.weightMax) {
         throw new BadRequestException(
@@ -167,7 +219,8 @@ export class SportsService {
   ): Promise<Category[]> {
     const queryBuilder = this.categoryRepository
       .createQueryBuilder('category')
-      .leftJoinAndSelect('category.sport', 'sport');
+      .leftJoinAndSelect('category.sport', 'sport')
+      .where('category.deletedAt IS NULL');
 
     if (sportId) {
       queryBuilder.andWhere('category.sportId = :sportId', { sportId });
@@ -186,6 +239,7 @@ export class SportsService {
     const category = await this.categoryRepository.findOne({
       where: { categoryId: id },
       relations: ['sport'],
+      withDeleted: false,
     });
 
     if (!category) {
@@ -205,7 +259,6 @@ export class SportsService {
       await this.findOneSport(updateDto.sportId);
     }
 
-    // Validar rangos de peso si se actualizan
     const newWeightMin = updateDto.weightMin ?? category.weightMin;
     const newWeightMax = updateDto.weightMax ?? category.weightMax;
 
@@ -219,8 +272,61 @@ export class SportsService {
     return this.categoryRepository.save(category);
   }
 
-  async removeCategory(id: number): Promise<void> {
+  async removeCategory(id: number, userId?: number): Promise<void> {
     const category = await this.findOneCategory(id);
+
+    await this.categoryRepository.softRemove(category);
+
+    if (userId) {
+      await this.categoryRepository.update(id, { deletedBy: userId });
+    }
+  }
+
+  async restoreCategory(id: number): Promise<Category> {
+    const category = await this.categoryRepository.findOne({
+      where: { categoryId: id },
+      withDeleted: true,
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Categoría con ID ${id} no encontrada`);
+    }
+
+    if (!category.deletedAt) {
+      throw new BadRequestException('La categoría no está eliminada');
+    }
+
+    await this.categoryRepository.restore(id);
+    await this.categoryRepository
+      .createQueryBuilder()
+      .update()
+      .set({ deletedBy: null } as any)
+      .where('categoryId = :id', { id })
+      .execute();
+
+    return this.findOneCategory(id);
+  }
+
+
+  async findDeletedCategories(): Promise<Category[]> {
+    return this.categoryRepository
+      .createQueryBuilder('category')
+      .leftJoinAndSelect('category.sport', 'sport')
+      .where('category.deletedAt IS NOT NULL')
+      .withDeleted()
+      .getMany();
+  }
+
+  async hardDeleteCategory(id: number): Promise<void> {
+    const category = await this.categoryRepository.findOne({
+      where: { categoryId: id },
+      withDeleted: true,
+    });
+
+    if (!category) {
+      throw new NotFoundException(`Categoría con ID ${id} no encontrada`);
+    }
+
     await this.categoryRepository.remove(category);
   }
 }

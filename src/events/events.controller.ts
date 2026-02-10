@@ -7,8 +7,8 @@ import {
   Param,
   Delete,
   Query,
-  UseInterceptors,      
-  UploadedFile,         
+  UseInterceptors,
+  UploadedFile,
   BadRequestException,
   ParseIntPipe,
   UseGuards,
@@ -27,13 +27,18 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UploadService, multerConfig } from '../common/services/upload.service';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EventsController {
-  constructor(private readonly eventsService: EventsService, private readonly uploadService: UploadService,) {}
+  constructor(
+    private readonly eventsService: EventsService,
+    private readonly uploadService: UploadService,
+  ) {}
 
   // ==================== EVENTS ====================
 
@@ -49,7 +54,13 @@ export class EventsController {
     return this.eventsService.findAllEvents(status);
   }
 
-  // ==================== EVENT CATEGORIES (ANTES DE :id) ====================
+  @Get('deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedEvents() {
+    return this.eventsService.findDeletedEvents();
+  }
+
+  // ==================== EVENT CATEGORIES ====================
 
   @Post('categories')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -85,7 +96,7 @@ export class EventsController {
     return this.eventsService.removeEventCategory(id);
   }
 
-  // ==================== REGISTRATIONS (ANTES DE :id) ====================
+  // ==================== REGISTRATIONS ====================
 
   @Post('registrations')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -108,6 +119,12 @@ export class EventsController {
     return this.eventsService.findAllRegistrations(eventCategoryIdNum);
   }
 
+  @Get('registrations/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedRegistrations() {
+    return this.eventsService.findDeletedRegistrations();
+  }
+
   @Get('registrations/:id')
   @Public()
   findOneRegistration(@Param('id', ParseIntPipe) id: number) {
@@ -125,11 +142,28 @@ export class EventsController {
 
   @Delete('registrations/:id')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  removeRegistration(@Param('id', ParseIntPipe) id: number) {
-    return this.eventsService.removeRegistration(id);
+  async removeRegistration(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.eventsService.removeRegistration(id, user.userId);
+    return { message: 'Registro eliminado correctamente' };
   }
 
-  // ==================== EVENTS BY ID (AL FINAL) ====================
+  @Patch('registrations/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreRegistration(@Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.restoreRegistration(id);
+  }
+
+  @Delete('registrations/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteRegistration(@Param('id', ParseIntPipe) id: number) {
+    await this.eventsService.hardDeleteRegistration(id);
+    return { message: 'Registro eliminado permanentemente' };
+  }
+
+  // ==================== EVENTS BY ID ====================
 
   @Get(':id')
   @Public()
@@ -148,9 +182,27 @@ export class EventsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  removeEvent(@Param('id', ParseIntPipe) id: number) {
-    return this.eventsService.removeEvent(id);
+  async removeEvent(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.eventsService.removeEvent(id, user.userId);
+    return { message: 'Evento eliminado correctamente' };
   }
+
+  @Patch(':id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreEvent(@Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.restoreEvent(id);
+  }
+
+  @Delete(':id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteEvent(@Param('id', ParseIntPipe) id: number) {
+    await this.eventsService.hardDeleteEvent(id);
+    return { message: 'Evento eliminado permanentemente' };
+  }
+
   @Post(':id/upload-logo')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   @UseInterceptors(FileInterceptor('file', multerConfig('events')))

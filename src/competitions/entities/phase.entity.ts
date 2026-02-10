@@ -6,6 +6,7 @@ import {
   OneToMany,
   JoinColumn,
   Index,
+  DeleteDateColumn
 } from 'typeorm';
 import { EventCategory } from '../../events/entities/event-category.entity';
 import { Match } from './match.entity';
@@ -36,6 +37,12 @@ export class Phase {
 
   @Column({ name: 'display_order', nullable: true })
   displayOrder: number;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @ManyToOne(() => EventCategory)
   @JoinColumn({ name: 'event_category_id' })

@@ -27,6 +27,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UploadService, multerConfig } from '../common/services/upload.service';
 
@@ -73,7 +75,7 @@ export class SportsController {
     return this.sportsService.removeSportType(id);
   }
 
-  // ==================== CATEGORIES (ANTES DE SPORTS) ====================
+  // ==================== CATEGORIES ====================
 
   @Post('categories')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -89,6 +91,12 @@ export class SportsController {
   ) {
     const sportIdNum = sportId ? parseInt(sportId, 10) : undefined;
     return this.sportsService.findAllCategories(sportIdNum, formatType);
+  }
+
+  @Get('categories/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedCategories() {
+    return this.sportsService.findDeletedCategories();
   }
 
   @Get('categories/:id')
@@ -108,11 +116,28 @@ export class SportsController {
 
   @Delete('categories/:id')
   @Roles(UserRole.ADMIN)
-  removeCategory(@Param('id', ParseIntPipe) id: number) {
-    return this.sportsService.removeCategory(id);
+  async removeCategory(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.sportsService.removeCategory(id, user.userId);
+    return { message: 'Categoría eliminada correctamente' };
   }
 
-  // ==================== SPORTS (DESPUÉS DE CATEGORIES) ====================
+  @Patch('categories/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreCategory(@Param('id', ParseIntPipe) id: number) {
+    return this.sportsService.restoreCategory(id);
+  }
+
+  @Delete('categories/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteCategory(@Param('id', ParseIntPipe) id: number) {
+    await this.sportsService.hardDeleteCategory(id);
+    return { message: 'Categoría eliminada permanentemente' };
+  }
+
+  // ==================== SPORTS ====================
 
   @Post()
   @Roles(UserRole.ADMIN)
@@ -125,6 +150,12 @@ export class SportsController {
   findAllSports(@Query('sportTypeId') sportTypeId?: string) {
     const sportTypeIdNum = sportTypeId ? parseInt(sportTypeId, 10) : undefined;
     return this.sportsService.findAllSports(sportTypeIdNum);
+  }
+
+  @Get('deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedSports() {
+    return this.sportsService.findDeletedSports();
   }
 
   @Get(':id')
@@ -144,11 +175,27 @@ export class SportsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  removeSport(@Param('id', ParseIntPipe) id: number) {
-    return this.sportsService.removeSport(id);
+  async removeSport(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.sportsService.removeSport(id, user.userId);
+    return { message: 'Deporte eliminado correctamente' };
   }
 
-  // ==================== UPLOAD ICON ====================
+  @Patch(':id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreSport(@Param('id', ParseIntPipe) id: number) {
+    return this.sportsService.restoreSport(id);
+  }
+
+  @Delete(':id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteSport(@Param('id', ParseIntPipe) id: number) {
+    await this.sportsService.hardDeleteSport(id);
+    return { message: 'Deporte eliminado permanentemente' };
+  }
+
   @Post(':id/upload-icon')
   @Roles(UserRole.ADMIN)
   @UseInterceptors(FileInterceptor('file', multerConfig('sports')))

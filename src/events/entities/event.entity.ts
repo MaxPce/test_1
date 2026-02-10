@@ -5,6 +5,7 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn
 } from 'typeorm';
 import { EventCategory } from './event-category.entity';
 import { EventStatus } from '../../common/enums';
@@ -42,6 +43,12 @@ export class Event {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @OneToMany(() => EventCategory, (eventCategory) => eventCategory.event)
   eventCategories: EventCategory[];

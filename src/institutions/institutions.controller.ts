@@ -13,7 +13,7 @@ import {
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express'; 
+import { FileInterceptor } from '@nestjs/platform-express';
 import { InstitutionsService } from './institutions.service';
 import {
   CreateInstitutionDto,
@@ -28,15 +28,17 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { UserRole } from '../common/enums/user-role.enum';
-import { UploadService, multerConfig } from '../common/services/upload.service'; 
+import { UploadService, multerConfig } from '../common/services/upload.service';
 
 @Controller('institutions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InstitutionsController {
   constructor(
     private readonly institutionsService: InstitutionsService,
-    private readonly uploadService: UploadService, 
+    private readonly uploadService: UploadService,
   ) {}
 
   // ==================== INSTITUTIONS ====================
@@ -53,7 +55,13 @@ export class InstitutionsController {
     return this.institutionsService.findAllInstitutions();
   }
 
-  // ==================== ATHLETES (ANTES DE :id) ====================
+  @Get('deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedInstitutions() {
+    return this.institutionsService.findDeletedInstitutions();
+  }
+
+  // ==================== ATHLETES ====================
 
   @Post('athletes')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -68,6 +76,12 @@ export class InstitutionsController {
       ? parseInt(institutionId, 10)
       : undefined;
     return this.institutionsService.findAllAthletes(institutionIdNum);
+  }
+
+  @Get('athletes/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedAthletes() {
+    return this.institutionsService.findDeletedAthletes();
   }
 
   @Get('athletes/:id')
@@ -87,8 +101,25 @@ export class InstitutionsController {
 
   @Delete('athletes/:id')
   @Roles(UserRole.ADMIN)
-  removeAthlete(@Param('id', ParseIntPipe) id: number) {
-    return this.institutionsService.removeAthlete(id);
+  async removeAthlete(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.institutionsService.removeAthlete(id, user.userId);
+    return { message: 'Atleta eliminado correctamente' };
+  }
+
+  @Patch('athletes/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreAthlete(@Param('id', ParseIntPipe) id: number) {
+    return this.institutionsService.restoreAthlete(id);
+  }
+
+  @Delete('athletes/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteAthlete(@Param('id', ParseIntPipe) id: number) {
+    await this.institutionsService.hardDeleteAthlete(id);
+    return { message: 'Atleta eliminado permanentemente' };
   }
 
   @Post('athletes/:id/upload-photo')
@@ -104,7 +135,6 @@ export class InstitutionsController {
 
     const photoUrl = this.uploadService.getFileUrl(file.filename, 'athletes');
 
-    // Actualizar el atleta con la nueva URL
     await this.institutionsService.updateAthlete(id, { photoUrl });
 
     return {
@@ -114,7 +144,7 @@ export class InstitutionsController {
     };
   }
 
-  // ==================== TEAMS (ANTES DE :id) ====================
+  // ==================== TEAMS ====================
 
   @Post('teams')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -138,6 +168,12 @@ export class InstitutionsController {
     );
   }
 
+  @Get('teams/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedTeams() {
+    return this.institutionsService.findDeletedTeams();
+  }
+
   @Get('teams/:id')
   @Public()
   findOneTeam(@Param('id', ParseIntPipe) id: number) {
@@ -155,8 +191,25 @@ export class InstitutionsController {
 
   @Delete('teams/:id')
   @Roles(UserRole.ADMIN)
-  removeTeam(@Param('id', ParseIntPipe) id: number) {
-    return this.institutionsService.removeTeam(id);
+  async removeTeam(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.institutionsService.removeTeam(id, user.userId);
+    return { message: 'Equipo eliminado correctamente' };
+  }
+
+  @Patch('teams/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreTeam(@Param('id', ParseIntPipe) id: number) {
+    return this.institutionsService.restoreTeam(id);
+  }
+
+  @Delete('teams/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteTeam(@Param('id', ParseIntPipe) id: number) {
+    await this.institutionsService.hardDeleteTeam(id);
+    return { message: 'Equipo eliminado permanentemente' };
   }
 
   // ==================== TEAM MEMBERS ====================
@@ -193,7 +246,7 @@ export class InstitutionsController {
     );
   }
 
-  // ==================== INSTITUTIONS BY ID (AL FINAL) ====================
+  // ==================== INSTITUTIONS BY ID ====================
 
   @Get(':id')
   @Public()
@@ -212,8 +265,25 @@ export class InstitutionsController {
 
   @Delete(':id')
   @Roles(UserRole.ADMIN)
-  removeInstitution(@Param('id', ParseIntPipe) id: number) {
-    return this.institutionsService.removeInstitution(id);
+  async removeInstitution(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.institutionsService.removeInstitution(id, user.userId);
+    return { message: 'Institución eliminada correctamente' };
+  }
+
+  @Patch(':id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreInstitution(@Param('id', ParseIntPipe) id: number) {
+    return this.institutionsService.restoreInstitution(id);
+  }
+
+  @Delete(':id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteInstitution(@Param('id', ParseIntPipe) id: number) {
+    await this.institutionsService.hardDeleteInstitution(id);
+    return { message: 'Institución eliminada permanentemente' };
   }
 
   @Post(':id/upload-logo')
@@ -227,7 +297,10 @@ export class InstitutionsController {
       throw new BadRequestException('No se proporcionó ningún archivo');
     }
 
-    const logoUrl = this.uploadService.getFileUrl(file.filename, 'institutions');
+    const logoUrl = this.uploadService.getFileUrl(
+      file.filename,
+      'institutions',
+    );
 
     await this.institutionsService.updateInstitution(id, { logoUrl });
 

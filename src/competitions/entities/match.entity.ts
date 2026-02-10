@@ -8,6 +8,7 @@ import {
   Index,
   CreateDateColumn,
   UpdateDateColumn,
+  DeleteDateColumn
 } from 'typeorm';
 import { Phase } from './phase.entity';
 import { Registration } from '../../events/entities/registration.entity';
@@ -143,6 +144,12 @@ export class Match {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
+
+  @DeleteDateColumn({ name: 'deleted_at' })
+  deletedAt: Date;
+
+  @Column({ name: 'deleted_by', nullable: true })
+  deletedBy: number;
 
   @ManyToOne(() => Phase, (phase) => phase.matches)
   @JoinColumn({ name: 'phase_id' })

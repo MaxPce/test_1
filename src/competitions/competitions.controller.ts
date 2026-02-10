@@ -1,4 +1,3 @@
-// src/competitions/competitions.controller.ts
 import {
   Controller,
   Get,
@@ -30,6 +29,8 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { UserRole } from '../common/enums/user-role.enum';
 import { MatchStatus } from '../common/enums';
 import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
@@ -65,6 +66,12 @@ export class CompetitionsController {
     return this.competitionsService.findAllPhases(eventCategoryIdNum);
   }
 
+  @Get('phases/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedPhases() {
+    return this.competitionsService.findDeletedPhases();
+  }
+
   @Get('phases/:id')
   @Public()
   findOnePhase(@Param('id', ParseIntPipe) id: number) {
@@ -81,9 +88,26 @@ export class CompetitionsController {
   }
 
   @Delete('phases/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR) // ✅ Cambiado: antes solo ADMIN
-  removePhase(@Param('id', ParseIntPipe) id: number) {
-    return this.competitionsService.removePhase(id);
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async removePhase(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.competitionsService.removePhase(id, user.userId);
+    return { message: 'Fase eliminada correctamente' };
+  }
+
+  @Patch('phases/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restorePhase(@Param('id', ParseIntPipe) id: number) {
+    return this.competitionsService.restorePhase(id);
+  }
+
+  @Delete('phases/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeletePhase(@Param('id', ParseIntPipe) id: number) {
+    await this.competitionsService.hardDeletePhase(id);
+    return { message: 'Fase eliminada permanentemente' };
   }
 
   // ==================== MATCHES ====================
@@ -104,6 +128,12 @@ export class CompetitionsController {
     return this.competitionsService.findAllMatches(phaseIdNum, status);
   }
 
+  @Get('matches/deleted')
+  @Roles(UserRole.ADMIN)
+  findDeletedMatches() {
+    return this.competitionsService.findDeletedMatches();
+  }
+
   @Get('matches/:id')
   @Public()
   findOneMatch(@Param('id', ParseIntPipe) id: number) {
@@ -120,9 +150,26 @@ export class CompetitionsController {
   }
 
   @Delete('matches/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR) // ✅ Cambiado: antes solo ADMIN
-  removeMatch(@Param('id', ParseIntPipe) id: number) {
-    return this.competitionsService.removeMatch(id);
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async removeMatch(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    await this.competitionsService.removeMatch(id, user.userId);
+    return { message: 'Match eliminado correctamente' };
+  }
+
+  @Patch('matches/:id/restore')
+  @Roles(UserRole.ADMIN)
+  restoreMatch(@Param('id', ParseIntPipe) id: number) {
+    return this.competitionsService.restoreMatch(id);
+  }
+
+  @Delete('matches/:id/hard')
+  @Roles(UserRole.ADMIN)
+  async hardDeleteMatch(@Param('id', ParseIntPipe) id: number) {
+    await this.competitionsService.hardDeleteMatch(id);
+    return { message: 'Match eliminado permanentemente' };
   }
 
   // ==================== PARTICIPATIONS ====================
@@ -207,10 +254,6 @@ export class CompetitionsController {
 
   // ==================== TENIS DE MESA - LINEUPS ====================
 
-  /**
-   * Configurar lineup de un equipo para un match
-   * POST /competitions/participations/:id/lineup
-   */
   @Post('participations/:id/lineup')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async setLineup(
@@ -220,10 +263,6 @@ export class CompetitionsController {
     return this.tableTennisService.setLineup(participationId, dto);
   }
 
-  /**
-   * Obtener lineups de un match (ambos equipos)
-   * GET /competitions/matches/:id/lineups
-   */
   @Get('matches/:id/lineups')
   @Public()
   async getMatchLineups(@Param('id', ParseIntPipe) matchId: number) {
@@ -232,30 +271,18 @@ export class CompetitionsController {
 
   // ==================== TENIS DE MESA - GAMES ====================
 
-  /**
-   * Generar juegos automáticamente para un match
-   * POST /competitions/matches/:id/generate-games
-   */
   @Post('matches/:id/generate-games')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async generateGames(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.generateGames(matchId);
   }
 
-  /**
-   * Obtener todos los juegos de un match
-   * GET /competitions/matches/:id/games
-   */
   @Get('matches/:id/games')
   @Public()
   async getMatchGames(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.getMatchGames(matchId);
   }
 
-  /**
-   * Actualizar resultado de un juego individual
-   * PATCH /competitions/games/:id
-   */
   @Patch('games/:id')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async updateGameResult(
@@ -267,20 +294,12 @@ export class CompetitionsController {
 
   // ==================== TENIS DE MESA - MATCH DETAILS ====================
 
-  /**
-   * Obtener detalles completos de un match de tenis de mesa
-   * GET /competitions/matches/:id/table-tennis
-   */
   @Get('matches/:id/table-tennis')
   @Public()
   async getTableTennisMatchDetails(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.getMatchDetails(matchId);
   }
 
-  /**
-   * Calcular resultado actual del match
-   * GET /competitions/matches/:id/result
-   */
   @Get('matches/:id/result')
   @Public()
   async calculateMatchResult(@Param('id', ParseIntPipe) matchId: number) {
@@ -289,24 +308,19 @@ export class CompetitionsController {
 
   // ==================== TENIS DE MESA - FINALIZE MATCH ====================
 
-  /**
-   * Finalizar match manualmente (marcar como finalizado)
-   * PATCH /competitions/matches/:id/finalize
-   */
   @Patch('matches/:id/finalize')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async finalizeMatch(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.finalizeMatch(matchId);
   }
+
   @Patch('matches/:id/reopen')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async reopenMatch(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.reopenMatch(matchId);
   }
 
-  
-
-  // ===== POOMSAE ENDPOINTS =====
+  // ==================== POOMSAE ENDPOINTS ====================
 
   @Patch('participations/:participationId/poomsae-score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
@@ -333,52 +347,35 @@ export class CompetitionsController {
   ) {
     return this.taekwondoPoomsaeService.getParticipationScore(participationId);
   }
+
   // ==================== ENDPOINTS DE BRACKET ====================
 
-  /**
-   * Generar bracket completo con tercer lugar
-   */
   @Post('brackets/generate-complete')
   async generateCompleteBracket(@Body() dto: GenerateBracketDto) {
     return this.bracketService.generateCompleteBracket(dto);
   }
 
-  /**
-   * Avanzar ganador automáticamente
-   */
   @Post('matches/advance-winner')
   async advanceWinner(@Body() dto: AdvanceWinnerDto) {
     return this.bracketService.advanceWinner(dto);
   }
 
-  /**
-   * Obtener estructura completa del bracket
-   */
   @Get('brackets/:phaseId/structure')
   async getBracketStructure(@Param('phaseId') phaseId: string) {
     return this.bracketService.getBracketStructure(+phaseId);
   }
 
-  /**
-   * Verificar si el bracket está completo
-   */
   @Get('brackets/:phaseId/is-complete')
   async isBracketComplete(@Param('phaseId') phaseId: string) {
     const isComplete = await this.bracketService.isBracketComplete(+phaseId);
     return { phaseId: +phaseId, isComplete };
   }
 
-  /**
-   * Obtener campeón del bracket
-   */
   @Get('brackets/:phaseId/champion')
   async getChampion(@Param('phaseId') phaseId: string) {
     return this.bracketService.getChampion(+phaseId);
   }
 
-  /**
-   * Obtener tercer lugar
-   */
   @Get('brackets/:phaseId/third-place')
   async getThirdPlace(@Param('phaseId') phaseId: string) {
     return this.bracketService.getThirdPlace(+phaseId);
@@ -393,9 +390,7 @@ export class CompetitionsController {
   }
 
   @Post('phases/:id/process-byes')
-    processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
-      return this.competitionsService.processPhaseByesAutomatically(phaseId);
-    }
-
-
+  processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.processPhaseByesAutomatically(phaseId);
+  }
 }
