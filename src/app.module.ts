@@ -10,8 +10,6 @@ import { InstitutionsModule } from './institutions/institutions.module';
 import { EventsModule } from './events/events.module';
 import { CompetitionsModule } from './competitions/competitions.module';
 import { ResultsModule } from './results/results.module';
-
-// Guards globales
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 
 @Module({
@@ -36,7 +34,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
       }),
     }),
 
-    // Módulos de la aplicación
+
     AuthModule,
     SportsModule,
     InstitutionsModule,
@@ -45,7 +43,6 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     ResultsModule,
   ],
   providers: [
-    // Guard global de JWT (todas las rutas requieren autenticación por defecto)
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
