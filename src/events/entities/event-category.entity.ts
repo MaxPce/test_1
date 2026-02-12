@@ -14,6 +14,8 @@ import { Registration } from './registration.entity';
 @Entity('event_categories')
 @Index(['eventId'])
 @Index(['categoryId'])
+@Index(['externalEventId']) 
+@Index(['externalSportId'])
 export class EventCategory {
   @PrimaryGeneratedColumn({ name: 'event_category_id' })
   eventCategoryId: number;
@@ -23,6 +25,20 @@ export class EventCategory {
 
   @Column({ name: 'category_id', nullable: true })
   categoryId: number;
+
+  @Column({ 
+    name: 'external_event_id', 
+    nullable: true,
+    comment: 'ID del evento en sismaster.events' 
+  })
+  externalEventId: number;
+
+  @Column({ 
+    name: 'external_sport_id', 
+    nullable: true,
+    comment: 'ID del deporte en sismaster.sport' 
+  })
+  externalSportId: number;
 
   @Column({
     type: 'enum',

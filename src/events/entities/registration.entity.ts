@@ -16,6 +16,8 @@ import { Team } from '../../institutions/entities/team.entity';
 @Index(['eventCategoryId'])
 @Index(['athleteId'])
 @Index(['teamId'])
+@Index(['externalAthleteId'])
+@Index(['externalInstitutionId'])
 @Index(['eventCategoryId', 'athleteId'])
 @Index(['eventCategoryId', 'teamId'])
 @Check(
@@ -41,6 +43,27 @@ export class Registration {
     comment: 'Para competencias por equipos',
   })
   teamId: number;
+
+  @Column({ 
+    name: 'external_athlete_id', 
+    nullable: true,
+    comment: 'ID del atleta en sismaster.person' 
+  })
+  externalAthleteId: number;
+
+  @Column({ 
+    name: 'external_institution_id', 
+    nullable: true,
+    comment: 'ID de institución en sismaster.institution' 
+  })
+  externalInstitutionId: number;
+
+  @Column({ 
+    name: 'external_accreditation_id', 
+    nullable: true,
+    comment: 'ID de acreditación en sismaster.accreditation' 
+  })
+  externalAccreditationId: number;
 
   @Column({ type: 'int', nullable: true, name: 'seed_number' }) 
   seedNumber: number | null;

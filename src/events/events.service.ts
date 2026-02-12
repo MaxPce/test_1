@@ -6,6 +6,10 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, IsNull } from 'typeorm';
 import { Event, EventCategory, Registration } from './entities';
+import { SismasterService } from '../sismaster/sismaster.service';
+import { Athlete } from '../institutions/entities/athlete.entity'; 
+import { Institution } from '../institutions/entities/institution.entity';
+import { Gender } from '../common/enums';
 import {
   CreateEventDto,
   UpdateEventDto,
@@ -24,7 +28,12 @@ export class EventsService {
     private eventCategoryRepository: Repository<EventCategory>,
     @InjectRepository(Registration)
     private registrationRepository: Repository<Registration>,
+    @InjectRepository(Athlete)
+    private athleteRepository: Repository<Athlete>, 
+    @InjectRepository(Institution)
+    private institutionRepository: Repository<Institution>,
     private dataSource: DataSource,
+    private sismasterService: SismasterService,
   ) {}
 
   // ==================== EVENTS ====================
@@ -491,5 +500,152 @@ export class EventsService {
     }
 
     await this.registrationRepository.remove(registration);
+  }
+  // ==================== SISMASTER INTEGRATION ====================
+
+  /**
+   * Sincronizar atletas acreditados desde Sismaster
+   */
+  async syncAthletesFromSismaster(
+    eventCategoryId: number,
+    externalEventId: number,
+    externalSportId: number,
+  ) {
+    // 1. Verificar que la event_category exista
+    const eventCategory = await this.eventCategoryRepository.findOne({
+      where: { eventCategoryId },
+      relations: ['category'],
+    });
+
+    if (!eventCategory) {
+      throw new NotFoundException(`EventCategory ${eventCategoryId} no encontrada`);
+    }
+
+    // 2. Actualizar referencias externas
+    eventCategory.externalEventId = externalEventId;
+    eventCategory.externalSportId = externalSportId;
+    await this.eventCategoryRepository.save(eventCategory);
+
+    // 3. Obtener atletas acreditados de Sismaster
+    const accreditedAthletes = await this.sismasterService.getAccreditedAthletes({
+      idevent: externalEventId,
+      idsport: externalSportId,
+      tregister: 'D', // Solo deportistas
+    });
+
+    const syncResults = {
+      total: accreditedAthletes.length,
+      created: 0,
+      updated: 0,
+      skipped: 0,
+      errors: [] as Array<{ athlete: string; error: string }>, 
+    };
+
+    // 4. Sincronizar cada atleta
+    for (const externalAthlete of accreditedAthletes) {
+      try {
+        // 4.1. Buscar o crear atleta local
+        let localAthlete = await this.athleteRepository.findOne({
+          where: { docNumber: externalAthlete.docnumber }, 
+        });
+
+        // 4.2. Buscar o crear institución local
+        let localInstitution = await this.institutionRepository.findOne({
+          where: { abrev: externalAthlete.institutionAbrev },
+        });
+
+        if (!localInstitution) {
+          // Crear institución si no existe
+          localInstitution = this.institutionRepository.create({
+            name: externalAthlete.institutionName,
+            abrev: externalAthlete.institutionAbrev,
+            logoUrl: externalAthlete.institutionLogo, 
+          });
+          localInstitution = await this.institutionRepository.save(localInstitution);
+        }
+
+        if (!localAthlete) {
+          // Crear atleta si no existe
+          localAthlete = this.athleteRepository.create({
+            institutionId: localInstitution.institutionId,
+            name: externalAthlete.fullName,
+            dateBirth: externalAthlete.birthday,
+            gender: externalAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO,
+            nationality: externalAthlete.country || 'PER',
+            docNumber: externalAthlete.docnumber,
+            photoUrl: externalAthlete.photo, 
+          });
+          localAthlete = await this.athleteRepository.save(localAthlete);
+          syncResults.created++;
+        } else {
+          // Actualizar datos del atleta si ya existe
+          localAthlete.name = externalAthlete.fullName;
+          localAthlete.dateBirth = externalAthlete.birthday; 
+          localAthlete.gender = externalAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO; 
+          localAthlete.institutionId = localInstitution.institutionId;
+          await this.athleteRepository.save(localAthlete);
+          syncResults.updated++;
+        }
+
+        // 4.3. Verificar si ya está registrado en este eventCategory
+        const existingRegistration = await this.registrationRepository.findOne({
+          where: {
+            eventCategoryId: eventCategory.eventCategoryId,
+            athleteId: localAthlete.athleteId,
+          },
+        });
+
+        if (!existingRegistration) {
+          // Crear registration
+          const registration = this.registrationRepository.create({
+            eventCategoryId: eventCategory.eventCategoryId,
+            athleteId: localAthlete.athleteId,
+            externalAthleteId: externalAthlete.idperson,
+            externalInstitutionId: externalAthlete.idinstitution,
+            externalAccreditationId: externalAthlete.idacreditation,
+          });
+          await this.registrationRepository.save(registration);
+        } else {
+          // Actualizar referencias externas si ya existe
+          existingRegistration.externalAthleteId = externalAthlete.idperson;
+          existingRegistration.externalInstitutionId = externalAthlete.idinstitution;
+          existingRegistration.externalAccreditationId = externalAthlete.idacreditation;
+          await this.registrationRepository.save(existingRegistration);
+          syncResults.skipped++;
+        }
+      } catch (error) {
+        syncResults.errors.push({
+          athlete: externalAthlete.fullName,
+          error: error.message || String(error),
+        });
+      }
+    }
+
+    return syncResults;
+  }
+
+  /**
+   * 🔍 Obtener atletas de Sismaster para un eventCategory
+   */
+  async getAvailableAthletesFromSismaster(eventCategoryId: number) {
+    const eventCategory = await this.eventCategoryRepository.findOne({
+      where: { eventCategoryId },
+    });
+
+    if (!eventCategory) {
+      throw new NotFoundException(`EventCategory ${eventCategoryId} no encontrada`);
+    }
+
+    if (!eventCategory.externalEventId || !eventCategory.externalSportId) {
+      throw new BadRequestException(
+        'Este EventCategory no tiene referencias a Sismaster configuradas',
+      );
+    }
+
+    return await this.sismasterService.getAccreditedAthletes({
+      idevent: eventCategory.externalEventId,
+      idsport: eventCategory.externalSportId,
+      tregister: 'D',
+    });
   }
 }

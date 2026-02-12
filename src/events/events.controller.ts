@@ -224,4 +224,34 @@ export class EventsController {
       filename: file.filename,
     };
   }
+  // ==================== SISMASTER INTEGRATION ====================
+
+  /**
+   * POST /events/categories/:id/sync-sismaster
+   * Sincronizar atletas desde Sismaster
+   */
+  @Post('categories/:id/sync-sismaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async syncFromSismaster(
+    @Param('id', ParseIntPipe) eventCategoryId: number,
+    @Query('externalEventId', ParseIntPipe) externalEventId: number,
+    @Query('externalSportId', ParseIntPipe) externalSportId: number,
+  ) {
+    return await this.eventsService.syncAthletesFromSismaster(
+      eventCategoryId,
+      externalEventId,
+      externalSportId,
+    );
+  }
+
+  /**
+   * GET /events/categories/:id/available-athletes-sismaster
+   * Ver atletas disponibles en Sismaster para sincronizar
+   */
+  @Get('categories/:id/available-athletes-sismaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async getAvailableAthletes(@Param('id', ParseIntPipe) eventCategoryId: number) {
+    return await this.eventsService.getAvailableAthletesFromSismaster(eventCategoryId);
+  }
 }
+
