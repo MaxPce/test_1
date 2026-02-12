@@ -1,7 +1,7 @@
 // src/sismaster/sismaster.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import {
   SismasterEvent,
   SismasterPerson,
@@ -76,29 +76,36 @@ export class SismasterService {
     });
   }
 
-  /**
-   * Obtener institución por ID
-   */
-  async getInstitutionById(idinstitution: number) {
-    const institution = await this.institutionRepo.findOne({
-      where: { idinstitution },
-    });
-    if (!institution) {
-      throw new NotFoundException(`Institución ${idinstitution} no encontrada en Sismaster`);
-    }
-    return institution;
-  }
+  
 
   /**
    * Obtener atleta por ID (person)
    */
-  async getAthleteById(idperson: number) {
-    const person = await this.personRepo.findOne({ where: { idperson } });
-    if (!person) {
-      throw new NotFoundException(`Atleta ${idperson} no encontrado en Sismaster`);
+  async getAthleteById(idperson: number): Promise<SismasterPerson | null> {
+    if (!idperson) return null;
+
+    try {
+      const person = await this.personRepo.findOne({ 
+        where: { idperson, mstatus: 1 },
+        select: [
+          'idperson',
+          'firstname',
+          'lastname',
+          'surname',
+          'docnumber',
+          'gender',
+          'birthday',
+          'country',
+        ],
+      });
+      
+      return person || null; // ← Convertir undefined a null
+    } catch (error) {
+      this.logger.error(`Error fetching person ${idperson}:`, error);
+      return null;
     }
-    return person;
   }
+
 
   /**
    * Obtener atleta por documento
@@ -200,4 +207,110 @@ export class SismasterService {
       .limit(limit)
       .getMany();
   }
+
+  /**
+   * Obtener persona por ID (optimizado)
+   */
+  async getPersonById(idperson: number): Promise<SismasterPerson | null> {
+    return this.getAthleteById(idperson);
+  }
+
+
+  /**
+   * Obtener múltiples personas por IDs (batch loading)
+   * Optimizado para evitar N+1 queries
+   */
+  async getPersonsByIds(ids: number[]): Promise<SismasterPerson[]> {
+    if (!ids || ids.length === 0) return [];
+
+    const uniqueIds = [...new Set(ids)].filter((id) => id != null && id > 0);
+
+    if (uniqueIds.length === 0) return [];
+
+    try {
+      return await this.personRepo.find({
+        where: { 
+          idperson: In(uniqueIds),
+          mstatus: 1 
+        },
+        select: [
+          'idperson',
+          'firstname',
+          'lastname',
+          'surname',
+          'docnumber',
+          'gender',
+          'birthday',
+          'country',
+        ],
+      });
+    } catch (error) {
+      this.logger.error('Error in batch loading persons:', error);
+      return [];
+    }
+  }
+
+
+  /**
+   * Obtener institución por ID (optimizado)
+   */
+  async getInstitutionById(
+    idinstitution: number,
+  ): Promise<SismasterInstitution | null> {
+    if (!idinstitution) return null;
+
+    try {
+      const institution = await this.institutionRepo.findOne({
+        where: { idinstitution, mstatus: 1 },
+        select: [
+          'idinstitution',
+          'business',
+          'businessName', // ← Corregido: usar businessName
+          'abrev',
+          'avatar',
+          'country',
+        ],
+      });
+      
+      return institution || null;
+    } catch (error) {
+      this.logger.error(`Error fetching institution ${idinstitution}:`, error);
+      return null;
+    }
+  }
+
+
+  /**
+   * Obtener múltiples instituciones por IDs
+   */
+  async getInstitutionsByIds(
+    ids: number[],
+  ): Promise<SismasterInstitution[]> {
+    if (!ids || ids.length === 0) return [];
+
+    const uniqueIds = [...new Set(ids)].filter((id) => id != null && id > 0);
+
+    if (uniqueIds.length === 0) return [];
+
+    try {
+      return await this.institutionRepo.find({
+        where: { 
+          idinstitution: In(uniqueIds),
+          mstatus: 1 
+        },
+        select: [
+          'idinstitution',
+          'business',
+          'businessName', // ← Corregido: usar businessName
+          'abrev',
+          'avatar',
+          'country',
+        ],
+      });
+    } catch (error) {
+      this.logger.error('Error in batch loading institutions:', error);
+      return [];
+    }
+  }
+
 }

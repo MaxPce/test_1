@@ -31,6 +31,9 @@ import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { UserRole } from '../common/enums/user-role.enum';
 import { UploadService, multerConfig } from '../common/services/upload.service';
+import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
+import { RegistrationWithSismasterDto } from './dto/registration-with-sismaster.dto';
+
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -38,6 +41,7 @@ export class EventsController {
   constructor(
     private readonly eventsService: EventsService,
     private readonly uploadService: UploadService,
+    private readonly registrationEnrichmentService: RegistrationEnrichmentService,
   ) {}
 
   // ==================== EVENTS ====================
@@ -252,6 +256,21 @@ export class EventsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async getAvailableAthletes(@Param('id', ParseIntPipe) eventCategoryId: number) {
     return await this.eventsService.getAvailableAthletesFromSismaster(eventCategoryId);
+  }
+
+  /**
+   * GET /events/:eventId/registrations/enriched
+   * Obtener registrations con datos enriquecidos de sismaster en tiempo real
+   */
+  @Get(':eventId/registrations/enriched')
+  async getEnrichedRegistrations(
+    @Param('eventId') eventId: number,
+  ): Promise<RegistrationWithSismasterDto[]> {
+    // 1. Obtener registrations básicos de la DB local
+    const registrations = await this.eventsService.getRegistrationsByEvent(eventId);
+
+    // 2. Enriquecerlos con datos de sismaster
+    return this.registrationEnrichmentService.enrichRegistrations(registrations);
   }
 }
 

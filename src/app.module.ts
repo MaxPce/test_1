@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { CacheModule } from '@nestjs/cache-manager';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { SportsModule } from './sports/sports.module';
@@ -11,10 +12,16 @@ import { ResultsModule } from './results/results.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { SismasterModule } from '../src/sismaster/sismaster.module';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
+    }),
+    CacheModule.register({
+      isGlobal: true,
+      ttl: 600000, // 10 minutos en milisegundos
+      max: 1000, // Máximo 1000 items
     }),
 
     TypeOrmModule.forRootAsync({

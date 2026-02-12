@@ -648,4 +648,18 @@ export class EventsService {
       tregister: 'D',
     });
   }
+  /**
+ * Obtener registrations por eventId
+ */
+  async getRegistrationsByEvent(eventId: number): Promise<Registration[]> {
+    return this.registrationRepository
+      .createQueryBuilder('registration')
+      .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
+      .leftJoinAndSelect('eventCategory.category', 'category')
+      .leftJoinAndSelect('eventCategory.event', 'event')
+      .where('event.eventId = :eventId', { eventId })
+      .andWhere('registration.deletedAt IS NULL')
+      .orderBy('registration.seedNumber', 'ASC')
+      .getMany();
+  }
 }
