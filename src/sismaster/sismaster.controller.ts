@@ -1,4 +1,3 @@
-// src/sismaster/sismaster.controller.ts
 import { Controller, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
 
@@ -105,5 +104,14 @@ export class SismasterController {
   @Get('institutions/:id')
   async getInstitutionById(@Param('id', ParseIntPipe) id: number) {
     return await this.sismasterService.getInstitutionById(id);
+  }
+
+  /**
+   * GET /sismaster/institutions
+   * Listar todas las instituciones
+   */
+  @Get('institutions')
+  async getAllInstitutions() {
+    return await this.sismasterService.getAllInstitutions();
   }
 }

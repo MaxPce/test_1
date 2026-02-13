@@ -312,5 +312,22 @@ export class SismasterService {
       return [];
     }
   }
+  /**
+   * Listar todas las instituciones
+   */
+  async getAllInstitutions() {
+    return await this.institutionRepo.find({
+      where: { mstatus: 1 },
+      select: [
+        'idinstitution',
+        'business',
+        'businessName',
+        'abrev',
+        'avatar',
+        'country',
+      ],
+      order: { business: 'ASC' },
+    });
+  }
 
 }
