@@ -192,15 +192,28 @@ export class EventsService {
   async createEventCategory(
     createDto: CreateEventCategoryDto,
   ): Promise<EventCategory> {
-    // Verificar que el evento existe
-    await this.findOneEvent(createDto.eventId);
+    if (!createDto.eventId && !createDto.externalEventId) {
+      throw new BadRequestException(
+        'Debe proporcionar eventId (evento local) o externalEventId (evento Sismaster)',
+      );
+    }
 
-    // Verificar que no exista la misma categoría en el evento
+    if (createDto.eventId) {
+      await this.findOneEvent(createDto.eventId);
+    }
+
+    const whereCondition: any = {
+      categoryId: createDto.categoryId,
+    };
+
+    if (createDto.eventId) {
+      whereCondition.eventId = createDto.eventId;
+    } else {
+      whereCondition.externalEventId = createDto.externalEventId;
+    }
+
     const existing = await this.eventCategoryRepository.findOne({
-      where: {
-        eventId: createDto.eventId,
-        categoryId: createDto.categoryId,
-      },
+      where: whereCondition,
     });
 
     if (existing) {
@@ -209,9 +222,18 @@ export class EventsService {
       );
     }
 
-    const eventCategory = this.eventCategoryRepository.create(createDto);
-    return this.eventCategoryRepository.save(eventCategory);
+    const eventCategory = this.eventCategoryRepository.create({
+      eventId: createDto.eventId ?? null,
+      externalEventId: createDto.externalEventId ?? null,
+      categoryId: createDto.categoryId,
+      externalSportId: createDto.externalSportId ?? null,
+      status: createDto.status ?? 'pendiente',
+    });
+
+    return await this.eventCategoryRepository.save(eventCategory);
   }
+
+
 
   async findAllEventCategories(eventId?: number): Promise<EventCategory[]> {
     const queryBuilder = this.eventCategoryRepository
@@ -662,4 +684,16 @@ export class EventsService {
       .orderBy('registration.seedNumber', 'ASC')
       .getMany();
   }
+  /**
+  * Obtener categorías asignadas a un evento de Sismaster
+  */
+  async findEventCategoriesByExternalEventId(
+    externalEventId: number,
+  ): Promise<EventCategory[]> {
+    return await this.eventCategoryRepository.find({
+      where: { externalEventId },
+      relations: ['category', 'category.sport', 'registrations', 'registrations.athlete'],
+    });
+  }
+
 }

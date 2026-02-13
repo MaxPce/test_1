@@ -272,5 +272,17 @@ export class EventsController {
     // 2. Enriquecerlos con datos de sismaster
     return this.registrationEnrichmentService.enrichRegistrations(registrations);
   }
+  /**
+   * GET /events/sismaster/:externalEventId/categories
+   * Obtener categorías de un evento de Sismaster
+   */
+  @Get('sismaster/:externalEventId/categories')
+  @Public()
+  findEventCategoriesByExternalEvent(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+  ) {
+    return this.eventsService.findEventCategoriesByExternalEventId(externalEventId);
+  }
+
 }
 

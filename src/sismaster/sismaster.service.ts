@@ -8,6 +8,7 @@ import {
   SismasterSport,
   SismasterAccreditation,
 } from './entities';
+
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { AthleteSismasterDto } from './dto/athlete-sismaster.dto';
 import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
@@ -33,6 +34,9 @@ export class SismasterService {
 
     @InjectRepository(SismasterAccreditation, 'sismaster')
     private readonly accreditationRepo: Repository<SismasterAccreditation>,
+
+    
+
   ) {}
 
   /**
@@ -216,14 +220,15 @@ export class SismasterService {
         'p.gender AS gender',
         'p.birthday AS birthday',
         'p.country AS country',
-        'MAX(a.photo) AS photo', // ✅ Tomar cualquier foto
-        'MAX(a.idinstitution) AS idinstitution', // ✅ Tomar cualquier institución
+        'MAX(a.photo) AS photo', 
+        'MAX(a.idinstitution) AS idinstitution', 
         'MAX(i.business_name) AS institutionName',
         'MAX(i.abrev) AS institutionAbrev',
         'MAX(i.avatar) AS institutionLogo',
       ])
       .where('a.mstatus = 1')
       .andWhere('p.mstatus = 1')
+      .andWhere('a.tregister = :tregister', { tregister: 'D' })
       .andWhere(
         '(p.firstname LIKE :search OR p.lastname LIKE :search OR p.surname LIKE :search OR p.docnumber LIKE :search)',
         { search: `%${searchTerm}%` }
@@ -303,6 +308,7 @@ export class SismasterService {
       .createQueryBuilder('a')
       .select('COUNT(DISTINCT a.idperson)', 'count')
       .where('a.mstatus = 1')
+      .andWhere('a.tregister = :tregister', { tregister: 'D' })
       .getRawOne();
     
     return parseInt(result.count, 10) || 0;
@@ -393,6 +399,9 @@ export class SismasterService {
       avatar: toSismasterUrl(inst.avatar)
     }));
   }
+
+  
+
 
 
 }

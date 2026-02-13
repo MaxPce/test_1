@@ -1,5 +1,6 @@
-import { Controller, Get, Query, Param, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Query, Param, ParseIntPipe, Body, Post, Delete, UseGuards, Req } from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
+
 
 @Controller('sismaster')
 export class SismasterController {
@@ -124,4 +125,6 @@ export class SismasterController {
   async getAllInstitutions() {
     return await this.sismasterService.getAllInstitutions();
   }
+
+  
 }

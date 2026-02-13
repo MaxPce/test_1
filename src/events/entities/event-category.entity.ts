@@ -20,25 +20,27 @@ export class EventCategory {
   @PrimaryGeneratedColumn({ name: 'event_category_id' })
   eventCategoryId: number;
 
-  @Column({ name: 'event_id', nullable: true })
-  eventId: number;
+  @Column({ name: 'event_id', nullable: true }) 
+  eventId: number | null; 
 
-  @Column({ name: 'category_id', nullable: true })
-  categoryId: number;
+  @Column({ name: 'category_id', nullable: true }) 
+  categoryId: number | null; 
 
   @Column({ 
     name: 'external_event_id', 
+    type: 'int',
     nullable: true,
     comment: 'ID del evento en sismaster.events' 
   })
-  externalEventId: number;
+  externalEventId: number | null;
 
   @Column({ 
     name: 'external_sport_id', 
+    type: 'int',
     nullable: true,
     comment: 'ID del deporte en sismaster.sport' 
   })
-  externalSportId: number;
+  externalSportId: number | null; 
 
   @Column({
     type: 'enum',
@@ -48,11 +50,11 @@ export class EventCategory {
   })
   status: string;
 
-  @ManyToOne(() => Event, (event) => event.eventCategories)
+  @ManyToOne(() => Event, (event) => event.eventCategories, { nullable: true }) 
   @JoinColumn({ name: 'event_id' })
   event: Event;
 
-  @ManyToOne(() => Category)
+  @ManyToOne(() => Category, { nullable: true }) 
   @JoinColumn({ name: 'category_id' })
   category: Category;
 

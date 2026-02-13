@@ -1,20 +1,20 @@
-import { IsNumber, IsOptional, IsEnum } from 'class-validator';
+import { IsNumber, IsOptional, IsEnum, IsInt } from 'class-validator';
 
 export class CreateEventCategoryDto {
-  @IsNumber()
-  eventId: number;
+  @IsOptional()
+  @IsInt()
+  eventId?: number; 
 
-  @IsNumber()
+  @IsInt()
   categoryId: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsInt()
   externalEventId?: number; 
 
   @IsOptional()
-  @IsNumber()
-  externalSportId?: number; 
-
+  @IsInt()
+  externalSportId?: number;
 
   @IsOptional()
   @IsEnum(['pendiente', 'en_curso', 'finalizado'])
