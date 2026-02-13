@@ -8,6 +8,15 @@ export class CreateEventCategoryDto {
   categoryId: number;
 
   @IsOptional()
+  @IsNumber()
+  externalEventId?: number; 
+
+  @IsOptional()
+  @IsNumber()
+  externalSportId?: number; 
+
+
+  @IsOptional()
   @IsEnum(['pendiente', 'en_curso', 'finalizado'])
   status?: string;
 }

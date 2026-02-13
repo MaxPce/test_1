@@ -1,4 +1,3 @@
-// src/sismaster/sismaster.service.ts
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -12,6 +11,8 @@ import {
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { AthleteSismasterDto } from './dto/athlete-sismaster.dto';
 import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
+import { toSismasterUrl } from './constants/sismaster.constants';
+
 
 @Injectable()
 export class SismasterService {
@@ -173,9 +174,11 @@ export class SismasterService {
 
     // Transformar y calcular campos adicionales
     return results.map((row) => ({
-        ...row,
-        fullName: `${row.firstname} ${row.lastname || ''} ${row.surname || ''}`.trim(),
-        age: this.calculateAge(row.birthday),
+      ...row,
+      photo: toSismasterUrl(row.photo), 
+      institutionLogo: toSismasterUrl(row.institutionLogo), 
+      fullName: `${row.firstname} ${row.lastname || ''} ${row.surname || ''}`.trim(),
+      age: this.calculateAge(row.birthday),
     }));
 }
 
@@ -195,18 +198,60 @@ export class SismasterService {
   }
 
   /**
-   * Buscar atletas por nombre (útil para búsquedas)
+   * Buscar atletas ACREDITADOS por nombre o documento
+   * Devuelve datos completos con foto e institución
    */
-  async searchAthletesByName(searchTerm: string, limit: number = 20) {
-    return await this.personRepo
-      .createQueryBuilder('p')
-      .where('p.firstname LIKE :search', { search: `%${searchTerm}%` })
-      .orWhere('p.lastname LIKE :search', { search: `%${searchTerm}%` })
-      .orWhere('p.surname LIKE :search', { search: `%${searchTerm}%` })
-      .orWhere('p.docnumber LIKE :search', { search: `%${searchTerm}%` })
-      .limit(limit)
-      .getMany();
+  async searchAthletesByName(searchTerm: string, limit: number = 50): Promise<AthleteSismasterDto[]> {
+    // Usar subquery para obtener la primera acreditación de cada persona
+    const query = this.accreditationRepo
+      .createQueryBuilder('a')
+      .innerJoin('person', 'p', 'a.idperson = p.idperson')
+      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
+      .select([
+        'p.idperson AS idperson',
+        'p.docnumber AS docnumber',
+        'p.firstname AS firstname',
+        'p.lastname AS lastname',
+        'p.surname AS surname',
+        'p.gender AS gender',
+        'p.birthday AS birthday',
+        'p.country AS country',
+        'MAX(a.photo) AS photo', // ✅ Tomar cualquier foto
+        'MAX(a.idinstitution) AS idinstitution', // ✅ Tomar cualquier institución
+        'MAX(i.business_name) AS institutionName',
+        'MAX(i.abrev) AS institutionAbrev',
+        'MAX(i.avatar) AS institutionLogo',
+      ])
+      .where('a.mstatus = 1')
+      .andWhere('p.mstatus = 1')
+      .andWhere(
+        '(p.firstname LIKE :search OR p.lastname LIKE :search OR p.surname LIKE :search OR p.docnumber LIKE :search)',
+        { search: `%${searchTerm}%` }
+      )
+      .groupBy('p.idperson') // Agrupar por persona
+      .addGroupBy('p.docnumber')
+      .addGroupBy('p.firstname')
+      .addGroupBy('p.lastname')
+      .addGroupBy('p.surname')
+      .addGroupBy('p.gender')
+      .addGroupBy('p.birthday')
+      .addGroupBy('p.country')
+      .limit(limit);
+
+    const results = await query.getRawMany();
+
+    // Transformar y calcular edad
+    return results.map((row) => ({
+      ...row,
+      photo: toSismasterUrl(row.photo), 
+      institutionLogo: toSismasterUrl(row.institutionLogo),
+      fullName: `${row.firstname} ${row.lastname || ''} ${row.surname || ''}`.trim(),
+      age: this.calculateAge(row.birthday),
+    }));
+
   }
+
+
 
   /**
    * Obtener persona por ID (optimizado)
@@ -249,6 +294,20 @@ export class SismasterService {
       return [];
     }
   }
+
+  /**
+   * Contar total de atletas ACREDITADOS (únicos)
+   */
+  async getAthletesCount(): Promise<number> {
+    const result = await this.accreditationRepo
+      .createQueryBuilder('a')
+      .select('COUNT(DISTINCT a.idperson)', 'count')
+      .where('a.mstatus = 1')
+      .getRawOne();
+    
+    return parseInt(result.count, 10) || 0;
+  }
+
 
 
   /**
@@ -316,7 +375,7 @@ export class SismasterService {
    * Listar todas las instituciones
    */
   async getAllInstitutions() {
-    return await this.institutionRepo.find({
+    const institutions = await this.institutionRepo.find({
       where: { mstatus: 1 },
       select: [
         'idinstitution',
@@ -328,6 +387,12 @@ export class SismasterService {
       ],
       order: { business: 'ASC' },
     });
+
+    return institutions.map(inst => ({
+      ...inst,
+      avatar: toSismasterUrl(inst.avatar)
+    }));
   }
+
 
 }

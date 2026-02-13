@@ -80,6 +80,16 @@ export class SismasterController {
   }
 
   /**
+  * GET /sismaster/athletes/count
+  * Obtener el total de atletas registrados
+  */
+  @Get('athletes/count')
+  async getAthletesCount() {
+    const count = await this.sismasterService.getAthletesCount();
+    return { count };
+  }
+
+  /**
    * GET /sismaster/athletes/:id
    * Obtener un atleta por ID
    */
