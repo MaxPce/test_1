@@ -2,12 +2,13 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, IsNull } from 'typeorm';
 import { Event, EventCategory, Registration } from './entities';
 import { SismasterService } from '../sismaster/sismaster.service';
-import { Athlete } from '../institutions/entities/athlete.entity'; 
+import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
 import { Gender } from '../common/enums';
 import {
@@ -17,10 +18,12 @@ import {
   UpdateEventCategoryDto,
   CreateRegistrationDto,
   BulkRegisterDto,
+  BulkRegisterSismasterDto,
 } from './dto';
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
   constructor(
     @InjectRepository(Event)
     private eventRepository: Repository<Event>,
@@ -29,7 +32,7 @@ export class EventsService {
     @InjectRepository(Registration)
     private registrationRepository: Repository<Registration>,
     @InjectRepository(Athlete)
-    private athleteRepository: Repository<Athlete>, 
+    private athleteRepository: Repository<Athlete>,
     @InjectRepository(Institution)
     private institutionRepository: Repository<Institution>,
     private dataSource: DataSource,
@@ -61,7 +64,7 @@ export class EventsService {
       .createQueryBuilder('event')
       .leftJoinAndSelect('event.eventCategories', 'eventCategories')
       .leftJoinAndSelect('eventCategories.category', 'category')
-      .where('event.deletedAt IS NULL'); 
+      .where('event.deletedAt IS NULL');
 
     if (status) {
       queryBuilder.andWhere('event.status = :status', { status });
@@ -80,7 +83,7 @@ export class EventsService {
         'eventCategories.category.sport',
         'eventCategories.registrations',
       ],
-      withDeleted: false, 
+      withDeleted: false,
     });
 
     if (!event) {
@@ -128,7 +131,7 @@ export class EventsService {
 
     // SOFT DELETE
     await this.eventRepository.softRemove(event);
-    
+
     // Actualizar deletedBy
     if (userId) {
       await this.eventRepository.update(id, { deletedBy: userId });
@@ -160,7 +163,6 @@ export class EventsService {
 
     return this.findOneEvent(id);
   }
-
 
   // Listar eventos eliminados
   async findDeletedEvents(): Promise<Event[]> {
@@ -233,8 +235,6 @@ export class EventsService {
     return await this.eventCategoryRepository.save(eventCategory);
   }
 
-
-
   async findAllEventCategories(eventId?: number): Promise<EventCategory[]> {
     const queryBuilder = this.eventCategoryRepository
       .createQueryBuilder('eventCategory')
@@ -268,6 +268,7 @@ export class EventsService {
         'registrations.team.institution',
         'registrations.team.members',
         'registrations.team.members.athlete',
+        'registrations.team.members.athlete.institution',
       ],
     });
 
@@ -440,7 +441,7 @@ export class EventsService {
         'team.members',
         'team.members.athlete',
       ],
-      withDeleted: false, 
+      withDeleted: false,
     });
 
     if (!registration) {
@@ -462,10 +463,10 @@ export class EventsService {
   // Cambiar a soft delete
   async removeRegistration(id: number, userId?: number): Promise<void> {
     const registration = await this.findOneRegistration(id);
-    
+
     // SOFT DELETE
     await this.registrationRepository.softRemove(registration);
-    
+
     if (userId) {
       await this.registrationRepository.update(id, { deletedBy: userId });
     }
@@ -496,7 +497,6 @@ export class EventsService {
 
     return this.findOneRegistration(id);
   }
-
 
   // Listar registros eliminados
   async findDeletedRegistrations(): Promise<Registration[]> {
@@ -531,7 +531,7 @@ export class EventsService {
   async syncAthletesFromSismaster(
     eventCategoryId: number,
     externalEventId: number,
-    externalSportId: number,
+    externalSportId?: number,
   ) {
     // 1. Verificar que la event_category exista
     const eventCategory = await this.eventCategoryRepository.findOne({
@@ -540,27 +540,30 @@ export class EventsService {
     });
 
     if (!eventCategory) {
-      throw new NotFoundException(`EventCategory ${eventCategoryId} no encontrada`);
+      throw new NotFoundException(
+        `EventCategory ${eventCategoryId} no encontrada`,
+      );
     }
 
     // 2. Actualizar referencias externas
     eventCategory.externalEventId = externalEventId;
-    eventCategory.externalSportId = externalSportId;
+    if (externalSportId) {
+      eventCategory.externalSportId = externalSportId;
+    }
     await this.eventCategoryRepository.save(eventCategory);
 
-    // 3. Obtener atletas acreditados de Sismaster
-    const accreditedAthletes = await this.sismasterService.getAccreditedAthletes({
-      idevent: externalEventId,
-      idsport: externalSportId,
-      tregister: 'D', // Solo deportistas
-    });
+    // 3. Obtener TODOS los atletas acreditados del evento
+    const accreditedAthletes =
+      await this.sismasterService.getAccreditedAthletes({
+        idevent: externalEventId,
+      });
 
     const syncResults = {
       total: accreditedAthletes.length,
       created: 0,
       updated: 0,
       skipped: 0,
-      errors: [] as Array<{ athlete: string; error: string }>, 
+      errors: [] as Array<{ athlete: string; error: string }>,
     };
 
     // 4. Sincronizar cada atleta
@@ -568,7 +571,7 @@ export class EventsService {
       try {
         // 4.1. Buscar o crear atleta local
         let localAthlete = await this.athleteRepository.findOne({
-          where: { docNumber: externalAthlete.docnumber }, 
+          where: { docNumber: externalAthlete.docnumber },
         });
 
         // 4.2. Buscar o crear institución local
@@ -581,9 +584,10 @@ export class EventsService {
           localInstitution = this.institutionRepository.create({
             name: externalAthlete.institutionName,
             abrev: externalAthlete.institutionAbrev,
-            logoUrl: externalAthlete.institutionLogo, 
+            logoUrl: externalAthlete.institutionLogo,
           });
-          localInstitution = await this.institutionRepository.save(localInstitution);
+          localInstitution =
+            await this.institutionRepository.save(localInstitution);
         }
 
         if (!localAthlete) {
@@ -592,18 +596,22 @@ export class EventsService {
             institutionId: localInstitution.institutionId,
             name: externalAthlete.fullName,
             dateBirth: externalAthlete.birthday,
-            gender: externalAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO,
+            gender:
+              externalAthlete.gender === 'M'
+                ? Gender.MASCULINO
+                : Gender.FEMENINO,
             nationality: externalAthlete.country || 'PER',
             docNumber: externalAthlete.docnumber,
-            photoUrl: externalAthlete.photo, 
+            photoUrl: externalAthlete.photo,
           });
           localAthlete = await this.athleteRepository.save(localAthlete);
           syncResults.created++;
         } else {
           // Actualizar datos del atleta si ya existe
           localAthlete.name = externalAthlete.fullName;
-          localAthlete.dateBirth = externalAthlete.birthday; 
-          localAthlete.gender = externalAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO; 
+          localAthlete.dateBirth = externalAthlete.birthday;
+          localAthlete.gender =
+            externalAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO;
           localAthlete.institutionId = localInstitution.institutionId;
           await this.athleteRepository.save(localAthlete);
           syncResults.updated++;
@@ -630,8 +638,10 @@ export class EventsService {
         } else {
           // Actualizar referencias externas si ya existe
           existingRegistration.externalAthleteId = externalAthlete.idperson;
-          existingRegistration.externalInstitutionId = externalAthlete.idinstitution;
-          existingRegistration.externalAccreditationId = externalAthlete.idacreditation;
+          existingRegistration.externalInstitutionId =
+            externalAthlete.idinstitution;
+          existingRegistration.externalAccreditationId =
+            externalAthlete.idacreditation;
           await this.registrationRepository.save(existingRegistration);
           syncResults.skipped++;
         }
@@ -647,32 +657,38 @@ export class EventsService {
   }
 
   /**
-   * 🔍 Obtener atletas de Sismaster para un eventCategory
+   * Obtener atletas de Sismaster para un eventCategory
    */
   async getAvailableAthletesFromSismaster(eventCategoryId: number) {
     const eventCategory = await this.eventCategoryRepository.findOne({
       where: { eventCategoryId },
+      relations: ['category'],
     });
 
     if (!eventCategory) {
-      throw new NotFoundException(`EventCategory ${eventCategoryId} no encontrada`);
-    }
-
-    if (!eventCategory.externalEventId || !eventCategory.externalSportId) {
-      throw new BadRequestException(
-        'Este EventCategory no tiene referencias a Sismaster configuradas',
+      throw new NotFoundException(
+        `EventCategory ${eventCategoryId} no encontrada`,
       );
     }
 
+    if (!eventCategory.externalEventId) {
+      throw new BadRequestException(
+        'Este EventCategory no tiene un evento de Sismaster configurado',
+      );
+    }
+
+    // Solo filtrar por evento (opcionalmente por género de la categoría)
     return await this.sismasterService.getAccreditedAthletes({
       idevent: eventCategory.externalEventId,
-      idsport: eventCategory.externalSportId,
-      tregister: 'D',
+      gender:
+        eventCategory.category?.gender !== 'MIXTO'
+          ? (eventCategory.category?.gender as 'M' | 'F')
+          : undefined,
     });
   }
   /**
- * Obtener registrations por eventId
- */
+   * Obtener registrations por eventId
+   */
   async getRegistrationsByEvent(eventId: number): Promise<Registration[]> {
     return this.registrationRepository
       .createQueryBuilder('registration')
@@ -685,15 +701,157 @@ export class EventsService {
       .getMany();
   }
   /**
-  * Obtener categorías asignadas a un evento de Sismaster
-  */
+   * Obtener categorías asignadas a un evento de Sismaster
+   */
   async findEventCategoriesByExternalEventId(
     externalEventId: number,
   ): Promise<EventCategory[]> {
     return await this.eventCategoryRepository.find({
       where: { externalEventId },
-      relations: ['category', 'category.sport', 'registrations', 'registrations.athlete'],
+      relations: [
+        'category',
+        'category.sport',
+        'registrations',
+        'registrations.athlete',
+      ],
     });
   }
+  async bulkRegisterFromSismaster(
+    bulkDto: BulkRegisterSismasterDto,
+  ): Promise<Registration[]> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
+    try {
+      // 1. Verificar que la categoría existe
+      const eventCategory = await this.eventCategoryRepository.findOne({
+        where: { eventCategoryId: bulkDto.eventCategoryId },
+        relations: ['category'],
+      });
+
+      if (!eventCategory) {
+        throw new NotFoundException(
+          `EventCategory ${bulkDto.eventCategoryId} no encontrada`,
+        );
+      }
+
+      if (!eventCategory.externalEventId) {
+        throw new BadRequestException(
+          'EventCategory no tiene externalEventId configurado',
+        );
+      }
+
+      const registrations: Registration[] = [];
+      const errors: string[] = [];
+
+      // 2. Procesar cada atleta externo
+      for (const externalAthleteId of bulkDto.external_athlete_ids) {
+        try {
+          // 2.1. Obtener datos COMPLETOS del atleta desde Sismaster
+          const accreditedAthletes =
+            await this.sismasterService.getAccreditedAthletes({
+              idevent: eventCategory.externalEventId,
+            });
+
+          const sismasterAthlete = accreditedAthletes.find(
+            (a) => a.idperson === externalAthleteId,
+          );
+
+          if (!sismasterAthlete) {
+            errors.push(
+              `Atleta ${externalAthleteId} no encontrado en Sismaster`,
+            );
+            continue;
+          }
+
+          // 2.2. Buscar o crear institución local
+          let localInstitution = await this.institutionRepository.findOne({
+            where: { abrev: sismasterAthlete.institutionAbrev },
+          });
+
+          if (!localInstitution) {
+            localInstitution = this.institutionRepository.create({
+              name: sismasterAthlete.institutionName,
+              abrev: sismasterAthlete.institutionAbrev,
+              logoUrl: sismasterAthlete.institutionLogo,
+            });
+            localInstitution = await queryRunner.manager.save(localInstitution);
+          }
+
+          // 2.3. Buscar o crear atleta local
+          let localAthlete = await this.athleteRepository.findOne({
+            where: { docNumber: sismasterAthlete.docnumber },
+          });
+
+          if (!localAthlete) {
+            localAthlete = this.athleteRepository.create({
+              name: `${sismasterAthlete.firstname} ${sismasterAthlete.lastname || ''}`.trim(),
+              dateBirth: sismasterAthlete.birthday,
+              gender:
+                sismasterAthlete.gender === 'M'
+                  ? Gender.MASCULINO
+                  : Gender.FEMENINO,
+              nationality: sismasterAthlete.country || 'PER',
+              docNumber: sismasterAthlete.docnumber,
+              photoUrl: sismasterAthlete.photo || null,
+              institutionId: localInstitution.institutionId,
+            });
+            localAthlete = await queryRunner.manager.save(localAthlete);
+          } else {
+            localAthlete.institutionId = localInstitution.institutionId;
+            if (sismasterAthlete.photo) {
+              localAthlete.photoUrl = sismasterAthlete.photo;
+            }
+            await queryRunner.manager.save(localAthlete);
+          }
+
+          // 2.4. Verificar si ya está inscrito
+          const existingRegistration =
+            await this.registrationRepository.findOne({
+              where: {
+                eventCategoryId: bulkDto.eventCategoryId,
+                athleteId: localAthlete.athleteId,
+              },
+            });
+
+          if (existingRegistration) {
+            existingRegistration.externalAthleteId = externalAthleteId;
+            existingRegistration.externalInstitutionId =
+              sismasterAthlete.idinstitution;
+            await queryRunner.manager.save(existingRegistration);
+            continue;
+          }
+
+          // 2.5. Crear inscripción
+          const registration = this.registrationRepository.create({
+            eventCategoryId: bulkDto.eventCategoryId,
+            athleteId: localAthlete.athleteId,
+            externalAthleteId: externalAthleteId,
+            externalInstitutionId: sismasterAthlete.idinstitution,
+          });
+
+          const saved = await queryRunner.manager.save(registration);
+          registrations.push(saved);
+        } catch (error) {
+          errors.push(
+            `Error con atleta ${externalAthleteId}: ${error.message}`,
+          );
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      if (errors.length > 0) {
+        this.logger.warn(`Errores en inscripción masiva: ${errors.join(', ')}`); // ✅ Ahora funciona
+      }
+
+      return registrations;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
 }

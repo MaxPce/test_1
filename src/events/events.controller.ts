@@ -33,7 +33,7 @@ import { UserRole } from '../common/enums/user-role.enum';
 import { UploadService, multerConfig } from '../common/services/upload.service';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { RegistrationWithSismasterDto } from './dto/registration-with-sismaster.dto';
-
+import { BulkRegisterSismasterDto } from './dto/bulk-register-sismaster.dto';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -254,8 +254,12 @@ export class EventsController {
    */
   @Get('categories/:id/available-athletes-sismaster')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async getAvailableAthletes(@Param('id', ParseIntPipe) eventCategoryId: number) {
-    return await this.eventsService.getAvailableAthletesFromSismaster(eventCategoryId);
+  async getAvailableAthletes(
+    @Param('id', ParseIntPipe) eventCategoryId: number,
+  ) {
+    return await this.eventsService.getAvailableAthletesFromSismaster(
+      eventCategoryId,
+    );
   }
 
   /**
@@ -267,10 +271,13 @@ export class EventsController {
     @Param('eventId') eventId: number,
   ): Promise<RegistrationWithSismasterDto[]> {
     // 1. Obtener registrations básicos de la DB local
-    const registrations = await this.eventsService.getRegistrationsByEvent(eventId);
+    const registrations =
+      await this.eventsService.getRegistrationsByEvent(eventId);
 
     // 2. Enriquecerlos con datos de sismaster
-    return this.registrationEnrichmentService.enrichRegistrations(registrations);
+    return this.registrationEnrichmentService.enrichRegistrations(
+      registrations,
+    );
   }
   /**
    * GET /events/sismaster/:externalEventId/categories
@@ -281,8 +288,12 @@ export class EventsController {
   findEventCategoriesByExternalEvent(
     @Param('externalEventId', ParseIntPipe) externalEventId: number,
   ) {
-    return this.eventsService.findEventCategoriesByExternalEventId(externalEventId);
+    return this.eventsService.findEventCategoriesByExternalEventId(
+      externalEventId,
+    );
   }
-
+  @Post('registrations/bulk-sismaster')
+  async bulkRegisterFromSismaster(@Body() bulkDto: BulkRegisterSismasterDto) {
+    return this.eventsService.bulkRegisterFromSismaster(bulkDto);
+  }
 }
-

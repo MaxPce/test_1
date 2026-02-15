@@ -20,7 +20,7 @@ export class Athlete {
   athleteId: number;
 
   @Column({ name: 'institution_id', nullable: true })
-  institutionId: number;
+  institutionId: number | null;
 
   @Column({ length: 200 })
   name: string;
@@ -38,8 +38,13 @@ export class Athlete {
   @Column({ length: 3, nullable: true, comment: 'Código ISO de 3 letras' })
   nationality: string;
 
-  @Column({ name: 'photo_url', length: 255, nullable: true })
-  photoUrl: string;
+  @Column({
+    name: 'photo_url',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  photoUrl: string | null;
 
   @Column({ name: 'doc_number', length: 50, nullable: true })
   docNumber: string;
@@ -52,6 +57,7 @@ export class Athlete {
 
   @ManyToOne(() => Institution, (institution) => institution.athletes, {
     onDelete: 'SET NULL',
+    nullable: true,
   })
   @JoinColumn({ name: 'institution_id' })
   institution: Institution;

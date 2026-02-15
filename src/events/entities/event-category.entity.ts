@@ -14,33 +14,33 @@ import { Registration } from './registration.entity';
 @Entity('event_categories')
 @Index(['eventId'])
 @Index(['categoryId'])
-@Index(['externalEventId']) 
-@Index(['externalSportId'])
+@Index(['externalEventId'])
 export class EventCategory {
   @PrimaryGeneratedColumn({ name: 'event_category_id' })
   eventCategoryId: number;
 
-  @Column({ name: 'event_id', nullable: true }) 
-  eventId: number | null; 
+  @Column({ name: 'event_id', nullable: true })
+  eventId: number | null;
 
-  @Column({ name: 'category_id', nullable: true }) 
-  categoryId: number | null; 
+  @Column({ name: 'category_id', nullable: true })
+  categoryId: number | null;
 
-  @Column({ 
-    name: 'external_event_id', 
+  @Column({
+    name: 'external_event_id',
     type: 'int',
     nullable: true,
-    comment: 'ID del evento en sismaster.events' 
+    comment: 'ID del evento en sismaster.events (para inscripción masiva)',
   })
   externalEventId: number | null;
 
-  @Column({ 
-    name: 'external_sport_id', 
+  @Column({
+    name: 'external_sport_id',
     type: 'int',
     nullable: true,
-    comment: 'ID del deporte en sismaster.sport' 
+    comment:
+      'DEPRECADO: ID del deporte en sismaster.sport (ya no se usa para inscripción)',
   })
-  externalSportId: number | null; 
+  externalSportId: number | null;
 
   @Column({
     type: 'enum',
@@ -50,11 +50,11 @@ export class EventCategory {
   })
   status: string;
 
-  @ManyToOne(() => Event, (event) => event.eventCategories, { nullable: true }) 
+  @ManyToOne(() => Event, (event) => event.eventCategories, { nullable: true })
   @JoinColumn({ name: 'event_id' })
   event: Event;
 
-  @ManyToOne(() => Category, { nullable: true }) 
+  @ManyToOne(() => Category, { nullable: true })
   @JoinColumn({ name: 'category_id' })
   category: Category;
 

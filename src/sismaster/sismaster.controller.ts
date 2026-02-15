@@ -1,6 +1,16 @@
-import { Controller, Get, Query, Param, ParseIntPipe, Body, Post, Delete, UseGuards, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  Param,
+  ParseIntPipe,
+  Body,
+  Post,
+  Delete,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
-
 
 @Controller('sismaster')
 export class SismasterController {
@@ -44,23 +54,17 @@ export class SismasterController {
 
   /**
    * GET /sismaster/athletes/accredited
-   * Obtener atletas acreditados con filtros
-   * Ejemplo: /sismaster/athletes/accredited?idevent=200&idsport=24&gender=M
    */
   @Get('athletes/accredited')
   async getAccreditedAthletes(
     @Query('idevent', ParseIntPipe) idevent: number,
-    @Query('idsport', ParseIntPipe) idsport: number,
-    @Query('idinstitution') idinstitution?: number,
-    @Query('tregister') tregister?: 'D' | 'E' | 'O',
     @Query('gender') gender?: 'M' | 'F',
+    @Query('idinstitution') idinstitution?: number,
   ) {
     return await this.sismasterService.getAccreditedAthletes({
       idevent,
-      idsport,
-      idinstitution: idinstitution ? Number(idinstitution) : undefined,
-      tregister,
       gender,
+      idinstitution: idinstitution ? Number(idinstitution) : undefined,
     });
   }
 
@@ -81,9 +85,9 @@ export class SismasterController {
   }
 
   /**
-  * GET /sismaster/athletes/count
-  * Obtener el total de atletas registrados
-  */
+   * GET /sismaster/athletes/count
+   * Obtener el total de atletas registrados
+   */
   @Get('athletes/count')
   async getAthletesCount() {
     const count = await this.sismasterService.getAthletesCount();
@@ -125,6 +129,4 @@ export class SismasterController {
   async getAllInstitutions() {
     return await this.sismasterService.getAllInstitutions();
   }
-
-  
 }

@@ -4,3 +4,4 @@ export * from './create-event-category.dto';
 export * from './update-event-category.dto';
 export * from './create-registration.dto';
 export * from './bulk-register.dto';
+export * from './bulk-register-sismaster.dto';
