@@ -243,9 +243,10 @@ export class EventsService {
       .leftJoinAndSelect('category.sport', 'sport')
       .leftJoinAndSelect('eventCategory.registrations', 'registrations')
       .leftJoinAndSelect('registrations.athlete', 'athlete')
-      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution') // ✅ CRÍTICO
       .leftJoinAndSelect('registrations.team', 'team')
-      .leftJoinAndSelect('team.institution', 'teamInstitution');
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .where('registrations.deletedAt IS NULL'); // ✅ Filtrar eliminados
 
     if (eventId) {
       queryBuilder.andWhere('eventCategory.eventId = :eventId', { eventId });
@@ -255,22 +256,26 @@ export class EventsService {
   }
 
   async findOneEventCategory(id: number): Promise<EventCategory> {
-    const eventCategory = await this.eventCategoryRepository.findOne({
-      where: { eventCategoryId: id },
-      relations: [
-        'event',
-        'category',
-        'category.sport',
-        'registrations',
-        'registrations.athlete',
-        'registrations.athlete.institution',
-        'registrations.team',
-        'registrations.team.institution',
-        'registrations.team.members',
-        'registrations.team.members.athlete',
-        'registrations.team.members.athlete.institution',
-      ],
-    });
+    // ✅ Usar QueryBuilder en lugar de find() para control total de las relaciones
+    const eventCategory = await this.eventCategoryRepository
+      .createQueryBuilder('eventCategory')
+      .leftJoinAndSelect('eventCategory.event', 'event')
+      .leftJoinAndSelect('eventCategory.category', 'category')
+      .leftJoinAndSelect('category.sport', 'sport')
+      .leftJoinAndSelect('eventCategory.registrations', 'registrations')
+      .leftJoinAndSelect('registrations.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution') // ✅ CRÍTICO
+      .leftJoinAndSelect('registrations.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'members')
+      .leftJoinAndSelect('members.athlete', 'memberAthlete')
+      .leftJoinAndSelect(
+        'memberAthlete.institution',
+        'memberAthleteInstitution',
+      ) // ✅ CRÍTICO
+      .where('eventCategory.eventCategoryId = :id', { id })
+      .andWhere('registrations.deletedAt IS NULL') // ✅ Excluir registros eliminados
+      .getOne();
 
     if (!eventCategory) {
       throw new NotFoundException(
