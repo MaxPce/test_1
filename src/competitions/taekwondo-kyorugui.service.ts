@@ -45,7 +45,6 @@ export class TaekwondoKyoruguiService {
       throw new BadRequestException('El match debe tener 2 participantes');
     }
 
-    // ✅ CORRECCIÓN: Validar que registrationId no sea null
     const participant1RegId = match.participations[0].registrationId;
     const participant2RegId = match.participations[1].registrationId;
 
@@ -105,7 +104,7 @@ export class TaekwondoKyoruguiService {
   ): Promise<Match> {
     const match = await this.matchRepository.findOne({
       where: { matchId },
-      relations: ['participations', 'participations.registration', 'phase'], // ✅ AGREGAR 'phase'
+      relations: ['participations', 'participations.registration', 'phase'],
     });
 
     if (!match) {
