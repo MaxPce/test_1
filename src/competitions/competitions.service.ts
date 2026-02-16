@@ -39,6 +39,8 @@ export class CompetitionsService {
   // ==================== PHASES ====================
 
   async createPhase(createDto: CreatePhaseDto): Promise<Phase> {
+    console.log('🔵 [CREATE PHASE] Iniciando con datos:', createDto);
+    
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -64,25 +66,35 @@ export class CompetitionsService {
         this.isPoomsaePhase(phaseWithRelations) &&
         phaseWithRelations.type === PhaseType.GRUPO
       ) {
+        console.log('Creando participaciones Poomsae...');
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
+      } else {
+        console.log('NO se crearán participaciones automáticas');
       }
 
       await queryRunner.commitTransaction();
+      console.log('Transacción completada');
 
       return this.findOnePhase(savedPhase.phaseId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      console.error('[CREATE PHASE] Error:', error);
       throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
+
   async findAllPhases(eventCategoryId?: number): Promise<Phase[]> {
     const queryBuilder = this.phaseRepository
       .createQueryBuilder('phase')
       .leftJoinAndSelect('phase.eventCategory', 'eventCategory')
-      .leftJoinAndSelect('phase.matches', 'matches')
+      .leftJoinAndSelect(
+        'phase.matches',
+        'matches',
+        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId'  
+      )
       .leftJoinAndSelect('matches.participations', 'participations')
       .leftJoinAndSelect('participations.registration', 'registration')
       .leftJoinAndSelect('registration.athlete', 'athlete')
@@ -100,28 +112,34 @@ export class CompetitionsService {
     return queryBuilder.orderBy('phase.displayOrder', 'ASC').getMany();
   }
 
+
+
+
   async findOnePhase(id: number): Promise<Phase> {
-    const phase = await this.phaseRepository.findOne({
-      where: { phaseId: id },
-      relations: [
-        'eventCategory',
+    const phase = await this.phaseRepository
+      .createQueryBuilder('phase')
+      .leftJoinAndSelect('phase.eventCategory', 'eventCategory')
+      .leftJoinAndSelect(
+        'phase.matches',
         'matches',
-        'matches.participations',
-        'matches.participations.registration',
-        'matches.participations.registration.athlete',
-        'matches.participations.registration.athlete.institution',
-        'matches.participations.registration.team',
-        'matches.participations.registration.team.institution',
-        'matches.winner',
-        'standings',
-        'standings.registration',
-        'standings.registration.athlete',
-        'standings.registration.athlete.institution',
-        'standings.registration.team',
-        'standings.registration.team.institution',
-      ],
-      withDeleted: false,
-    });
+        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId'  
+      )
+      .leftJoinAndSelect('matches.participations', 'participations')
+      .leftJoinAndSelect('participations.registration', 'registration')
+      .leftJoinAndSelect('registration.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('matches.winner', 'winner')
+      .leftJoinAndSelect('phase.standings', 'standings')
+      .leftJoinAndSelect('standings.registration', 'standingRegistration')
+      .leftJoinAndSelect('standingRegistration.athlete', 'standingAthlete')
+      .leftJoinAndSelect('standingAthlete.institution', 'standingAthleteInstitution')
+      .leftJoinAndSelect('standingRegistration.team', 'standingTeam')
+      .leftJoinAndSelect('standingTeam.institution', 'standingTeamInstitution')
+      .where('phase.phaseId = :id', { id })
+      .andWhere('phase.deletedAt IS NULL')
+      .getOne();
 
     if (!phase) {
       throw new NotFoundException(`Fase con ID ${id} no encontrada`);
@@ -129,6 +147,9 @@ export class CompetitionsService {
 
     return phase;
   }
+
+
+
 
   async updatePhase(id: number, updateDto: UpdatePhaseDto): Promise<Phase> {
     const phase = await this.findOnePhase(id);
