@@ -243,43 +243,50 @@ export class EventsService {
       .leftJoinAndSelect('category.sport', 'sport')
       .leftJoinAndSelect('eventCategory.registrations', 'registrations')
       .leftJoinAndSelect('registrations.athlete', 'athlete')
-      .leftJoinAndSelect('athlete.institution', 'athleteInstitution') // ✅ CRÍTICO
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
       .leftJoinAndSelect('registrations.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
-      .where('registrations.deletedAt IS NULL'); // ✅ Filtrar eliminados
+      .where('registrations.deletedAt IS NULL');
 
     if (eventId) {
       queryBuilder.andWhere('eventCategory.eventId = :eventId', { eventId });
     }
 
-    return queryBuilder.getMany();
+    const result = await queryBuilder.getMany();
+
+    return result;
   }
 
   async findOneEventCategory(id: number): Promise<EventCategory> {
-    // ✅ Usar QueryBuilder en lugar de find() para control total de las relaciones
-    const eventCategory = await this.eventCategoryRepository
-      .createQueryBuilder('eventCategory')
-      .leftJoinAndSelect('eventCategory.event', 'event')
-      .leftJoinAndSelect('eventCategory.category', 'category')
-      .leftJoinAndSelect('category.sport', 'sport')
-      .leftJoinAndSelect('eventCategory.registrations', 'registrations')
-      .leftJoinAndSelect('registrations.athlete', 'athlete')
-      .leftJoinAndSelect('athlete.institution', 'athleteInstitution') // ✅ CRÍTICO
-      .leftJoinAndSelect('registrations.team', 'team')
-      .leftJoinAndSelect('team.institution', 'teamInstitution')
-      .leftJoinAndSelect('team.members', 'members')
-      .leftJoinAndSelect('members.athlete', 'memberAthlete')
-      .leftJoinAndSelect(
-        'memberAthlete.institution',
-        'memberAthleteInstitution',
-      ) // ✅ CRÍTICO
-      .where('eventCategory.eventCategoryId = :id', { id })
-      .andWhere('registrations.deletedAt IS NULL') // ✅ Excluir registros eliminados
-      .getOne();
+    const eventCategory = await this.eventCategoryRepository.findOne({
+      where: {
+        eventCategoryId: id,
+      },
+      relations: [
+        'event',
+        'category',
+        'category.sport',
+        'registrations',
+        'registrations.athlete',
+        'registrations.athlete.institution',
+        'registrations.team',
+        'registrations.team.institution',
+        'registrations.team.members',
+        'registrations.team.members.athlete',
+        'registrations.team.members.athlete.institution',
+      ],
+    });
 
     if (!eventCategory) {
       throw new NotFoundException(
         `Categoría de evento con ID ${id} no encontrada`,
+      );
+    }
+
+    // Filtrar registrations eliminados manualmente
+    if (eventCategory.registrations) {
+      eventCategory.registrations = eventCategory.registrations.filter(
+        (reg) => !reg.deletedAt,
       );
     }
 
@@ -415,13 +422,16 @@ export class EventsService {
       .createQueryBuilder('registration')
       .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
       .leftJoinAndSelect('eventCategory.category', 'category')
+      // ✅ Cargar athlete
       .leftJoinAndSelect('registration.athlete', 'athlete')
+      // ✅ CRÍTICO: Cargar institution
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      // ✅ Para teams
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
       .leftJoinAndSelect('team.members', 'members')
       .leftJoinAndSelect('members.athlete', 'memberAthlete')
-      .where('registration.deletedAt IS NULL'); // ← AGREGADO
+      .where('registration.deletedAt IS NULL');
 
     if (eventCategoryId) {
       queryBuilder.andWhere('registration.eventCategoryId = :eventCategoryId', {
@@ -711,16 +721,45 @@ export class EventsService {
   async findEventCategoriesByExternalEventId(
     externalEventId: number,
   ): Promise<EventCategory[]> {
-    return await this.eventCategoryRepository.find({
-      where: { externalEventId },
-      relations: [
-        'category',
-        'category.sport',
-        'registrations',
-        'registrations.athlete',
-      ],
-    });
+    // ✅ SOLUCIÓN: Usar QueryBuilder con todas las relaciones
+    const result = await this.eventCategoryRepository
+      .createQueryBuilder('eventCategory')
+      .leftJoinAndSelect('eventCategory.event', 'event')
+      .leftJoinAndSelect('eventCategory.category', 'category')
+      .leftJoinAndSelect('category.sport', 'sport')
+      .leftJoinAndSelect('eventCategory.registrations', 'registrations')
+      .leftJoinAndSelect('registrations.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registrations.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'members')
+      .leftJoinAndSelect('members.athlete', 'memberAthlete')
+      .leftJoinAndSelect(
+        'memberAthlete.institution',
+        'memberAthleteInstitution',
+      )
+      .where('eventCategory.externalEventId = :externalEventId', {
+        externalEventId,
+      })
+      .andWhere('registrations.deletedAt IS NULL')
+      .getMany();
+
+    if (
+      result.length > 0 &&
+      result[0].registrations &&
+      result[0].registrations.length > 0
+    ) {
+      const firstReg = result[0].registrations[0];
+      this.logger.log(
+        `   Primera registration: AthleteId=${firstReg.athlete?.athleteId}, ` +
+          `InstitutionId=${firstReg.athlete?.institutionId}, ` +
+          `Institution="${firstReg.athlete?.institution?.name || 'NULL'}"`,
+      );
+    }
+
+    return result;
   }
+
   async bulkRegisterFromSismaster(
     bulkDto: BulkRegisterSismasterDto,
   ): Promise<Registration[]> {
@@ -729,7 +768,6 @@ export class EventsService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Verificar que la categoría existe
       const eventCategory = await this.eventCategoryRepository.findOne({
         where: { eventCategoryId: bulkDto.eventCategoryId },
         relations: ['category'],
@@ -747,13 +785,11 @@ export class EventsService {
         );
       }
 
-      const registrations: Registration[] = [];
+      const registrationIds: number[] = [];
       const errors: string[] = [];
 
-      // 2. Procesar cada atleta externo
       for (const externalAthleteId of bulkDto.external_athlete_ids) {
         try {
-          // 2.1. Obtener datos COMPLETOS del atleta desde Sismaster
           const accreditedAthletes =
             await this.sismasterService.getAccreditedAthletes({
               idevent: eventCategory.externalEventId,
@@ -770,7 +806,6 @@ export class EventsService {
             continue;
           }
 
-          // 2.2. Buscar o crear institución local
           let localInstitution = await this.institutionRepository.findOne({
             where: { abrev: sismasterAthlete.institutionAbrev },
           });
@@ -784,7 +819,6 @@ export class EventsService {
             localInstitution = await queryRunner.manager.save(localInstitution);
           }
 
-          // 2.3. Buscar o crear atleta local
           let localAthlete = await this.athleteRepository.findOne({
             where: { docNumber: sismasterAthlete.docnumber },
           });
@@ -811,7 +845,6 @@ export class EventsService {
             await queryRunner.manager.save(localAthlete);
           }
 
-          // 2.4. Verificar si ya está inscrito
           const existingRegistration =
             await this.registrationRepository.findOne({
               where: {
@@ -825,10 +858,10 @@ export class EventsService {
             existingRegistration.externalInstitutionId =
               sismasterAthlete.idinstitution;
             await queryRunner.manager.save(existingRegistration);
+            registrationIds.push(existingRegistration.registrationId);
             continue;
           }
 
-          // 2.5. Crear inscripción
           const registration = this.registrationRepository.create({
             eventCategoryId: bulkDto.eventCategoryId,
             athleteId: localAthlete.athleteId,
@@ -837,7 +870,7 @@ export class EventsService {
           });
 
           const saved = await queryRunner.manager.save(registration);
-          registrations.push(saved);
+          registrationIds.push(saved.registrationId);
         } catch (error) {
           errors.push(
             `Error con atleta ${externalAthleteId}: ${error.message}`,
@@ -848,12 +881,37 @@ export class EventsService {
       await queryRunner.commitTransaction();
 
       if (errors.length > 0) {
-        this.logger.warn(`Errores en inscripción masiva: ${errors.join(', ')}`); // ✅ Ahora funciona
+        this.logger.warn(`Errores en inscripción masiva: ${errors.join(', ')}`);
       }
 
-      return registrations;
+      if (registrationIds.length === 0) {
+        this.logger.warn('⚠️ No se crearon registrations');
+        return [];
+      }
+
+      const fullRegistrations = await this.registrationRepository
+        .createQueryBuilder('registration')
+        .leftJoinAndSelect('registration.athlete', 'athlete')
+        .leftJoinAndSelect('athlete.institution', 'institution')
+        .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
+        .leftJoinAndSelect('eventCategory.category', 'category')
+        .whereInIds(registrationIds)
+        .getMany();
+
+      fullRegistrations.forEach((reg, index) => {
+        this.logger.log(
+          `  [${index + 1}] Registration ${reg.registrationId}: ` +
+            `Atleta="${reg.athlete?.name || 'NULL'}", ` +
+            `AthleteId=${reg.athlete?.athleteId || 'NULL'}, ` +
+            `InstitutionId=${reg.athlete?.institutionId || 'NULL'}, ` +
+            `Institution="${reg.athlete?.institution?.name || 'NULL'}"`,
+        );
+      });
+
+      return fullRegistrations;
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      this.logger.error(`Error en bulkRegisterFromSismaster: ${error.message}`);
       throw error;
     } finally {
       await queryRunner.release();

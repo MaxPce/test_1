@@ -277,8 +277,8 @@ export class TaekwondoPoomsaeService {
         'participations.registration',
         'participations.registration.athlete',
         'participations.registration.athlete.institution',
-        'participations.registration.team',            
-        'participations.registration.team.institution'
+        'participations.registration.team',
+        'participations.registration.team.institution',
       ],
     });
 
@@ -308,18 +308,14 @@ export class TaekwondoPoomsaeService {
       const score = scores.find(
         (s) => s.participationId === participation.participationId,
       );
-      
+
       const reg = participation.registration;
       const isTeam = !!reg?.team;
-      
-      const name = isTeam
-        ? reg.team.name
-        : reg?.athlete?.name || 'Sin nombre';
-      
-      const photoUrl = isTeam
-        ? null
-        : reg?.athlete?.photoUrl || null;
-      
+
+      const name = isTeam ? reg.team.name : reg?.athlete?.name || 'Sin nombre';
+
+      const photoUrl = isTeam ? null : reg?.athlete?.photoUrl || null;
+
       const institution = isTeam
         ? reg.team.institution
         : reg?.athlete?.institution;
@@ -328,9 +324,9 @@ export class TaekwondoPoomsaeService {
         participationId: participation.participationId,
         registrationId: participation.registrationId,
         corner: participation.corner,
-        participantName: name, 
-        isTeam: isTeam,        
-        participantPhoto: photoUrl,  
+        participantName: name,
+        isTeam: isTeam,
+        participantPhoto: photoUrl,
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
         accuracy: score?.accuracy || null,
@@ -339,7 +335,6 @@ export class TaekwondoPoomsaeService {
         isWinner: match.winnerRegistrationId === participation.registrationId,
       };
     });
-
 
     return {
       matchId,
@@ -378,7 +373,27 @@ export class TaekwondoPoomsaeService {
     // Obtener participaciones
     const participations = phase.matches
       .flatMap((match) => match.participations || [])
-      .filter((p) => p !== null);
+      .filter((p) => p !== null)
+      // Filtrar participations con registrations eliminados
+      .filter((p) => {
+        // Si no tiene registration, filtrar
+        if (!p.registration) return false;
+
+        // Si el registration tiene deletedAt, filtrar
+        if (p.registration.deletedAt) return false;
+
+        // Si tiene athlete, verificar que no esté eliminado
+        if (p.registration.athlete && p.registration.athlete.deletedAt) {
+          return false;
+        }
+
+        // Si tiene team, verificar que no esté eliminado
+        if (p.registration.team && p.registration.team.deletedAt) {
+          return false;
+        }
+
+        return true;
+      });
 
     if (participations.length === 0) {
       return []; // No hay participantes
@@ -394,31 +409,25 @@ export class TaekwondoPoomsaeService {
       const score = scores.find(
         (s) => s.participationId === participation.participationId,
       );
-      
+
       const reg = participation.registration;
       const isTeam = !!reg?.team;
-      
-      const name = isTeam
-        ? reg.team.name
-        : reg?.athlete?.name || 'Sin nombre';
-      
-      const photoUrl = isTeam
-        ? null
-        : reg?.athlete?.photoUrl || null;
-      
+
+      const name = isTeam ? reg.team.name : reg?.athlete?.name || 'Sin nombre';
+
+      const photoUrl = isTeam ? null : reg?.athlete?.photoUrl || null;
+
       const institution = isTeam
         ? reg.team.institution
         : reg?.athlete?.institution;
-      
-      const gender = isTeam
-        ? 'Equipo'
-        : reg?.athlete?.gender || '-';
+
+      const gender = isTeam ? 'Equipo' : reg?.athlete?.gender || '-';
 
       return {
         participationId: participation.participationId,
-        participantName: name,        
-        isTeam: isTeam,              
-        participantPhoto: photoUrl, 
+        participantName: name,
+        isTeam: isTeam,
+        participantPhoto: photoUrl,
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
         gender: gender,
@@ -428,7 +437,6 @@ export class TaekwondoPoomsaeService {
         rank: score?.rank || null,
       };
     });
-
 
     return results;
   }
