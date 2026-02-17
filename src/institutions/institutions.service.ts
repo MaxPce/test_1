@@ -2,10 +2,13 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, IsNull } from 'typeorm';
 import { Institution, Athlete, Team, TeamMember } from './entities';
+import { SismasterService } from '../sismaster/sismaster.service';
+import { Gender } from '../common/enums';
 import {
   CreateInstitutionDto,
   UpdateInstitutionDto,
@@ -18,6 +21,7 @@ import {
 
 @Injectable()
 export class InstitutionsService {
+  private readonly logger = new Logger(InstitutionsService.name);
   constructor(
     @InjectRepository(Institution)
     private institutionRepository: Repository<Institution>,
@@ -27,6 +31,7 @@ export class InstitutionsService {
     private teamRepository: Repository<Team>,
     @InjectRepository(TeamMember)
     private teamMemberRepository: Repository<TeamMember>,
+    private sismasterService: SismasterService,
   ) {}
 
   // ==================== INSTITUTIONS ====================
@@ -255,15 +260,73 @@ export class InstitutionsService {
   // ==================== TEAMS ====================
 
   async createTeam(createDto: CreateTeamDto): Promise<Team> {
-    await this.findOneInstitution(createDto.institutionId);
-
     if (!createDto.categoryId) {
       throw new BadRequestException('categoryId es requerido');
     }
 
+    let institution = await this.institutionRepository.findOne({
+      where: { institutionId: createDto.institutionId },
+    });
+
+    if (!institution) {
+      this.logger.warn(
+        `Institución ${createDto.institutionId} no encontrada localmente.`,
+      );
+
+      try {
+        const sismasterInstitution = await this.sismasterService.getInstitutionById(
+          createDto.institutionId,
+        );
+
+        if (sismasterInstitution) {
+          institution = this.institutionRepository.create({
+            institutionId: sismasterInstitution.idinstitution,
+            name: sismasterInstitution.businessName || sismasterInstitution.business,
+            abrev: sismasterInstitution.abrev,
+            logoUrl: sismasterInstitution.avatar,
+          });
+          institution = await this.institutionRepository.save(institution);
+          
+          
+        } else {
+          throw new NotFoundException(
+            `Institución con ID ${createDto.institutionId} no encontrada en Sismaster`,
+          );
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error al buscar institución ${createDto.institutionId} en Sismaster:`,
+          error.message,
+        );
+        throw new NotFoundException(
+          `Institución con ID ${createDto.institutionId} no encontrada`,
+        );
+      }
+    }
+
+    const existingTeam = await this.teamRepository.findOne({
+      where: {
+        name: createDto.name,
+        categoryId: createDto.categoryId,
+        institutionId: createDto.institutionId,
+      },
+    });
+
+    if (existingTeam) {
+      throw new BadRequestException(
+        `Ya existe un equipo "${createDto.name}" de esta institución en esta categoría`,
+      );
+    }
+
     const team = this.teamRepository.create(createDto);
-    return this.teamRepository.save(team);
+    const savedTeam = await this.teamRepository.save(team);
+
+    
+
+    return savedTeam;
   }
+
+
 
   async findAllTeams(
     institutionId?: number,
@@ -375,13 +438,65 @@ export class InstitutionsService {
     teamId: number,
     dto: AddTeamMemberDto,
   ): Promise<TeamMember> {
-    await this.findOneTeam(teamId);
-    await this.findOneAthlete(dto.athleteId);
+    const team = await this.findOneTeam(teamId);
+
+    
+    let athlete = await this.athleteRepository.findOne({
+      where: { athleteId: dto.athleteId },
+    });
+
+    if (!athlete) {
+      this.logger.warn(
+        `Atleta ${dto.athleteId} no encontrado localmente. Buscando en Sismaster...`,
+      );
+
+      try {
+        const sismasterPerson = await this.sismasterService.getAthleteById(
+          dto.athleteId,
+        );
+
+        if (!sismasterPerson) {
+          throw new NotFoundException(
+            `Atleta con ID ${dto.athleteId} no encontrado en Sismaster`,
+          );
+        }
+
+        athlete = await this.athleteRepository.findOne({
+          where: { docNumber: sismasterPerson.docnumber },
+        });
+
+        if (!athlete) {
+          const fullName = `${sismasterPerson.firstname} ${sismasterPerson.lastname} ${sismasterPerson.surname || ''}`.trim();
+          
+          const gender = sismasterPerson.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO;
+          
+          athlete = this.athleteRepository.create({
+            name: fullName,
+            gender: gender,
+            dateBirth: sismasterPerson.birthday,
+            nationality: sismasterPerson.country || 'PER',
+            docNumber: sismasterPerson.docnumber,
+            // institutionId se puede actualizar después si es necesario
+          });
+          athlete = await this.athleteRepository.save(athlete);
+
+          
+        }
+      } catch (error) {
+        this.logger.error(
+          `Error al buscar atleta ${dto.athleteId} en Sismaster:`,
+          error.message,
+        );
+        throw new NotFoundException(
+          `Atleta con ID ${dto.athleteId} no encontrado`,
+        );
+      }
+    }
 
     const existing = await this.teamMemberRepository.findOne({
       where: {
         teamId,
-        athleteId: dto.athleteId,
+        athleteId: athlete.athleteId, // Usar el ID local
       },
     });
 
@@ -391,12 +506,15 @@ export class InstitutionsService {
 
     const teamMember = this.teamMemberRepository.create({
       teamId,
-      athleteId: dto.athleteId,
+      athleteId: athlete.athleteId,
       rol: dto.rol || 'titular',
     });
 
-    return this.teamMemberRepository.save(teamMember);
+    const savedMember = await this.teamMemberRepository.save(teamMember);
+    return savedMember;
   }
+
+
 
   async removeTeamMember(teamId: number, athleteId: number): Promise<void> {
     const teamMember = await this.teamMemberRepository.findOne({

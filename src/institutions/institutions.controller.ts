@@ -153,7 +153,7 @@ export class InstitutionsController {
   }
 
   @Get('teams')
-  @Public()
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   findAllTeams(
     @Query('institutionId') institutionId?: string,
     @Query('categoryId') categoryId?: string,
@@ -175,7 +175,7 @@ export class InstitutionsController {
   }
 
   @Get('teams/:id')
-  @Public()
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   findOneTeam(@Param('id', ParseIntPipe) id: number) {
     return this.institutionsService.findOneTeam(id);
   }
@@ -190,7 +190,7 @@ export class InstitutionsController {
   }
 
   @Delete('teams/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async removeTeam(
     @Param('id', ParseIntPipe) id: number,
     @CurrentUser() user: AuthUser,
