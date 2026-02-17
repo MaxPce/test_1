@@ -768,6 +768,7 @@ export class EventsService {
     await queryRunner.startTransaction();
 
     try {
+      // 1. Validar eventCategory
       const eventCategory = await this.eventCategoryRepository.findOne({
         where: { eventCategoryId: bulkDto.eventCategoryId },
         relations: ['category'],
@@ -785,27 +786,31 @@ export class EventsService {
         );
       }
 
+      // 2. ✅ Obtener TODOS los atletas acreditados UNA SOLA VEZ
+      const allAccreditedAthletes = await this.sismasterService.getAccreditedAthletes({
+        idevent: eventCategory.externalEventId,
+      });
+
+      // 3. ✅ Crear un Map para búsqueda rápida por ID
+      const athletesMap = new Map(
+        allAccreditedAthletes.map((athlete) => [athlete.idperson, athlete])
+      );
+
       const registrationIds: number[] = [];
       const errors: string[] = [];
 
+      // 4. Procesar cada atleta
       for (const externalAthleteId of bulkDto.external_athlete_ids) {
         try {
-          const accreditedAthletes =
-            await this.sismasterService.getAccreditedAthletes({
-              idevent: eventCategory.externalEventId,
-            });
-
-          const sismasterAthlete = accreditedAthletes.find(
-            (a) => a.idperson === externalAthleteId,
-          );
+          // 4.1. ✅ Buscar en el Map (sin llamadas extra)
+          const sismasterAthlete = athletesMap.get(externalAthleteId);
 
           if (!sismasterAthlete) {
-            errors.push(
-              `Atleta ${externalAthleteId} no encontrado en Sismaster`,
-            );
+            errors.push(`Atleta ${externalAthleteId} no encontrado en Sismaster`);
             continue;
           }
 
+          // 4.2. Buscar o crear institución
           let localInstitution = await this.institutionRepository.findOne({
             where: { abrev: sismasterAthlete.institutionAbrev },
           });
@@ -819,76 +824,83 @@ export class EventsService {
             localInstitution = await queryRunner.manager.save(localInstitution);
           }
 
+          // 4.3. ✅ Buscar o crear atleta con NOMBRE COMPLETO
           let localAthlete = await this.athleteRepository.findOne({
             where: { docNumber: sismasterAthlete.docnumber },
           });
 
           if (!localAthlete) {
+            // ✅ CRÍTICO: Concatenar firstname + lastname + surname
+            const fullName = `${sismasterAthlete.firstname} ${sismasterAthlete.lastname} ${sismasterAthlete.surname || ''}`.trim();
+            
             localAthlete = this.athleteRepository.create({
-              name: `${sismasterAthlete.firstname} ${sismasterAthlete.lastname || ''}`.trim(),
+              name: fullName, // ✅ Nombre completo
               dateBirth: sismasterAthlete.birthday,
-              gender:
-                sismasterAthlete.gender === 'M'
-                  ? Gender.MASCULINO
-                  : Gender.FEMENINO,
+              gender: sismasterAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO,
               nationality: sismasterAthlete.country || 'PER',
               docNumber: sismasterAthlete.docnumber,
               photoUrl: sismasterAthlete.photo || null,
               institutionId: localInstitution.institutionId,
             });
             localAthlete = await queryRunner.manager.save(localAthlete);
+            
+            this.logger.log(`✅ Atleta creado: ${fullName} (ID: ${localAthlete.athleteId})`);
           } else {
+            // Actualizar datos si ya existe
+            const fullName = `${sismasterAthlete.firstname} ${sismasterAthlete.lastname} ${sismasterAthlete.surname || ''}`.trim();
+            
+            localAthlete.name = fullName;
             localAthlete.institutionId = localInstitution.institutionId;
+            
             if (sismasterAthlete.photo) {
               localAthlete.photoUrl = sismasterAthlete.photo;
             }
+            
             await queryRunner.manager.save(localAthlete);
+            this.logger.log(`🔄 Atleta actualizado: ${fullName}`);
           }
 
-          const existingRegistration =
-            await this.registrationRepository.findOne({
-              where: {
-                eventCategoryId: bulkDto.eventCategoryId,
-                athleteId: localAthlete.athleteId,
-              },
-            });
+          // 4.4. Crear o actualizar registration
+          const existingRegistration = await this.registrationRepository.findOne({
+            where: {
+              eventCategoryId: bulkDto.eventCategoryId,
+              athleteId: localAthlete.athleteId,
+            },
+          });
 
           if (existingRegistration) {
             existingRegistration.externalAthleteId = externalAthleteId;
-            existingRegistration.externalInstitutionId =
-              sismasterAthlete.idinstitution;
+            existingRegistration.externalInstitutionId = sismasterAthlete.idinstitution;
             await queryRunner.manager.save(existingRegistration);
             registrationIds.push(existingRegistration.registrationId);
-            continue;
+          } else {
+            const registration = this.registrationRepository.create({
+              eventCategoryId: bulkDto.eventCategoryId,
+              athleteId: localAthlete.athleteId,
+              externalAthleteId: externalAthleteId,
+              externalInstitutionId: sismasterAthlete.idinstitution,
+            });
+            const saved = await queryRunner.manager.save(registration);
+            registrationIds.push(saved.registrationId);
           }
-
-          const registration = this.registrationRepository.create({
-            eventCategoryId: bulkDto.eventCategoryId,
-            athleteId: localAthlete.athleteId,
-            externalAthleteId: externalAthleteId,
-            externalInstitutionId: sismasterAthlete.idinstitution,
-          });
-
-          const saved = await queryRunner.manager.save(registration);
-          registrationIds.push(saved.registrationId);
         } catch (error) {
-          errors.push(
-            `Error con atleta ${externalAthleteId}: ${error.message}`,
-          );
+          this.logger.error(`Error con atleta ${externalAthleteId}:`, error.message);
+          errors.push(`Error con atleta ${externalAthleteId}: ${error.message}`);
         }
       }
 
       await queryRunner.commitTransaction();
 
       if (errors.length > 0) {
-        this.logger.warn(`Errores en inscripción masiva: ${errors.join(', ')}`);
+        this.logger.warn('Errores en inscripción masiva:', errors.join(', '));
       }
 
       if (registrationIds.length === 0) {
-        this.logger.warn('⚠️ No se crearon registrations');
+        this.logger.warn('No se crearon registrations');
         return [];
       }
 
+      // 5. ✅ Retornar registrations con TODAS las relaciones
       const fullRegistrations = await this.registrationRepository
         .createQueryBuilder('registration')
         .leftJoinAndSelect('registration.athlete', 'athlete')
@@ -898,20 +910,21 @@ export class EventsService {
         .whereInIds(registrationIds)
         .getMany();
 
+      // 6. Log de verificación
       fullRegistrations.forEach((reg, index) => {
         this.logger.log(
-          `  [${index + 1}] Registration ${reg.registrationId}: ` +
-            `Atleta="${reg.athlete?.name || 'NULL'}", ` +
-            `AthleteId=${reg.athlete?.athleteId || 'NULL'}, ` +
-            `InstitutionId=${reg.athlete?.institutionId || 'NULL'}, ` +
-            `Institution="${reg.athlete?.institution?.name || 'NULL'}"`,
+          `${index + 1}. Registration ${reg.registrationId}: ` +
+          `Atleta="${reg.athlete?.name || 'NULL'}" ` +
+          `(AthleteID=${reg.athlete?.athleteId || 'NULL'}, ` +
+          `InstitutionID=${reg.athlete?.institutionId || 'NULL'}, ` +
+          `Institution="${reg.athlete?.institution?.name || 'NULL'}")`
         );
       });
 
       return fullRegistrations;
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Error en bulkRegisterFromSismaster: ${error.message}`);
+      this.logger.error('Error en bulkRegisterFromSismaster:', error.message);
       throw error;
     } finally {
       await queryRunner.release();
