@@ -251,7 +251,7 @@ export class TableTennisService {
     // Eliminar juegos existentes
     await this.gameRepository.delete({ matchId });
 
-    // ✅ Generar juegos según modalidad
+    // Generar juegos según modalidad
     switch (modality) {
       case 'individual':
         return await this.generateIndividualGames(matchId);
@@ -273,7 +273,7 @@ export class TableTennisService {
   private async generateIndividualGames(matchId: number) {
     const participations = await this.participationRepository.find({
       where: { matchId },
-      relations: ['registration', 'registration.athlete'],
+      relations: ['registration', 'registration.athlete','registration.athlete.institution'],
     });
 
     if (participations.length !== 2) {
@@ -320,6 +320,8 @@ export class TableTennisService {
         'registration.team',
         'registration.team.members',
         'registration.team.members.athlete',
+        'registration.team.members.athlete.institution', 
+        'registration.team.institution',
       ],
     });
 
@@ -574,19 +576,15 @@ export class TableTennisService {
 
     const game = games[0]; // Solo hay 1 juego
 
-    // Solo contar como "win" si el juego está COMPLETADO
+    // Para individual/dobles, contar SETS ganados, no juegos
     let team1Wins = 0;
     let team2Wins = 0;
 
     if (game && game.status === GameStatus.COMPLETED) {
-      // Solo si el juego terminó, contar el ganador
-      if (game.winnerId === game.player1Id) {
-        team1Wins = 1;
-      } else if (game.winnerId === game.player2Id) {
-        team2Wins = 1;
-      }
+      // Usar score1 y score2 que ya contienen los sets ganados
+      team1Wins = game.score1 || 0;
+      team2Wins = game.score2 || 0;
     }
-    // Si el juego está en progreso o pendiente, wins = 0 - 0
 
     const isComplete = game?.status === GameStatus.COMPLETED;
     const winnerParticipation = isComplete
@@ -602,7 +600,7 @@ export class TableTennisService {
           participations[0].registration.athlete?.name ||
           participations[0].registration.team?.name ||
           'Participante 1',
-        wins: team1Wins,
+        wins: team1Wins, 
         lineups: [],
       },
       team2: {
@@ -611,15 +609,16 @@ export class TableTennisService {
           participations[1].registration.athlete?.name ||
           participations[1].registration.team?.name ||
           'Participante 2',
-        wins: team2Wins,
+        wins: team2Wins, 
         lineups: [],
       },
       games,
       isComplete,
       winner: winnerParticipation,
-      score: `${team1Wins} - ${team2Wins}`,
+      score: `${team1Wins} - ${team2Wins}`, 
     };
   }
+
 
   /**
    * Calcular resultado para Equipos (lógica original)
@@ -777,4 +776,55 @@ export class TableTennisService {
       match,
     };
   }
+
+  /**
+   * Marcar match como walkover (victoria automática sin jugar)
+   */
+  async setWalkover(
+    matchId: number,
+    winnerRegistrationId: number,
+    reason?: string,
+  ) {
+    const match = await this.matchRepository.findOne({
+      where: { matchId },
+      relations: ['participations', 'participations.registration'],
+    });
+
+    if (!match) {
+      throw new NotFoundException('Match no encontrado');
+    }
+
+    if (match.status === 'finalizado') {
+      throw new BadRequestException('El match ya está finalizado');
+    }
+
+    const validRegistrationIds = match.participations.map(
+      (p) => p.registration.registrationId,
+    );
+
+    if (!validRegistrationIds.includes(winnerRegistrationId)) {
+      throw new BadRequestException(
+        'El registrationId del ganador no es válido para este match',
+      );
+    }
+
+    const modality = await this.detectMatchModality(matchId);
+
+    await this.gameRepository.delete({ matchId });
+
+    match.isWalkover = true;
+    match.walkoverReason = reason || 'Walkover';
+    match.status = 'finalizado' as any;
+    match.winnerRegistrationId = winnerRegistrationId;
+
+    await this.matchRepository.save(match);
+
+    return {
+      message: 'Match marcado como walkover exitosamente',
+      match,
+      score: modality === 'team' ? '3 - 0 (WO)' : '1 - 0 (WO)',
+      modality,
+    };
+  }
+
 }

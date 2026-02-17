@@ -393,4 +393,18 @@ export class CompetitionsController {
   processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
     return this.competitionsService.processPhaseByesAutomatically(phaseId);
   }
+
+  @Post('table-tennis/matches/:matchId/walkover')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async setTableTennisWalkover(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() dto: { winnerRegistrationId: number; reason?: string },
+  ) {
+    return this.tableTennisService.setWalkover(
+      matchId,
+      dto.winnerRegistrationId,
+      dto.reason,
+    );
+  }
+
 }

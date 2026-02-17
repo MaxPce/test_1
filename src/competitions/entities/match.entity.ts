@@ -151,6 +151,23 @@ export class Match {
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
 
+  @Column({
+    name: 'is_walkover',
+    type: 'boolean',
+    default: false,
+    comment: 'Indica si el match fue ganado por walkover (WO)',
+  })
+  isWalkover: boolean;
+
+  @Column({
+    name: 'walkover_reason',
+    length: 255,
+    nullable: true,
+    comment: 'Razón del walkover: no_show, retired, disqualified, etc.',
+  })
+  walkoverReason?: string;
+
+
   @ManyToOne(() => Phase, (phase) => phase.matches)
   @JoinColumn({ name: 'phase_id' })
   phase: Phase;
