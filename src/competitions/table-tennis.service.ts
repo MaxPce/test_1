@@ -11,6 +11,7 @@ import { Match } from './entities/match.entity';
 import { Participation } from './entities/participation.entity';
 import { SetMatchLineupDto } from './dto/match-lineup.dto';
 import { UpdateMatchGameDto } from './dto/match-game.dto';
+import { BracketService } from './bracket.service';
 
 @Injectable()
 export class TableTennisService {
@@ -23,6 +24,7 @@ export class TableTennisService {
     private matchRepository: Repository<Match>,
     @InjectRepository(Participation)
     private participationRepository: Repository<Participation>,
+    private bracketService: BracketService,
   ) {}
 
   /**
@@ -243,10 +245,9 @@ export class TableTennisService {
       throw new BadRequestException('Este match no es de tenis de mesa');
     }
 
-    // ✅ Detectar modalidad
     const modality = await this.detectMatchModality(matchId);
 
-    console.log('🏓 Modalidad detectada:', modality);
+    console.log('Modalidad detectada:', modality);
 
     // Eliminar juegos existentes
     await this.gameRepository.delete({ matchId });
@@ -819,12 +820,19 @@ export class TableTennisService {
 
     await this.matchRepository.save(match);
 
+    const advanceResult = await this.bracketService.advanceWinner({
+      matchId,
+      winnerRegistrationId,
+    });
+
     return {
       message: 'Match marcado como walkover exitosamente',
-      match,
+      match: advanceResult.updatedMatch,
+      nextMatch: advanceResult.nextMatch,
       score: modality === 'team' ? '3 - 0 (WO)' : '1 - 0 (WO)',
       modality,
     };
   }
+
 
 }
