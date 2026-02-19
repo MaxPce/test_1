@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Not, IsNull } from 'typeorm';
+import { Repository, DataSource, Not, IsNull, In } from 'typeorm';
 import { Phase, Match, Participation, Standing } from './entities';
 import { Registration } from '../events/entities/registration.entity';
 import {
@@ -18,6 +18,7 @@ import {
 } from './dto';
 import { PhaseType, MatchStatus, Corner } from '../common/enums';
 import { BracketService } from './bracket.service';
+import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
 
 @Injectable()
 export class CompetitionsService {
@@ -976,4 +977,75 @@ export class CompetitionsService {
       await queryRunner.release();
     }
   }
+
+  async setManualStandingRanks(
+    phaseId: number,
+    dto: SetManualRanksDto,
+  ): Promise<{ updated: number }> {
+    const registrationIds = dto.ranks.map((r) => r.registrationId);
+
+    // Verificar que los registrationIds participen en algún match de esta fase
+    const participations = await this.participationRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.match', 'm')
+      .where('m.phaseId = :phaseId', { phaseId })
+      .andWhere('p.registrationId IN (:...registrationIds)', { registrationIds })
+      .getMany();
+
+    const foundIds = new Set(participations.map((p) => p.registrationId));
+    const missing = registrationIds.filter((id) => !foundIds.has(id));
+
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Las siguientes registrations no pertenecen a la fase ${phaseId}: ${missing.join(', ')}`,
+      );
+    }
+
+    // Verificar que no se repitan posiciones (ignorando nulls)
+    const positions = dto.ranks
+      .map((r) => r.manualRankPosition)
+      .filter((p): p is number => p !== null);
+
+    if (new Set(positions).size !== positions.length) {
+      throw new BadRequestException(
+        'No se pueden repetir posiciones manuales dentro de la misma fase.',
+      );
+    }
+
+    // Guardar en la tabla phase_manual_ranks (upsert por phaseId + registrationId)
+    await Promise.all(
+      dto.ranks.map((item) =>
+        this.dataSource.query(
+          `INSERT INTO phase_manual_ranks (phase_id, registration_id, manual_rank_position, updated_at)
+          VALUES (?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE manual_rank_position = VALUES(manual_rank_position), updated_at = NOW()`,
+          [phaseId, item.registrationId, item.manualRankPosition],
+        ),
+      ),
+    );
+
+    return { updated: dto.ranks.length };
+  }
+
+
+
+  async clearManualStandingRanks(
+    phaseId: number,
+  ): Promise<{ cleared: number }> {
+    const result = await this.standingRepository
+      .createQueryBuilder()
+      .update()
+      .set({
+        manualRankPosition: null,
+        manualRankUpdatedAt: null,
+      })
+      .where(
+        'phaseId = :phaseId',
+        { phaseId },
+      )
+      .execute();
+
+    return { cleared: result.affected ?? 0 };
+  }
+
 }

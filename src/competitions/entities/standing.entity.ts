@@ -10,6 +10,7 @@ import {
 import { Phase } from './phase.entity';
 import { Registration } from '../../events/entities/registration.entity';
 
+
 @Entity('standings')
 @Index(['phaseId'])
 @Index(['registrationId'])
@@ -58,6 +59,26 @@ export class Standing {
 
   @Column({ name: 'rank_position', nullable: true })
   rankPosition: number;
+
+
+  @Column({
+    name: 'manual_rank_position',
+    type: 'int',
+    nullable: true,
+    default: null,
+    comment: 'Puesto asignado manualmente por el admin (sobreescribe cálculo automático)',
+  })
+  manualRankPosition: number | null;
+
+  @Column({
+    name: 'manual_rank_updated_at',
+    type: 'timestamp',
+    nullable: true,
+    default: null,
+    comment: 'Última vez que se actualizó el puesto manual',
+  })
+  manualRankUpdatedAt: Date | null;
+
 
   @ManyToOne(() => Phase, (phase) => phase.standings, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'phase_id' })

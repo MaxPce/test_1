@@ -38,6 +38,9 @@ import { TaekwondoKyoruguiService } from './taekwondo-kyorugui.service';
 import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
 import { UpdateKyoruguiScoreDto } from './dto/update-kyorugui-score.dto';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
+import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
+
+
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -360,7 +363,7 @@ export class CompetitionsController {
   async advanceWinner(@Body() dto: AdvanceWinnerDto) {
     return this.bracketService.advanceWinner(dto);
   }
-  
+
   @Patch('matches/:matchId/walkover')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async setMatchWalkover(
@@ -420,6 +423,23 @@ export class CompetitionsController {
       dto.winnerRegistrationId,
       dto.reason,
     );
+  }
+
+  @Patch('phases/:phaseId/standings/manual-ranks')
+  @UseGuards(JwtAuthGuard)  
+  async setManualRanks(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() dto: SetManualRanksDto,
+  ): Promise<{ updated: number }> {
+    return this.competitionsService.setManualStandingRanks(phaseId, dto);
+  }
+
+  @Delete('phases/:phaseId/standings/manual-ranks')
+  @UseGuards(JwtAuthGuard)
+  async clearManualRanks(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+  ): Promise<{ cleared: number }> {
+    return this.competitionsService.clearManualStandingRanks(phaseId);
   }
 
 }
