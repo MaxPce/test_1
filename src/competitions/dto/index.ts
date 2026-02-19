@@ -10,3 +10,4 @@ export * from './match-game.dto';
 export * from './update-poomsae-score.dto';
 export * from './advance-winner.dto';
 export * from './update-kyorugui-round.dto';
+export * from './set-walkover.dto';

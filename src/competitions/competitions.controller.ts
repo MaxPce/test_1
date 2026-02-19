@@ -24,6 +24,7 @@ import {
   SetMatchLineupDto,
   UpdateMatchGameDto,
   AdvanceWinnerDto,
+  SetWalkoverDto,
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -359,6 +360,20 @@ export class CompetitionsController {
   async advanceWinner(@Body() dto: AdvanceWinnerDto) {
     return this.bracketService.advanceWinner(dto);
   }
+  
+  @Patch('matches/:matchId/walkover')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async setMatchWalkover(
+    @Param('matchId', ParseIntPipe) matchId: number,
+    @Body() dto: SetWalkoverDto,
+  ) {
+    return this.competitionsService.setWalkover(
+      matchId,
+      dto.winnerRegistrationId,
+      dto.reason,
+    );
+  }
+
 
   @Get('brackets/:phaseId/structure')
   async getBracketStructure(@Param('phaseId') phaseId: string) {

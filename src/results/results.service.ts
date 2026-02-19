@@ -514,13 +514,25 @@ export class ResultsService {
 
     // Si no existe participation, crear una (para deportes sin matches)
     if (!participation) {
-      participation = this.participationRepository.create({
+      const newParticipation = this.participationRepository.create({
         registrationId: dto.registrationId,
         matchId: null,
         corner: null,
       });
-      participation = await this.participationRepository.save(participation);
+      const saved = await this.participationRepository.save(newParticipation);
+
+      participation = await this.participationRepository.findOne({
+        where: { participationId: saved.participationId },
+        relations: ['registration', 'registration.athlete', 'registration.team'],
+      });
+
+      if (!participation) {
+        throw new NotFoundException(
+          `No se pudo crear la participación para registration ${dto.registrationId}`,
+        );
+      }
     }
+
 
     // 2. Detectar si está descalificado
     const isDQ = dto.timeValue.startsWith('x');

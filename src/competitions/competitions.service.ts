@@ -352,6 +352,43 @@ export class CompetitionsService {
     await this.matchRepository.remove(match);
   }
 
+  async setWalkover(
+    matchId: number,
+    winnerRegistrationId: number,
+    reason?: string,
+  ): Promise<Match> {
+    const match = await this.findOneMatch(matchId);
+
+    if (match.status === MatchStatus.FINALIZADO) {
+      throw new BadRequestException('El match ya está finalizado');
+    }
+
+    const participation = match.participations?.find(
+      (p) => p.registrationId === winnerRegistrationId,
+    );
+
+    if (!participation) {
+      throw new BadRequestException(
+        'El participante ganador no pertenece a este match',
+      );
+    }
+
+    // Avanzar en bracket primero (maneja la lógica del siguiente round)
+    await this.bracketService.advanceWinner({
+      matchId,
+      winnerRegistrationId,
+    });
+
+    // Luego agregar los campos específicos de walkover encima
+    await this.matchRepository.update(matchId, {
+      isWalkover: true,
+      walkoverReason: reason || 'Walkover',
+    });
+
+    return this.findOneMatch(matchId);
+  }
+
+
   // ==================== PARTICIPATIONS ====================
 
   async createParticipation(
