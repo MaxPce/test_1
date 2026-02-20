@@ -230,6 +230,13 @@ export class CompetitionsController {
     return this.competitionsService.updateStandings(phaseId);
   }
 
+  
+  @Get('phases/:phaseId/manual-ranks')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  getManualRanks(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.getManualRanks(phaseId);
+  }
+
   // ==================== BEST OF 3 ====================
 
   @Post('phases/:phaseId/initialize-best-of-3')

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Not, IsNull, In } from 'typeorm';
-import { Phase, Match, Participation, Standing } from './entities';
+import { Phase, Match, Participation, Standing, PhaseManualRank } from './entities';
 import { Registration } from '../events/entities/registration.entity';
 import {
   CreatePhaseDto,
@@ -33,6 +33,8 @@ export class CompetitionsService {
     private standingRepository: Repository<Standing>,
     @InjectRepository(Registration)
     private registrationRepository: Repository<Registration>,
+    @InjectRepository(PhaseManualRank)
+    private phaseManualRankRepository: Repository<PhaseManualRank>,
     private dataSource: DataSource,
     private bracketService: BracketService,
   ) {}
@@ -831,6 +833,63 @@ export class CompetitionsService {
     };
   }
 
+  async getManualRanks(phaseId: number) {
+    const rows: any[] = await this.dataSource.query(
+      `SELECT pmr.id, pmr.phase_id AS phaseId, pmr.registration_id AS registrationId,
+              pmr.manual_rank_position AS manualRankPosition, pmr.updated_at AS updatedAt,
+              a.name AS athleteName, a.photo_url AS photoUrl,
+              ai.name AS institutionName, ai.abrev AS institutionAbrev, ai.logo_url AS logoUrl,
+              t.name AS teamName,
+              ti.name AS teamInstitutionName, ti.abrev AS teamInstitutionAbrev, ti.logo_url AS teamLogoUrl
+      FROM phase_manual_ranks pmr
+      LEFT JOIN registrations r  ON r.registration_id = pmr.registration_id
+      LEFT JOIN athletes a        ON a.athlete_id = r.athlete_id
+      LEFT JOIN institutions ai   ON ai.institution_id = a.institution_id
+      LEFT JOIN teams t           ON t.team_id = r.team_id
+      LEFT JOIN institutions ti   ON ti.institution_id = t.institution_id
+      WHERE pmr.phase_id = ?
+      ORDER BY pmr.manual_rank_position ASC`,
+      [phaseId],
+    );
+
+    // Transformar al shape que espera el front
+    return rows.map((row) => ({
+      id: row.id,
+      phaseId: row.phaseId,
+      registrationId: row.registrationId,
+      manualRankPosition: row.manualRankPosition,
+      updatedAt: row.updatedAt,
+      registration: {
+        athlete: row.athleteName
+          ? {
+              name: row.athleteName,
+              photoUrl: row.photoUrl,
+              institution: row.institutionName
+                ? {
+                    name: row.institutionName,
+                    abrev: row.institutionAbrev,
+                    logoUrl: row.logoUrl,
+                  }
+                : null,
+            }
+          : null,
+        team: row.teamName
+          ? {
+              name: row.teamName,
+              institution: row.teamInstitutionName
+                ? {
+                    name: row.teamInstitutionName,
+                    abrev: row.teamInstitutionAbrev,
+                    logoUrl: row.teamLogoUrl,
+                  }
+                : null,
+            }
+          : null,
+      },
+    }));
+  }
+
+
   // ==================== TAEKWONDO POOMSAE ====================
 
   private isPoomsaePhase(phase: Phase): boolean {
@@ -984,11 +1043,11 @@ export class CompetitionsService {
   ): Promise<{ updated: number }> {
     const registrationIds = dto.ranks.map((r) => r.registrationId);
 
-    // Verificar que los registrationIds participen en algún match de esta fase
     const participations = await this.participationRepository
       .createQueryBuilder('p')
       .innerJoin('p.match', 'm')
       .where('m.phaseId = :phaseId', { phaseId })
+      .andWhere('m.deletedAt IS NULL')
       .andWhere('p.registrationId IN (:...registrationIds)', { registrationIds })
       .getMany();
 
@@ -997,22 +1056,10 @@ export class CompetitionsService {
 
     if (missing.length > 0) {
       throw new BadRequestException(
-        `Las siguientes registrations no pertenecen a la fase ${phaseId}: ${missing.join(', ')}`,
+        `Registrations no pertenecen a la fase ${phaseId}: ${missing.join(', ')}`,
       );
     }
 
-    // Verificar que no se repitan posiciones (ignorando nulls)
-    const positions = dto.ranks
-      .map((r) => r.manualRankPosition)
-      .filter((p): p is number => p !== null);
-
-    if (new Set(positions).size !== positions.length) {
-      throw new BadRequestException(
-        'No se pueden repetir posiciones manuales dentro de la misma fase.',
-      );
-    }
-
-    // Guardar en la tabla phase_manual_ranks (upsert por phaseId + registrationId)
     await Promise.all(
       dto.ranks.map((item) =>
         this.dataSource.query(
@@ -1029,23 +1076,13 @@ export class CompetitionsService {
 
 
 
-  async clearManualStandingRanks(
-    phaseId: number,
-  ): Promise<{ cleared: number }> {
-    const result = await this.standingRepository
-      .createQueryBuilder()
-      .update()
-      .set({
-        manualRankPosition: null,
-        manualRankUpdatedAt: null,
-      })
-      .where(
-        'phaseId = :phaseId',
-        { phaseId },
-      )
-      .execute();
 
-    return { cleared: result.affected ?? 0 };
+  async clearManualStandingRanks(phaseId: number): Promise<{ cleared: number }> {
+    const result = await this.dataSource.query(
+      `DELETE FROM phase_manual_ranks WHERE phase_id = ?`,
+      [phaseId],
+    );
+    return { cleared: result.affectedRows ?? 0 };
   }
 
 }

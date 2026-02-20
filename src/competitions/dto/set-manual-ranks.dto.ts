@@ -3,7 +3,7 @@ import { IsArray, IsInt, IsOptional, Min, ValidateNested } from 'class-validator
 
 export class ManualRankItemDto {
   @IsInt()
-  registrationId: number;  
+  registrationId: number;         
 
   @IsOptional()
   @IsInt()

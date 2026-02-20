@@ -20,6 +20,7 @@ import {
   Phase,
   Standing,
   IndividualScore,
+  PhaseManualRank,
 } from './entities';
 
 @Module({
@@ -33,6 +34,7 @@ import {
       Standing,
       Registration,
       IndividualScore,
+      PhaseManualRank,
     ]),
   ],
   controllers: [
