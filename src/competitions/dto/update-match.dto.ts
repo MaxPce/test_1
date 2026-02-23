@@ -11,7 +11,7 @@ export class UpdateMatchDto extends PartialType(CreateMatchDto) {
   @IsNumber()
   winnerRegistrationId?: number;
 
-  // ── Puntajes generales (kyorugi, tenis de mesa, etc.) ─────────
+  // ── Puntajes Generales (kyorugi, tenis de mesa, etc.) ─────────
   @IsOptional()
   @Type(() => Number)
   @IsNumber()

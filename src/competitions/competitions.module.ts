@@ -11,6 +11,10 @@ import { JudoController } from './judo.controller';
 import { JudoService } from './judo.service';
 import { BracketService } from './bracket.service';
 import { Registration } from '../events/entities/registration.entity';
+import { KarateController } from './karate.controller';
+import { KarateService } from './karate.service';
+import { WushuController } from './wushu.controller';
+import { WushuService } from './wushu.service';
 
 import {
   Match,
@@ -42,6 +46,8 @@ import {
     TaekwondoPoomsaeController,
     TaekwondoKyoruguiController,
     JudoController,
+    KarateController,
+    WushuController,
   ],
   providers: [
     CompetitionsService,
@@ -50,6 +56,8 @@ import {
     TaekwondoPoomsaeService,
     JudoService,
     BracketService,
+    KarateService,
+    WushuService,
   ],
   exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService],
 })
