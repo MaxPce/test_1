@@ -15,6 +15,8 @@ import { KarateController } from './karate.controller';
 import { KarateService } from './karate.service';
 import { WushuController } from './wushu.controller';
 import { WushuService } from './wushu.service';
+import { WushuTaoluController } from './wushu-taolu.controller';
+import { WushuTaoluService } from './wushu-taolu.service';
 
 import {
   Match,
@@ -48,6 +50,7 @@ import {
     JudoController,
     KarateController,
     WushuController,
+    WushuTaoluController,
   ],
   providers: [
     CompetitionsService,
@@ -58,7 +61,8 @@ import {
     BracketService,
     KarateService,
     WushuService,
+    WushuTaoluService,
   ],
-  exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService],
+  exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService, WushuTaoluService],
 })
 export class CompetitionsModule {}

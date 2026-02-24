@@ -1,6 +1,6 @@
 import { IsNumber, Min, Max } from 'class-validator';
 
-export class UpdatePoomsaeScoreDto {
+export class UpdateTaoluScoreDto {
   @IsNumber()
   @Min(0)
   accuracy: number;

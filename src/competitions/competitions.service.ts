@@ -43,7 +43,7 @@ export class CompetitionsService {
 
   async createPhase(createDto: CreatePhaseDto): Promise<Phase> {
     console.log('🔵 [CREATE PHASE] Iniciando con datos:', createDto);
-    
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -64,16 +64,21 @@ export class CompetitionsService {
         ],
       });
 
-      if (
+      // ── CAMBIO: incluir Taolu además de Poomsae ──────────────────────────
+      const isScoreTablePhase =
         phaseWithRelations &&
-        this.isPoomsaePhase(phaseWithRelations) &&
-        phaseWithRelations.type === PhaseType.GRUPO
-      ) {
-        console.log('Creando participaciones Poomsae...');
+        (this.isPoomsaePhase(phaseWithRelations) ||
+          this.isWushuTaoluPhase(phaseWithRelations));
+
+      if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
+        console.log(
+          'Creando participaciones de tabla de puntajes (Poomsae/Taolu)...',
+        );
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
       } else {
         console.log('NO se crearán participaciones automáticas');
       }
+      // ─────────────────────────────────────────────────────────────────────
 
       await queryRunner.commitTransaction();
       console.log('Transacción completada');
@@ -88,7 +93,6 @@ export class CompetitionsService {
     }
   }
 
-
   async findAllPhases(eventCategoryId?: number): Promise<Phase[]> {
     const queryBuilder = this.phaseRepository
       .createQueryBuilder('phase')
@@ -96,7 +100,7 @@ export class CompetitionsService {
       .leftJoinAndSelect(
         'phase.matches',
         'matches',
-        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId'  
+        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId',
       )
       .leftJoinAndSelect('matches.participations', 'participations')
       .leftJoinAndSelect('participations.registration', 'registration')
@@ -115,9 +119,6 @@ export class CompetitionsService {
     return queryBuilder.orderBy('phase.displayOrder', 'ASC').getMany();
   }
 
-
-
-
   async findOnePhase(id: number): Promise<Phase> {
     const phase = await this.phaseRepository
       .createQueryBuilder('phase')
@@ -125,7 +126,7 @@ export class CompetitionsService {
       .leftJoinAndSelect(
         'phase.matches',
         'matches',
-        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId'  
+        'matches.deletedAt IS NULL AND matches.phaseId = phase.phaseId',
       )
       .leftJoinAndSelect('matches.participations', 'participations')
       .leftJoinAndSelect('participations.registration', 'registration')
@@ -151,9 +152,6 @@ export class CompetitionsService {
     return phase;
   }
 
-
-
-
   async updatePhase(id: number, updateDto: UpdatePhaseDto): Promise<Phase> {
     const phase = await this.findOnePhase(id);
     Object.assign(phase, updateDto);
@@ -162,9 +160,7 @@ export class CompetitionsService {
 
   async removePhase(id: number, userId?: number): Promise<void> {
     const phase = await this.findOnePhase(id);
-
     await this.phaseRepository.softRemove(phase);
-
     if (userId) {
       await this.phaseRepository.update(id, { deletedBy: userId });
     }
@@ -195,7 +191,6 @@ export class CompetitionsService {
     return this.findOnePhase(id);
   }
 
-
   async findDeletedPhases(): Promise<Phase[]> {
     return this.phaseRepository
       .createQueryBuilder('phase')
@@ -223,7 +218,6 @@ export class CompetitionsService {
 
   async createMatch(createDto: CreateMatchDto): Promise<Match> {
     await this.findOnePhase(createDto.phaseId);
-
     const match = this.matchRepository.create(createDto);
     return this.matchRepository.save(match);
   }
@@ -298,9 +292,7 @@ export class CompetitionsService {
 
   async removeMatch(id: number, userId?: number): Promise<void> {
     const match = await this.findOneMatch(id);
-
     await this.matchRepository.softRemove(match);
-
     if (userId) {
       await this.matchRepository.update(id, { deletedBy: userId });
     }
@@ -330,7 +322,6 @@ export class CompetitionsService {
 
     return this.findOneMatch(id);
   }
-
 
   async findDeletedMatches(): Promise<Match[]> {
     return this.matchRepository
@@ -376,13 +367,11 @@ export class CompetitionsService {
       );
     }
 
-    // Avanzar en bracket primero (maneja la lógica del siguiente round)
     await this.bracketService.advanceWinner({
       matchId,
       winnerRegistrationId,
     });
 
-    // Luego agregar los campos específicos de walkover encima
     await this.matchRepository.update(matchId, {
       isWalkover: true,
       walkoverReason: reason || 'Walkover',
@@ -390,7 +379,6 @@ export class CompetitionsService {
 
     return this.findOneMatch(matchId);
   }
-
 
   // ==================== PARTICIPATIONS ====================
 
@@ -462,7 +450,6 @@ export class CompetitionsService {
 
       const registrations = dto.registrationIds || [];
       const numParticipants = registrations.length;
-
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const firstRoundMatches = nextPowerOf2 / 2;
 
@@ -552,7 +539,6 @@ export class CompetitionsService {
           scoreAgainst: 0,
           scoreDiff: 0,
         });
-
         const saved = await queryRunner.manager.save(standing);
         standings.push(saved);
       }
@@ -636,13 +622,13 @@ export class CompetitionsService {
 
       for (const standing of standings) {
         standing.matchesPlayed = 0;
-        standing.wins = 0;
-        standing.draws = 0;
-        standing.losses = 0;
-        standing.points = 0;
-        standing.scoreFor = 0;
+        standing.wins         = 0;
+        standing.draws        = 0;
+        standing.losses       = 0;
+        standing.points       = 0;
+        standing.scoreFor     = 0;
         standing.scoreAgainst = 0;
-        standing.scoreDiff = 0;
+        standing.scoreDiff    = 0;
       }
 
       for (const match of matches) {
@@ -650,12 +636,8 @@ export class CompetitionsService {
 
         const [p1, p2] = match.participations;
 
-        const s1 = standings.find(
-          (s) => s.registrationId === p1.registrationId,
-        );
-        const s2 = standings.find(
-          (s) => s.registrationId === p2.registrationId,
-        );
+        const s1 = standings.find((s) => s.registrationId === p1.registrationId);
+        const s2 = standings.find((s) => s.registrationId === p2.registrationId);
 
         if (!s1 || !s2) continue;
 
@@ -672,8 +654,6 @@ export class CompetitionsService {
             s2.points += 3;
             s1.losses++;
           }
-        } else {
-          
         }
       }
 
@@ -682,7 +662,7 @@ export class CompetitionsService {
       }
 
       standings.sort((a, b) => {
-        if (b.points !== a.points) return b.points - a.points;
+        if (b.points !== a.points)     return b.points - a.points;
         if (b.scoreDiff !== a.scoreDiff) return b.scoreDiff - a.scoreDiff;
         return b.scoreFor - a.scoreFor;
       });
@@ -694,7 +674,6 @@ export class CompetitionsService {
       }
 
       await queryRunner.commitTransaction();
-
       return this.getStandings(phaseId);
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -704,6 +683,8 @@ export class CompetitionsService {
     }
   }
 
+  // ==================== BEST OF 3 ====================
+
   async initializeBestOf3Series(phaseId: number, registrationIds: number[]) {
     if (registrationIds.length !== 2) {
       throw new BadRequestException(
@@ -711,9 +692,7 @@ export class CompetitionsService {
       );
     }
 
-    const phase = await this.phaseRepository.findOne({
-      where: { phaseId },
-    });
+    const phase = await this.phaseRepository.findOne({ where: { phaseId } });
 
     if (!phase) {
       throw new NotFoundException('Fase no encontrada');
@@ -735,7 +714,7 @@ export class CompetitionsService {
           phaseId: phase.phaseId,
           matchNumber: i,
           round: `Partido ${i} de 3`,
-          status: i === 1 ? MatchStatus.PROGRAMADO : MatchStatus.PROGRAMADO,
+          status: MatchStatus.PROGRAMADO,
         });
 
         const savedMatch = await queryRunner.manager.save(match);
@@ -753,7 +732,6 @@ export class CompetitionsService {
       }
 
       await queryRunner.commitTransaction();
-
       return {
         message: 'Serie Mejor de 3 inicializada correctamente',
         matches,
@@ -807,10 +785,7 @@ export class CompetitionsService {
       const [ganadorId] = ganadorEntry;
 
       const partidosPendientes = await this.matchRepository.find({
-        where: {
-          phaseId: match.phaseId,
-          status: MatchStatus.PROGRAMADO,
-        },
+        where: { phaseId: match.phaseId, status: MatchStatus.PROGRAMADO },
       });
 
       for (const p of partidosPendientes) {
@@ -833,6 +808,8 @@ export class CompetitionsService {
     };
   }
 
+  // ==================== MANUAL RANKS ====================
+
   async getManualRanks(phaseId: number) {
     const rows: any[] = await this.dataSource.query(
       `SELECT pmr.id, pmr.phase_id AS phaseId, pmr.registration_id AS registrationId,
@@ -852,7 +829,6 @@ export class CompetitionsService {
       [phaseId],
     );
 
-    // Transformar al shape que espera el front
     return rows.map((row) => ({
       id: row.id,
       phaseId: row.phaseId,
@@ -889,54 +865,49 @@ export class CompetitionsService {
     }));
   }
 
+  async setManualStandingRanks(
+    phaseId: number,
+    dto: SetManualRanksDto,
+  ): Promise<{ updated: number }> {
+    const registrationIds = dto.ranks.map((r) => r.registrationId);
 
-  // ==================== TAEKWONDO POOMSAE ====================
+    const participations = await this.participationRepository
+      .createQueryBuilder('p')
+      .innerJoin('p.match', 'm')
+      .where('m.phaseId = :phaseId', { phaseId })
+      .andWhere('m.deletedAt IS NULL')
+      .andWhere('p.registrationId IN (:...registrationIds)', { registrationIds })
+      .getMany();
 
-  private isPoomsaePhase(phase: Phase): boolean {
-    const categoryName =
-      phase.eventCategory?.category?.name?.toLowerCase() || '';
+    const foundIds = new Set(participations.map((p) => p.registrationId));
+    const missing  = registrationIds.filter((id) => !foundIds.has(id));
 
-    return (
-      categoryName.includes('poomsae') ||
-      categoryName.includes('formas') ||
-      categoryName.includes('forma')
+    if (missing.length > 0) {
+      throw new BadRequestException(
+        `Registrations no pertenecen a la fase ${phaseId}: ${missing.join(', ')}`,
+      );
+    }
+
+    await Promise.all(
+      dto.ranks.map((item) =>
+        this.dataSource.query(
+          `INSERT INTO phase_manual_ranks (phase_id, registration_id, manual_rank_position, updated_at)
+          VALUES (?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE manual_rank_position = VALUES(manual_rank_position), updated_at = NOW()`,
+          [phaseId, item.registrationId, item.manualRankPosition],
+        ),
+      ),
     );
+
+    return { updated: dto.ranks.length };
   }
 
-  private async createPoomsaeParticipations(
-    phase: Phase,
-    queryRunner: any,
-  ): Promise<void> {
-    const registrations = phase.eventCategory?.registrations || [];
-
-    if (registrations.length === 0) {
-      console.log(
-        `Fase ${phase.phaseId} de Poomsae creada sin atletas inscritos`,
-      );
-      return;
-    }
-
-    const match = queryRunner.manager.create(Match, {
-      phaseId: phase.phaseId,
-      matchNumber: 1,
-      round: 'Final',
-      status: MatchStatus.EN_CURSO,
-    });
-
-    const savedMatch = await queryRunner.manager.save(match);
-
-    for (const registration of registrations) {
-      const participation = queryRunner.manager.create(Participation, {
-        matchId: savedMatch.matchId,
-        registrationId: registration.registrationId,
-      });
-
-      await queryRunner.manager.save(participation);
-    }
-
-    console.log(
-      `Creadas ${registrations.length} participaciones para Poomsae en fase ${phase.phaseId}`,
+  async clearManualStandingRanks(phaseId: number): Promise<{ cleared: number }> {
+    const result = await this.dataSource.query(
+      `DELETE FROM phase_manual_ranks WHERE phase_id = ?`,
+      [phaseId],
     );
+    return { cleared: result.affectedRows ?? 0 };
   }
 
   async updateRegistrationSeed(
@@ -987,6 +958,7 @@ export class CompetitionsService {
         relations: ['participations', 'participations.registration'],
         order: { matchNumber: 'ASC' },
       });
+
       let processedCount = 0;
 
       for (const match of matches) {
@@ -1037,52 +1009,65 @@ export class CompetitionsService {
     }
   }
 
-  async setManualStandingRanks(
-    phaseId: number,
-    dto: SetManualRanksDto,
-  ): Promise<{ updated: number }> {
-    const registrationIds = dto.ranks.map((r) => r.registrationId);
+  // ==================== POOMSAE / TAOLU (SCORE TABLE) ====================
 
-    const participations = await this.participationRepository
-      .createQueryBuilder('p')
-      .innerJoin('p.match', 'm')
-      .where('m.phaseId = :phaseId', { phaseId })
-      .andWhere('m.deletedAt IS NULL')
-      .andWhere('p.registrationId IN (:...registrationIds)', { registrationIds })
-      .getMany();
+  private isPoomsaePhase(phase: Phase): boolean {
+    const categoryName =
+      phase.eventCategory?.category?.name?.toLowerCase() || '';
+    return (
+      categoryName.includes('poomsae') ||
+      categoryName.includes('formas')  ||
+      categoryName.includes('forma')
+    );
+  }
 
-    const foundIds = new Set(participations.map((p) => p.registrationId));
-    const missing = registrationIds.filter((id) => !foundIds.has(id));
+  // ── NUEVO ────────────────────────────────────────────────────────────────
+  private isWushuTaoluPhase(phase: Phase): boolean {
+    const sportName =
+      phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
+    const categoryName =
+      phase.eventCategory?.category?.name?.toLowerCase() || '';
+    return (
+      sportName.includes('wushu') &&
+      (categoryName.includes('taolu') ||
+        categoryName.includes('formas') ||
+        categoryName.includes('forma'))
+    );
+  }
+  // ─────────────────────────────────────────────────────────────────────────
 
-    if (missing.length > 0) {
-      throw new BadRequestException(
-        `Registrations no pertenecen a la fase ${phaseId}: ${missing.join(', ')}`,
+  private async createPoomsaeParticipations(
+    phase: Phase,
+    queryRunner: any,
+  ): Promise<void> {
+    const registrations = phase.eventCategory?.registrations || [];
+
+    if (registrations.length === 0) {
+      console.log(
+        `Fase ${phase.phaseId} de tabla de puntajes creada sin atletas inscritos`,
       );
+      return;
     }
 
-    await Promise.all(
-      dto.ranks.map((item) =>
-        this.dataSource.query(
-          `INSERT INTO phase_manual_ranks (phase_id, registration_id, manual_rank_position, updated_at)
-          VALUES (?, ?, ?, NOW())
-          ON DUPLICATE KEY UPDATE manual_rank_position = VALUES(manual_rank_position), updated_at = NOW()`,
-          [phaseId, item.registrationId, item.manualRankPosition],
-        ),
-      ),
+    const match = queryRunner.manager.create(Match, {
+      phaseId: phase.phaseId,
+      matchNumber: 1,
+      round: 'Final',
+      status: MatchStatus.EN_CURSO,
+    });
+
+    const savedMatch = await queryRunner.manager.save(match);
+
+    for (const registration of registrations) {
+      const participation = queryRunner.manager.create(Participation, {
+        matchId: savedMatch.matchId,
+        registrationId: registration.registrationId,
+      });
+      await queryRunner.manager.save(participation);
+    }
+
+    console.log(
+      `Creadas ${registrations.length} participaciones para tabla de puntajes en fase ${phase.phaseId}`,
     );
-
-    return { updated: dto.ranks.length };
   }
-
-
-
-
-  async clearManualStandingRanks(phaseId: number): Promise<{ cleared: number }> {
-    const result = await this.dataSource.query(
-      `DELETE FROM phase_manual_ranks WHERE phase_id = ?`,
-      [phaseId],
-    );
-    return { cleared: result.affectedRows ?? 0 };
-  }
-
 }
