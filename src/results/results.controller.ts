@@ -137,6 +137,24 @@ export class ResultsController {
 
   // ==================== SWIMMING TIME RESULTS ====================
 
+  @Get('phase/:phaseId')
+  @Public()
+  async getPhaseResults(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+  ) {
+    return await this.resultsService.getPhaseResults(phaseId);
+  }
+
+  @Patch(':id')  
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async updateTimeResult(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: Partial<CreateTimeResultDto>,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return await this.resultsService.updateTimeResult(id, dto, user.userId);
+  }
+
   @Post('time')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async createTimeResult(

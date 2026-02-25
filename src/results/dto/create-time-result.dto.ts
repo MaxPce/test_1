@@ -18,4 +18,8 @@ export class CreateTimeResultDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsNumber()
+  @IsOptional()
+  phaseId?: number;
 }

@@ -512,7 +512,6 @@ export class ResultsService {
       relations: ['registration', 'registration.athlete', 'registration.team'],
     });
 
-    // Si no existe participation, crear una (para deportes sin matches)
     if (!participation) {
       const newParticipation = this.participationRepository.create({
         registrationId: dto.registrationId,
@@ -533,31 +532,45 @@ export class ResultsService {
       }
     }
 
-
     // 2. Detectar si está descalificado
     const isDQ = dto.timeValue.startsWith('x');
     const cleanTime = isDQ ? dto.timeValue.substring(1) : dto.timeValue;
 
-    // 3. Buscar si ya existe un resultado para esta participation
-    let result = await this.resultRepository.findOne({
-      where: { participationId: participation.participationId },
-    });
+    // 3. Buscar si ya existe resultado para esta participation EN ESTA FASE
+    //    (si viene phaseId, buscar por participation + phase;
+    //     si no viene, buscar solo por participation — compatibilidad hacia atrás)
+    let result: Result | null = null;
+
+    if (dto.phaseId) {
+      result = await this.resultRepository.findOne({
+        where: {
+          participationId: participation.participationId,
+          phaseId: dto.phaseId,
+        },
+      });
+    } else {
+      result = await this.resultRepository.findOne({
+        where: { participationId: participation.participationId },
+      });
+    }
 
     if (result) {
       // Actualizar resultado existente
       result.timeValue = cleanTime;
       result.notes = isDQ
         ? `DQ - ${dto.notes || 'Descalificado'}`
-        : dto.notes || null; 
+        : dto.notes || null;
       result.recordedBy = userId;
+      if (dto.phaseId) result.phaseId = dto.phaseId; 
     } else {
       // Crear nuevo resultado
       result = this.resultRepository.create({
         participationId: participation.participationId,
+        phaseId: dto.phaseId || null, 
         timeValue: cleanTime,
         notes: isDQ
           ? `DQ - ${dto.notes || 'Descalificado'}`
-          : dto.notes || null, 
+          : dto.notes || null,
         recordedBy: userId,
         rankPosition: null,
         isWinner: false,
@@ -566,12 +579,81 @@ export class ResultsService {
 
     const savedResult = await this.resultRepository.save(result);
 
-    // 4. Recalcular posiciones automáticamente después de guardar
+    // 4. Recalcular posiciones
     const eventCategoryId = participation.registration.eventCategoryId;
-    await this.recalculateSwimmingPositions(eventCategoryId);
+
+    // Si tiene phaseId, recalcular por fase; si no, recalcular por categoría entera
+    if (dto.phaseId) {
+      await this.recalculatePhaseTimePositions(dto.phaseId);
+    } else {
+      await this.recalculateSwimmingPositions(eventCategoryId);
+    }
 
     return savedResult;
   }
+
+  // recalcular posiciones dentro de una fase
+  async recalculatePhaseTimePositions(phaseId: number) {
+    const results = await this.resultRepository
+      .createQueryBuilder('result')
+      .where('result.phaseId = :phaseId', { phaseId })
+      .andWhere('result.timeValue IS NOT NULL')
+      .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
+      .orderBy('result.timeValue', 'ASC')
+      .getMany();
+
+    for (let i = 0; i < results.length; i++) {
+      results[i].rankPosition = i + 1;
+      results[i].isWinner = i === 0;
+      await this.resultRepository.save(results[i]);
+    }
+
+    // DQ → rankPosition null
+    const disqualified = await this.resultRepository
+      .createQueryBuilder('result')
+      .where('result.phaseId = :phaseId', { phaseId })
+      .andWhere('result.timeValue IS NOT NULL')
+      .andWhere("result.notes LIKE '%DQ%'")
+      .getMany();
+
+    for (const r of disqualified) {
+      r.rankPosition = null;
+      r.isWinner = false;
+      await this.resultRepository.save(r);
+    }
+
+    return {
+      message: 'Posiciones recalculadas por fase',
+      totalResults: results.length,
+      disqualified: disqualified.length,
+    };
+  }
+
+  // obtener resultados por fase (para Natación/Atletismo)
+  async getPhaseResults(phaseId: number) {
+    const results = await this.resultRepository
+      .createQueryBuilder('result')
+      .leftJoinAndSelect('result.participation', 'participation')
+      .leftJoinAndSelect('participation.registration', 'registration')
+      .leftJoinAndSelect('registration.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'members')
+      .leftJoinAndSelect('members.athlete', 'memberAthlete')
+      .where('result.phaseId = :phaseId', { phaseId })
+      .andWhere('result.timeValue IS NOT NULL')
+      .orderBy(
+        'CASE WHEN result.rankPosition IS NULL THEN 1 ELSE 0 END',
+        'ASC',
+      )
+      .addOrderBy('result.rankPosition', 'ASC')
+      .addOrderBy('result.timeValue', 'ASC')
+      .getMany();
+
+    return results;
+  }
+
 
   /**
    * Obtener resultados de natación por categoría

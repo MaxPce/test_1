@@ -1,4 +1,3 @@
-// src/results/entities/result.entity.ts
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -10,9 +9,11 @@ import {
 } from 'typeorm';
 import { Participation } from '../../competitions/entities/participation.entity';
 import { User } from '../../auth/entities/user.entity';
+import { Phase } from '../../competitions/entities/phase.entity'; 
 
 @Entity('results')
 @Index(['participationId'])
+@Index(['phaseId']) 
 export class Result {
   @PrimaryGeneratedColumn({ name: 'result_id' })
   resultId: number;
@@ -20,8 +21,11 @@ export class Result {
   @Column({ name: 'participation_id', nullable: true })
   participationId: number;
 
+  @Column({ name: 'phase_id', nullable: true })
+  phaseId: number | null;
+
   @Column({
-    type: 'int', 
+    type: 'int',
     name: 'score_value',
     nullable: true,
     comment: 'Puntos en combate o general',
@@ -29,7 +33,7 @@ export class Result {
   scoreValue: number | null;
 
   @Column({
-    type: 'int', 
+    type: 'int',
     name: 'rank_position',
     nullable: true,
     comment: 'Posición final: 1,2,3',
@@ -77,6 +81,10 @@ export class Result {
   @ManyToOne(() => Participation)
   @JoinColumn({ name: 'participation_id' })
   participation: Participation;
+
+  @ManyToOne(() => Phase, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'phase_id' })
+  phase: Phase;
 
   @ManyToOne(() => User, { onDelete: 'SET NULL' })
   @JoinColumn({ name: 'recorded_by' })

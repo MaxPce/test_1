@@ -449,4 +449,31 @@ export class CompetitionsController {
     return this.competitionsService.clearManualStandingRanks(phaseId);
   }
 
+  // ── PHASE REGISTRATIONS ──────────────────────────
+
+  @Get('phases/:phaseId/registrations')
+  @Public()
+  getPhaseRegistrations(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.getPhaseRegistrations(phaseId);
+  }
+
+  @Post('phases/:phaseId/registrations')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  assignPhaseRegistration(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body('registrationId') registrationId: number,
+  ) {
+    return this.competitionsService.assignPhaseRegistration(phaseId, registrationId);
+  }
+
+  @Delete('phases/:phaseId/registrations/:registrationId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  removePhaseRegistration(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Param('registrationId', ParseIntPipe) registrationId: number,
+  ) {
+    return this.competitionsService.removePhaseRegistration(phaseId, registrationId);
+  }
+
+
 }

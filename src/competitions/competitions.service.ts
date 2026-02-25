@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Not, IsNull, In } from 'typeorm';
-import { Phase, Match, Participation, Standing, PhaseManualRank } from './entities';
+import { Phase, Match, Participation, Standing, PhaseManualRank, PhaseRegistration } from './entities';
 import { Registration } from '../events/entities/registration.entity';
 import {
   CreatePhaseDto,
@@ -35,6 +35,8 @@ export class CompetitionsService {
     private registrationRepository: Repository<Registration>,
     @InjectRepository(PhaseManualRank)
     private phaseManualRankRepository: Repository<PhaseManualRank>,
+    @InjectRepository(PhaseRegistration)
+  private phaseRegistrationRepository: Repository<PhaseRegistration>,
     private dataSource: DataSource,
     private bracketService: BracketService,
   ) {}
@@ -213,6 +215,42 @@ export class CompetitionsService {
 
     await this.phaseRepository.remove(phase);
   }
+
+  async getPhaseRegistrations(phaseId: number) {
+    return this.phaseRegistrationRepository.find({
+      where: { phaseId },
+      relations: [
+        'registration',
+        'registration.athlete',
+        'registration.athlete.institution',
+        'registration.team',
+        'registration.team.institution',
+        'registration.team.members',
+        'registration.team.members.athlete',
+      ],
+      order: { phaseRegistrationId: 'ASC' },
+    });
+  }
+
+  async assignPhaseRegistration(phaseId: number, registrationId: number) {
+    const existing = await this.phaseRegistrationRepository.findOne({
+      where: { phaseId, registrationId },
+    });
+    if (existing) return existing; // idempotente, no lanza error
+
+    const pr = this.phaseRegistrationRepository.create({ phaseId, registrationId });
+    return this.phaseRegistrationRepository.save(pr);
+  }
+
+  async removePhaseRegistration(phaseId: number, registrationId: number) {
+    const pr = await this.phaseRegistrationRepository.findOne({
+      where: { phaseId, registrationId },
+    });
+    if (!pr) throw new NotFoundException('Asignación no encontrada');
+    await this.phaseRegistrationRepository.remove(pr);
+    return { message: 'Participante removido de la serie' };
+  }
+
 
   // ==================== MATCHES ====================
 
