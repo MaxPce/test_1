@@ -8,7 +8,7 @@ import {
   Index,
   CreateDateColumn,
   UpdateDateColumn,
-  DeleteDateColumn
+  DeleteDateColumn,
 } from 'typeorm';
 import { Phase } from './phase.entity';
 import { Registration } from '../../events/entities/registration.entity';
@@ -167,6 +167,14 @@ export class Match {
   })
   walkoverReason?: string;
 
+  @Column({
+    name: 'victory_type',
+    type: 'varchar',
+    length: 10,
+    nullable: true,
+    comment: 'Tipo de victoria Lucha Olímpica: VFA, VSU, VSU1, VPO, VCA',
+  })
+  victoryType?: string | null;
 
   @ManyToOne(() => Phase, (phase) => phase.matches)
   @JoinColumn({ name: 'phase_id' })

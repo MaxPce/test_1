@@ -4,7 +4,6 @@ import { IsNumber, IsOptional, IsBoolean, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class UpdateMatchDto extends PartialType(CreateMatchDto) {
-
   // ── Ganador / estado ──────────────────────────────────────────
   @IsOptional()
   @Type(() => Number)
@@ -52,4 +51,9 @@ export class UpdateMatchDto extends PartialType(CreateMatchDto) {
   @IsOptional()
   @IsString()
   walkoverReason?: string;
+
+  // ── tipo de victoria ─────────────────────────────────────────────
+  @IsOptional()
+  @IsString()
+  victoryType?: string | null;
 }
