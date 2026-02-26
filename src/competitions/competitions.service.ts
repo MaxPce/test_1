@@ -5,7 +5,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, Not, IsNull, In } from 'typeorm';
-import { Phase, Match, Participation, Standing, PhaseManualRank, PhaseRegistration } from './entities';
+import {
+  Phase,
+  Match,
+  Participation,
+  Standing,
+  PhaseManualRank,
+  PhaseRegistration,
+} from './entities';
 import { Registration } from '../events/entities/registration.entity';
 import {
   CreatePhaseDto,
@@ -36,7 +43,7 @@ export class CompetitionsService {
     @InjectRepository(PhaseManualRank)
     private phaseManualRankRepository: Repository<PhaseManualRank>,
     @InjectRepository(PhaseRegistration)
-  private phaseRegistrationRepository: Repository<PhaseRegistration>,
+    private phaseRegistrationRepository: Repository<PhaseRegistration>,
     private dataSource: DataSource,
     private bracketService: BracketService,
   ) {}
@@ -140,7 +147,10 @@ export class CompetitionsService {
       .leftJoinAndSelect('phase.standings', 'standings')
       .leftJoinAndSelect('standings.registration', 'standingRegistration')
       .leftJoinAndSelect('standingRegistration.athlete', 'standingAthlete')
-      .leftJoinAndSelect('standingAthlete.institution', 'standingAthleteInstitution')
+      .leftJoinAndSelect(
+        'standingAthlete.institution',
+        'standingAthleteInstitution',
+      )
       .leftJoinAndSelect('standingRegistration.team', 'standingTeam')
       .leftJoinAndSelect('standingTeam.institution', 'standingTeamInstitution')
       .where('phase.phaseId = :id', { id })
@@ -238,7 +248,10 @@ export class CompetitionsService {
     });
     if (existing) return existing; // idempotente, no lanza error
 
-    const pr = this.phaseRegistrationRepository.create({ phaseId, registrationId });
+    const pr = this.phaseRegistrationRepository.create({
+      phaseId,
+      registrationId,
+    });
     return this.phaseRegistrationRepository.save(pr);
   }
 
@@ -250,7 +263,6 @@ export class CompetitionsService {
     await this.phaseRegistrationRepository.remove(pr);
     return { message: 'Participante removido de la serie' };
   }
-
 
   // ==================== MATCHES ====================
 
@@ -555,15 +567,14 @@ export class CompetitionsService {
 
     try {
       const phase = await this.findOnePhase(dto.phaseId);
-
       if (phase.type !== PhaseType.GRUPO) {
         throw new BadRequestException(
           'Solo se puede inicializar round robin para fases de grupo',
         );
       }
 
+      // 1. Crear standings (igual que antes)
       const standings: Standing[] = [];
-
       for (const registrationId of dto.registrationIds) {
         const standing = queryRunner.manager.create(Standing, {
           phaseId: dto.phaseId,
@@ -577,35 +588,53 @@ export class CompetitionsService {
           scoreAgainst: 0,
           scoreDiff: 0,
         });
-        const saved = await queryRunner.manager.save(standing);
-        standings.push(saved);
+        standings.push(await queryRunner.manager.save(standing));
       }
 
-      const registrations = dto.registrationIds;
+      // 2. Circle Method para asignar rondas correctamente
+      const regs: (number | null)[] = [...dto.registrationIds];
+      const hasOdd = regs.length % 2 !== 0;
+      if (hasOdd) regs.push(null); // null = BYE
+
+      const n = regs.length; // siempre par
+      const numRounds = n - 1;
+      const matchesPerRound = n / 2;
       let matchNumber = 1;
 
-      for (let i = 0; i < registrations.length; i++) {
-        for (let j = i + 1; j < registrations.length; j++) {
+      for (let round = 1; round <= numRounds; round++) {
+        for (let i = 0; i < matchesPerRound; i++) {
+          const home = regs[i];
+          const away = regs[n - 1 - i];
+
+          // Saltear si alguno es BYE (null)
+          if (home === null || away === null) continue;
+
           const match = queryRunner.manager.create(Match, {
             phaseId: dto.phaseId,
             matchNumber: matchNumber++,
+            round: String(round), // ← "1", "2", "3", etc.
             status: MatchStatus.PROGRAMADO,
           });
-
           const savedMatch = await queryRunner.manager.save(match);
 
           await queryRunner.manager.save(Participation, {
             matchId: savedMatch.matchId,
-            registrationId: registrations[i],
+            registrationId: home,
             corner: Corner.A,
           });
-
           await queryRunner.manager.save(Participation, {
             matchId: savedMatch.matchId,
-            registrationId: registrations[j],
+            registrationId: away,
             corner: Corner.B,
           });
         }
+
+        // Rotación: fijar el primer elemento, rotar los demás a la derecha
+        const fixed = regs[0];
+        const last = regs[n - 1];
+        for (let k = n - 1; k > 1; k--) regs[k] = regs[k - 1];
+        regs[1] = last;
+        regs[0] = fixed;
       }
 
       await queryRunner.commitTransaction();
@@ -660,13 +689,13 @@ export class CompetitionsService {
 
       for (const standing of standings) {
         standing.matchesPlayed = 0;
-        standing.wins         = 0;
-        standing.draws        = 0;
-        standing.losses       = 0;
-        standing.points       = 0;
-        standing.scoreFor     = 0;
+        standing.wins = 0;
+        standing.draws = 0;
+        standing.losses = 0;
+        standing.points = 0;
+        standing.scoreFor = 0;
         standing.scoreAgainst = 0;
-        standing.scoreDiff    = 0;
+        standing.scoreDiff = 0;
       }
 
       for (const match of matches) {
@@ -674,8 +703,12 @@ export class CompetitionsService {
 
         const [p1, p2] = match.participations;
 
-        const s1 = standings.find((s) => s.registrationId === p1.registrationId);
-        const s2 = standings.find((s) => s.registrationId === p2.registrationId);
+        const s1 = standings.find(
+          (s) => s.registrationId === p1.registrationId,
+        );
+        const s2 = standings.find(
+          (s) => s.registrationId === p2.registrationId,
+        );
 
         if (!s1 || !s2) continue;
 
@@ -700,7 +733,7 @@ export class CompetitionsService {
       }
 
       standings.sort((a, b) => {
-        if (b.points !== a.points)     return b.points - a.points;
+        if (b.points !== a.points) return b.points - a.points;
         if (b.scoreDiff !== a.scoreDiff) return b.scoreDiff - a.scoreDiff;
         return b.scoreFor - a.scoreFor;
       });
@@ -914,11 +947,13 @@ export class CompetitionsService {
       .innerJoin('p.match', 'm')
       .where('m.phaseId = :phaseId', { phaseId })
       .andWhere('m.deletedAt IS NULL')
-      .andWhere('p.registrationId IN (:...registrationIds)', { registrationIds })
+      .andWhere('p.registrationId IN (:...registrationIds)', {
+        registrationIds,
+      })
       .getMany();
 
     const foundIds = new Set(participations.map((p) => p.registrationId));
-    const missing  = registrationIds.filter((id) => !foundIds.has(id));
+    const missing = registrationIds.filter((id) => !foundIds.has(id));
 
     if (missing.length > 0) {
       throw new BadRequestException(
@@ -940,7 +975,9 @@ export class CompetitionsService {
     return { updated: dto.ranks.length };
   }
 
-  async clearManualStandingRanks(phaseId: number): Promise<{ cleared: number }> {
+  async clearManualStandingRanks(
+    phaseId: number,
+  ): Promise<{ cleared: number }> {
     const result = await this.dataSource.query(
       `DELETE FROM phase_manual_ranks WHERE phase_id = ?`,
       [phaseId],
@@ -1054,7 +1091,7 @@ export class CompetitionsService {
       phase.eventCategory?.category?.name?.toLowerCase() || '';
     return (
       categoryName.includes('poomsae') ||
-      categoryName.includes('formas')  ||
+      categoryName.includes('formas') ||
       categoryName.includes('forma')
     );
   }
