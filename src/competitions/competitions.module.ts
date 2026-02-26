@@ -17,6 +17,9 @@ import { WushuController } from './wushu.controller';
 import { WushuService } from './wushu.service';
 import { WushuTaoluController } from './wushu-taolu.controller';
 import { WushuTaoluService } from './wushu-taolu.service';
+import { ShootingController } from './shooting.controller';
+import { ShootingService } from './shooting.service';
+import { ShootingScore } from './entities/shooting-score.entity';
 
 import {
   Match,
@@ -28,6 +31,7 @@ import {
   IndividualScore,
   PhaseManualRank,
   PhaseRegistration,
+  
 } from './entities';
 
 @Module({
@@ -43,6 +47,7 @@ import {
       IndividualScore,
       PhaseManualRank,
       PhaseRegistration,
+      ShootingScore,
     ]),
   ],
   controllers: [
@@ -53,6 +58,7 @@ import {
     KarateController,
     WushuController,
     WushuTaoluController,
+    ShootingController,
   ],
   providers: [
     CompetitionsService,
@@ -64,7 +70,8 @@ import {
     KarateService,
     WushuService,
     WushuTaoluService,
+    ShootingService,
   ],
-  exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService, WushuTaoluService],
+  exports: [CompetitionsService, BracketService, TaekwondoPoomsaeService, WushuTaoluService, ShootingService],
 })
 export class CompetitionsModule {}

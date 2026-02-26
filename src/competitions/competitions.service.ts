@@ -51,7 +51,7 @@ export class CompetitionsService {
   // ==================== PHASES ====================
 
   async createPhase(createDto: CreatePhaseDto): Promise<Phase> {
-    console.log('🔵 [CREATE PHASE] Iniciando con datos:', createDto);
+    
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -70,14 +70,17 @@ export class CompetitionsService {
           'eventCategory.registrations',
           'eventCategory.registrations.athlete',
           'eventCategory.registrations.athlete.institution',
+          'eventCategory.registrations.team',           
+          'eventCategory.registrations.team.institution', // ← agregar
         ],
       });
 
-      // ── CAMBIO: incluir Taolu además de Poomsae ──────────────────────────
+      // ── incluir Taolu además de Poomsae ──────────────────────────
       const isScoreTablePhase =
         phaseWithRelations &&
         (this.isPoomsaePhase(phaseWithRelations) ||
-          this.isWushuTaoluPhase(phaseWithRelations));
+          this.isWushuTaoluPhase(phaseWithRelations) ||
+          this.isTiroDeportivoPhase(phaseWithRelations));
 
       if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
         console.log(
@@ -1096,7 +1099,6 @@ export class CompetitionsService {
     );
   }
 
-  // ── NUEVO ────────────────────────────────────────────────────────────────
   private isWushuTaoluPhase(phase: Phase): boolean {
     const sportName =
       phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
@@ -1109,7 +1111,18 @@ export class CompetitionsService {
         categoryName.includes('forma'))
     );
   }
-  // ─────────────────────────────────────────────────────────────────────────
+
+  private isTiroDeportivoPhase(phase: Phase): boolean {
+    const sportName =
+        phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
+      console.log('🎯 sportName detectado:', sportName);
+      return (
+        sportName.includes('tiro deportivo') ||
+        sportName.includes('tiro al blanco') ||
+        sportName.includes('shooting')
+      );
+  }
+
 
   private async createPoomsaeParticipations(
     phase: Phase,

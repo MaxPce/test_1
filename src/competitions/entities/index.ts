@@ -8,3 +8,4 @@ export * from './poomsae-score.entity';
 export * from './individual-score.entity';
 export * from './phase-manual-rank.entity';
 export * from './phase-registration.entity';
+export * from './shooting-score.entity';
