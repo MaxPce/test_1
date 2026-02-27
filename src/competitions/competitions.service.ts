@@ -78,8 +78,7 @@ export class CompetitionsService {
         phaseWithRelations &&
         (this.isPoomsaePhase(phaseWithRelations) ||
           this.isWushuTaoluPhase(phaseWithRelations) ||
-          this.isTiroDeportivoPhase(phaseWithRelations) ||
-          this.isWeightliftingPhase(phaseWithRelations));
+          this.isTiroDeportivoPhase(phaseWithRelations));
 
       if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);

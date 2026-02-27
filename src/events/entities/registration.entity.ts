@@ -74,6 +74,15 @@ export class Registration {
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
 
+  @Column({
+    name: 'weight_class',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+    comment: 'División de peso solo pesas (ej: "89", "96")',
+  })
+  weightClass: string | null;
+
   @ManyToOne(
     () => EventCategory,
     (eventCategory) => eventCategory.registrations,

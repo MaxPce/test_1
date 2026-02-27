@@ -3,7 +3,11 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { WeightliftingAttempt } from './entities/weightlifting-attempt.entity';
 import { Participation } from './entities/participation.entity';
+import { Registration } from '../events/entities/registration.entity';
+import { Phase } from './entities/phase.entity';
+import { Match } from './entities/match.entity';
 import { UpsertWeightliftingAttemptDto } from './dto/create-weightlifting-attempt.dto';
+import { MatchStatus } from '../common/enums';
 
 export interface WeightliftingAthleteResult {
   participation: Participation;
@@ -23,11 +27,16 @@ export class WeightliftingService {
     private readonly attemptRepo: Repository<WeightliftingAttempt>,
     @InjectRepository(Participation)
     private readonly participationRepo: Repository<Participation>,
+    @InjectRepository(Registration)
+    private readonly registrationRepo: Repository<Registration>,
+    @InjectRepository(Phase)
+    private readonly phaseRepo: Repository<Phase>,
+    @InjectRepository(Match)
+    private readonly matchRepo: Repository<Match>,
   ) {}
 
-  async getPhaseResults(
-    phaseId: number,
-  ): Promise<WeightliftingAthleteResult[]> {
+  // ── Resultados de la fase ────────────────────────────────────────────────
+  async getPhaseResults(phaseId: number): Promise<WeightliftingAthleteResult[]> {
     const participations = await this.participationRepo
       .createQueryBuilder('p')
       .innerJoin('p.match', 'match')
@@ -37,16 +46,9 @@ export class WeightliftingService {
       .where('match.phase_id = :phaseId', { phaseId })
       .getMany();
 
-    // Si no hay matches aún (fase recién creada sin partidos),
-    // caemos al fallback de phase_registrations
-    const finalParticipations =
-      participations.length > 0
-        ? participations
-        : await this.getParticipationsFromPhaseRegistrations(phaseId);
+    if (participations.length === 0) return [];
 
-    if (finalParticipations.length === 0) return [];
-
-    const participationIds = finalParticipations.map((p) => p.participationId);
+    const participationIds = participations.map((p) => p.participationId);
 
     const allAttempts = await this.attemptRepo
       .createQueryBuilder('a')
@@ -54,80 +56,40 @@ export class WeightliftingService {
       .orderBy('a.attempt_number', 'ASC')
       .getMany();
 
-    const results: WeightliftingAthleteResult[] = finalParticipations.map(
-      (p) => {
-        const attempts = allAttempts.filter(
-          (a) => a.participationId === p.participationId,
-        );
-        const snatch = attempts
-          .filter((a) => a.liftType === 'snatch')
-          .sort((a, b) => a.attemptNumber - b.attemptNumber);
-        const cnj = attempts
-          .filter((a) => a.liftType === 'clean_and_jerk')
-          .sort((a, b) => a.attemptNumber - b.attemptNumber);
-
-        const bestSnatch = this.getBestLift(snatch);
-        const bestCnj = this.getBestLift(cnj);
-        const total =
-          bestSnatch !== null && bestCnj !== null ? bestSnatch + bestCnj : null;
-        const totalAchievedAtAttempt =
-          total !== null ? this.getTotalAchievedAttempt(snatch, cnj) : null;
-
-        return {
-          participation: p,
-          snatchAttempts: snatch,
-          cleanAndJerkAttempts: cnj,
-          bestSnatch,
-          bestCleanAndJerk: bestCnj,
-          total,
-          totalAchievedAtAttempt,
-          rank: null,
-        };
-      },
-    );
-
-    const ranked = results.sort((a, b) => {
-      if (a.total === null && b.total === null) return 0;
-      if (a.total === null) return 1;
-      if (b.total === null) return -1;
-      if (b.total !== a.total) return b.total - a.total;
-      return (
-        (a.totalAchievedAtAttempt ?? 99) - (b.totalAchievedAtAttempt ?? 99)
+    const results: WeightliftingAthleteResult[] = participations.map((p) => {
+      const attempts = allAttempts.filter(
+        (a) => a.participationId === p.participationId,
       );
+      const snatch = attempts
+        .filter((a) => a.liftType === 'snatch')
+        .sort((a, b) => a.attemptNumber - b.attemptNumber);
+      const cnj = attempts
+        .filter((a) => a.liftType === 'clean_and_jerk')
+        .sort((a, b) => a.attemptNumber - b.attemptNumber);
+
+      const bestSnatch = this.getBestLift(snatch);
+      const bestCnj = this.getBestLift(cnj);
+      const total =
+        bestSnatch !== null && bestCnj !== null ? bestSnatch + bestCnj : null;
+      const totalAchievedAtAttempt =
+        total !== null ? this.getTotalAchievedAttempt(snatch, cnj) : null;
+
+      return {
+        participation: p,
+        snatchAttempts: snatch,
+        cleanAndJerkAttempts: cnj,
+        bestSnatch,
+        bestCleanAndJerk: bestCnj,
+        total,
+        totalAchievedAtAttempt,
+        rank: null,
+      };
     });
 
-    ranked.forEach((r, idx) => {
-      r.rank = r.total !== null ? idx + 1 : null;
-    });
-
-    return ranked;
+    return results;
   }
 
-  /**
-   * Fallback: obtiene participations via phase_registrations.
-   * Usamos participationId = registrationId como proxy para identificar
-   * al atleta dentro del contexto de la fase cuando no hay matches.
-   * Los intentos se guardan por participationId que viene del frontend
-   * (el WeightliftingAttemptsTable envía el registrationId como participationId).
-   */
-  private async getParticipationsFromPhaseRegistrations(
-    phaseId: number,
-  ): Promise<Participation[]> {
-    return this.participationRepo
-      .createQueryBuilder('p')
-      .leftJoinAndSelect('p.registration', 'registration')
-      .leftJoinAndSelect('registration.athlete', 'athlete')
-      .leftJoinAndSelect('athlete.institution', 'institution')
-      .innerJoin(
-        'phase_registrations',
-        'pr',
-        'pr.registration_id = p.registration_id AND pr.phase_id = :phaseId',
-        { phaseId },
-      )
-      .where('p.match_id IS NULL')
-      .getMany();
-  }
-
+  // ── Intentos de una participación ────────────────────────────────────────
   async getParticipationAttempts(
     participationId: number,
   ): Promise<WeightliftingAttempt[]> {
@@ -137,6 +99,7 @@ export class WeightliftingService {
     });
   }
 
+  // ── Upsert de un intento ─────────────────────────────────────────────────
   async upsertAttempt(
     participationId: number,
     dto: UpsertWeightliftingAttemptDto,
@@ -167,21 +130,78 @@ export class WeightliftingService {
     return this.attemptRepo.save(attempt);
   }
 
+  // ── Inicializar fase con atletas y divisiones ────────────────────────────
+  async initializePhase(
+    phaseId: number,
+    entries: { registrationId: number; weightClass?: string | null }[],
+  ): Promise<{ message: string; participationsCreated: number }> {
+    const phase = await this.phaseRepo.findOne({ where: { phaseId } });
+    if (!phase) throw new NotFoundException(`Phase ${phaseId} no encontrada`);
+
+    // Crear o reusar el match único de la fase
+    let match = await this.matchRepo.findOne({ where: { phaseId } });
+    if (!match) {
+      match = this.matchRepo.create({
+        phaseId,
+        matchNumber: 1,
+        round: 'Final',
+        status: MatchStatus.EN_CURSO,
+      });
+      match = await this.matchRepo.save(match);
+    }
+
+    // Filtrar los que ya estaban asignados (idempotente)
+    const existing = await this.participationRepo.find({
+      where: { matchId: match.matchId },
+    });
+    const existingRegIds = new Set(existing.map((p) => p.registrationId));
+    const newEntries = entries.filter((e) => !existingRegIds.has(e.registrationId));
+
+    if (newEntries.length === 0) {
+      return {
+        message: 'Todos los atletas ya estaban asignados',
+        participationsCreated: 0,
+      };
+    }
+
+    // Guardar weightClass en la registration
+    for (const entry of newEntries) {
+      if (entry.weightClass !== undefined) {
+        await this.registrationRepo.update(
+          { registrationId: entry.registrationId },
+          { weightClass: entry.weightClass ?? null },
+        );
+      }
+    }
+
+    // Crear participations nuevas
+    const participations = newEntries.map((e) =>
+      this.participationRepo.create({
+        matchId: match.matchId,
+        registrationId: e.registrationId,
+      }),
+    );
+    await this.participationRepo.save(participations);
+
+    return {
+      message: 'Fase inicializada correctamente',
+      participationsCreated: newEntries.length,
+    };
+  }
+
   private getBestLift(attempts: WeightliftingAttempt[]): number | null {
-    const validAttempts = attempts.filter(
+    const valid = attempts.filter(
       (a) => a.result === 'valid' && a.weightKg !== null,
     );
-    if (validAttempts.length === 0) return null;
-    return Math.max(...validAttempts.map((a) => Number(a.weightKg)));
+    if (valid.length === 0) return null;
+    return Math.max(...valid.map((a) => Number(a.weightKg)));
   }
 
   private getTotalAchievedAttempt(
     snatch: WeightliftingAttempt[],
     cnj: WeightliftingAttempt[],
   ): number {
-    const lastValidSnatch = [...snatch]
-      .reverse()
-      .find((a) => a.result === 'valid');
+    const lastValidSnatch = [...snatch].reverse().find((a) => a.result === 'valid');
     const lastValidCnj = [...cnj].reverse().find((a) => a.result === 'valid');
     const snatchGlobal = lastValidSnatch ? lastValidSnatch.attemptNumber : 99;
     const cnjGlobal = lastValidCnj ? lastValidCnj.attemptNumber + 3 : 99;
