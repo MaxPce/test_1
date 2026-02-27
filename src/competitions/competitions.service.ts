@@ -51,8 +51,6 @@ export class CompetitionsService {
   // ==================== PHASES ====================
 
   async createPhase(createDto: CreatePhaseDto): Promise<Phase> {
-    
-
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -70,7 +68,7 @@ export class CompetitionsService {
           'eventCategory.registrations',
           'eventCategory.registrations.athlete',
           'eventCategory.registrations.athlete.institution',
-          'eventCategory.registrations.team',           
+          'eventCategory.registrations.team',
           'eventCategory.registrations.team.institution', // ← agregar
         ],
       });
@@ -80,12 +78,10 @@ export class CompetitionsService {
         phaseWithRelations &&
         (this.isPoomsaePhase(phaseWithRelations) ||
           this.isWushuTaoluPhase(phaseWithRelations) ||
-          this.isTiroDeportivoPhase(phaseWithRelations));
+          this.isTiroDeportivoPhase(phaseWithRelations) ||
+          this.isWeightliftingPhase(phaseWithRelations));
 
       if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
-        console.log(
-          'Creando participaciones de tabla de puntajes (Poomsae/Taolu)...',
-        );
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
       } else {
         console.log('NO se crearán participaciones automáticas');
@@ -1114,15 +1110,23 @@ export class CompetitionsService {
 
   private isTiroDeportivoPhase(phase: Phase): boolean {
     const sportName =
-        phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
-      console.log('🎯 sportName detectado:', sportName);
-      return (
-        sportName.includes('tiro deportivo') ||
-        sportName.includes('tiro al blanco') ||
-        sportName.includes('shooting')
-      );
+      phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
+    return (
+      sportName.includes('tiro deportivo') ||
+      sportName.includes('tiro al blanco') ||
+      sportName.includes('shooting')
+    );
   }
 
+  private isWeightliftingPhase(phase: Phase): boolean {
+    const sportName =
+      phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
+    return (
+      sportName.includes('halterofilia') ||
+      sportName.includes('weightlifting') ||
+      sportName.includes('levantamiento de pesas')
+    );
+  }
 
   private async createPoomsaeParticipations(
     phase: Phase,
