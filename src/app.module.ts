@@ -11,7 +11,7 @@ import { CompetitionsModule } from './competitions/competitions.module';
 import { ResultsModule } from './results/results.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { SismasterModule } from '../src/sismaster/sismaster.module';
-
+import { CompaniesModule } from './companies/companies.module';
 
 @Module({
   imports: [
@@ -62,6 +62,7 @@ import { SismasterModule } from '../src/sismaster/sismaster.module';
     EventsModule,
     CompetitionsModule,
     ResultsModule,
+    CompaniesModule,
   ],
   providers: [
     {

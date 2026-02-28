@@ -4,6 +4,7 @@ import {
   IsDateString,
   IsEnum,
   MaxLength,
+  IsNumber,
 } from 'class-validator';
 import { EventStatus } from '../../common/enums';
 
@@ -11,6 +12,10 @@ export class CreateEventDto {
   @IsString()
   @MaxLength(200)
   name: string;
+
+  @IsOptional()
+  @IsNumber()
+  companyId?: number;
 
   @IsOptional()
   @IsDateString()

@@ -5,10 +5,13 @@ import {
   OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
-  DeleteDateColumn
+  DeleteDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { EventCategory } from './event-category.entity';
 import { EventStatus } from '../../common/enums';
+import { Company } from '../../companies/entities/company.entity';
 
 @Entity('events')
 export class Event {
@@ -49,6 +52,13 @@ export class Event {
 
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
+
+  @Column({ name: 'company_id', nullable: true })
+  companyId: number;
+
+  @ManyToOne(() => Company, (company) => company.events, { nullable: true })
+  @JoinColumn({ name: 'company_id' })
+  company: Company;
 
   @OneToMany(() => EventCategory, (eventCategory) => eventCategory.event)
   eventCategories: EventCategory[];
