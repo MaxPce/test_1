@@ -19,4 +19,9 @@ export class CreateCompanyDto {
   @IsString()
   @MaxLength(255)
   address?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(50)
+  sismasterPrefix?: string;
 }

@@ -37,6 +37,13 @@ export class Company {
 
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
+  @Column({
+    name: 'sismaster_prefix',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
+  sismasterPrefix: string | null;
 
   @OneToMany(() => Event, (event) => event.company)
   events: Event[];

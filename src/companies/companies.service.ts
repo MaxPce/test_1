@@ -40,4 +40,10 @@ export class CompaniesService {
     await this.companyRepository.softDelete(id);
     return { message: `Company #${id} deleted` };
   }
+
+  async updateLogo(id: number, logoUrl: string): Promise<Company> {
+    await this.findOne(id);
+    await this.companyRepository.update(id, { logoUrl });
+    return this.findOne(id);
+  }
 }
