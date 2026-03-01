@@ -13,6 +13,7 @@ import {
   PhaseManualRank,
   PhaseRegistration,
 } from './entities';
+import { MatchGame } from './entities/match-game.entity';
 import { Registration } from '../events/entities/registration.entity';
 import {
   CreatePhaseDto,
@@ -44,6 +45,8 @@ export class CompetitionsService {
     private phaseManualRankRepository: Repository<PhaseManualRank>,
     @InjectRepository(PhaseRegistration)
     private phaseRegistrationRepository: Repository<PhaseRegistration>,
+    @InjectRepository(MatchGame)
+    private matchGameRepository: Repository<MatchGame>,
     private dataSource: DataSource,
     private bracketService: BracketService,
   ) {}
@@ -686,6 +689,21 @@ export class CompetitionsService {
         relations: ['participations', 'participations.registration', 'winner'],
       });
 
+      // ── FIX: cargar todos los MatchGame de los partidos finalizados ──
+      const matchIds = matches.map((m) => m.matchId);
+      const allGames = matchIds.length
+        ? await this.matchGameRepository.find({
+            where: { matchId: In(matchIds) },
+          })
+        : [];
+
+      const gamesByMatch = new Map<number, MatchGame[]>();
+      for (const game of allGames) {
+        if (!gamesByMatch.has(game.matchId)) gamesByMatch.set(game.matchId, []);
+        gamesByMatch.get(game.matchId)!.push(game);
+      }
+      // ────────────────────────────────────────────────────────────────
+
       for (const standing of standings) {
         standing.matchesPlayed = 0;
         standing.wins = 0;
@@ -725,6 +743,20 @@ export class CompetitionsService {
             s1.losses++;
           }
         }
+
+        // ── FIX: acumular sets ganados/perdidos ──────────────────────
+        const games = gamesByMatch.get(match.matchId) ?? [];
+        for (const game of games) {
+          const sets1 = game.score1 ?? 0; // sets ganados por player1 del juego
+          const sets2 = game.score2 ?? 0; // sets ganados por player2 del juego
+
+          // p1 de la participation ↔ player1Id del game (mismo orden de creación)
+          s1.scoreFor += sets1;
+          s1.scoreAgainst += sets2;
+          s2.scoreFor += sets2;
+          s2.scoreAgainst += sets1;
+        }
+        // ────────────────────────────────────────────────────────────
       }
 
       for (const standing of standings) {
