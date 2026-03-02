@@ -7,7 +7,9 @@ import {
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
-import { ClimbingService, UpdateClimbingScoreDto } from './climbing.service';
+import { ClimbingService } from './climbing.service';
+import { UpdateClimbingScoreDto } from './dto/update-climbing-score.dto';
+
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';

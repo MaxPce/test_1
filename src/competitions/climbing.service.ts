@@ -4,11 +4,7 @@ import { Repository } from 'typeorm';
 import { IndividualScore } from './entities/individual-score.entity';
 import { Participation } from './entities/participation.entity';
 import { Phase } from './entities/phase.entity';
-
-export class UpdateClimbingScoreDto {
-  total?: number | null;
-  rank?: number | null;
-}
+import { UpdateClimbingScoreDto } from './dto/update-climbing-score.dto';
 
 @Injectable()
 export class ClimbingService {
