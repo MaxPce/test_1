@@ -4,6 +4,7 @@ import { Repository } from 'typeorm';
 import { FeaturedAthlete } from '../entities/featured-athlete.entity';
 import { CreateFeaturedAthleteDto } from '../dto/create-featured-athlete.dto';
 import { UpdateFeaturedAthleteDto } from '../dto/update-featured-athlete.dto';
+import { UpsertFeaturedAthleteByPhaseDto } from '../dto/upsert-featured-athlete-by-phase.dto';
 
 @Injectable()
 export class FeaturedAthletesService {
@@ -39,4 +40,39 @@ export class FeaturedAthletesService {
   async remove(id: number): Promise<void> {
     await this.repo.delete(id);
   }
+
+  async findByPhase(phaseId: number): Promise<FeaturedAthlete[]> {
+    return this.featuredAthleteRepo.find({
+        where: { phaseId },
+        relations: [
+        'registration',
+        'registration.athlete',
+        'registration.institution',
+        ],
+    });
+    }
+
+    async upsertByPhase(
+    dto: UpsertFeaturedAthleteByPhaseDto,
+    ): Promise<FeaturedAthlete> {
+    const existing = await this.featuredAthleteRepo.findOne({
+        where: { phaseId: dto.phaseId },
+    });
+
+    if (existing) {
+        existing.registrationId = dto.registrationId;
+        existing.reason = dto.reason ?? null;
+        return this.featuredAthleteRepo.save(existing);
+    }
+
+    return this.featuredAthleteRepo.save(
+        this.featuredAthleteRepo.create({
+        phaseId:         dto.phaseId,
+        eventCategoryId: dto.eventCategoryId,
+        registrationId:  dto.registrationId,
+        reason:          dto.reason ?? null,
+        }),
+    );
+    }
+
 }

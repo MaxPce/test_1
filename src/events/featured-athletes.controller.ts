@@ -5,6 +5,7 @@ import {
 import { FeaturedAthletesService } from './services/featured-athletes.service';
 import { CreateFeaturedAthleteDto } from './dto/create-featured-athlete.dto';
 import { UpdateFeaturedAthleteDto } from './dto/update-featured-athlete.dto';
+import { UpsertFeaturedAthleteByPhaseDto } from './dto/upsert-featured-athlete-by-phase.dto';
 
 @Controller('featured-athletes')
 export class FeaturedAthletesController {
@@ -32,4 +33,14 @@ export class FeaturedAthletesController {
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.service.remove(id);
   }
+
+  @Get('phase/:phaseId')
+    findByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.featuredAthletesService.findByPhase(phaseId);
+    }
+
+    @Post('phase')
+    upsertByPhase(@Body() dto: UpsertFeaturedAthleteByPhaseDto) {
+    return this.featuredAthletesService.upsertByPhase(dto);
+    }
 }

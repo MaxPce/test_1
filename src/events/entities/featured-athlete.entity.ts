@@ -4,6 +4,7 @@ import {
 } from 'typeorm';
 import { EventCategory } from './event-category.entity';
 import { Registration } from './registration.entity';
+import { Phase } from '../../competitions/entities/phase.entity';
 
 @Entity('featured_athletes')
 export class FeaturedAthlete {
@@ -19,6 +20,9 @@ export class FeaturedAthlete {
   @Column({ type: 'text' })
   reason: string;
 
+  @Column({ name: 'phase_id', type: 'int', nullable: true })
+    phaseId: number | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
@@ -32,4 +36,8 @@ export class FeaturedAthlete {
   @ManyToOne(() => Registration, { nullable: false })
   @JoinColumn({ name: 'registration_id' })
   registration: Registration;
+
+  @ManyToOne(() => Phase, { nullable: true, onDelete: 'SET NULL' })
+    @JoinColumn({ name: 'phase_id' })
+    phase: Phase;
 }
