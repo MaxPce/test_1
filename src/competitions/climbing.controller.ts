@@ -25,12 +25,6 @@ export class ClimbingController {
     return this.climbingService.getPhaseScores(phaseId);
   }
 
-  @Get('phases/:phaseId/climbing-institutional')
-  @Public()
-  getInstitutionalRanking(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.climbingService.getInstitutionalRanking(phaseId);
-  }
-
   @Patch('participations/:participationId/climbing-score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   updateClimbingScore(
@@ -38,19 +32,5 @@ export class ClimbingController {
     @Body() dto: UpdateClimbingScoreDto,
   ) {
     return this.climbingService.updateScore(participationId, dto);
-  }
-
-  @Get('participations/:participationId/climbing-score')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  getParticipationScore(
-    @Param('participationId', ParseIntPipe) participationId: number,
-  ) {
-    return this.climbingService.getParticipationScore(participationId);
-  }
-
-  @Get('climbing/points-table')
-  @Public()
-  getPointsTable() {
-    return this.climbingService.getPointsTable();
   }
 }

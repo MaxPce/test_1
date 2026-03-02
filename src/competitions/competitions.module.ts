@@ -25,7 +25,6 @@ import { WeightliftingService } from './weightlifting.service';
 import { WeightliftingAttempt } from './entities/weightlifting-attempt.entity';
 import { ClimbingController } from './climbing.controller';
 import { ClimbingService } from './climbing.service';
-import { ClimbingScore } from './entities/climbing-score.entity';
 
 import {
   Match,
@@ -54,7 +53,6 @@ import {
       PhaseRegistration,
       ShootingScore,
       WeightliftingAttempt,
-      ClimbingScore,
     ]),
   ],
   controllers: [

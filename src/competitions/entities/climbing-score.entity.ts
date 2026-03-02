@@ -43,9 +43,6 @@ export class ClimbingScore {
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
 
-  @OneToOne(() => Participation, (p) => p.climbingScore, {
-    onDelete: 'CASCADE',
-  })
   @JoinColumn({ name: 'participation_id' })
   participation: Participation;
 }
