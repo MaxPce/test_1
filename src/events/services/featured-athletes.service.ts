@@ -42,37 +42,43 @@ export class FeaturedAthletesService {
   }
 
   async findByPhase(phaseId: number): Promise<FeaturedAthlete[]> {
-    return this.featuredAthleteRepo.find({
-        where: { phaseId },
-        relations: [
-        'registration',
-        'registration.athlete',
-        'registration.institution',
-        ],
-    });
-    }
+  return this.repo.find({ // Cambiar de featuredAthleteRepo a repo
+    where: { phaseId },
+    relations: [
+      'registration',
+      'registration.athlete',
+      'registration.athlete.institution', 
+    ],
+  });
+}
 
-    async upsertByPhase(
-    dto: UpsertFeaturedAthleteByPhaseDto,
-    ): Promise<FeaturedAthlete> {
-    const existing = await this.featuredAthleteRepo.findOne({
-        where: { phaseId: dto.phaseId },
-    });
+async upsertByPhase(
+  dto: UpsertFeaturedAthleteByPhaseDto,
+): Promise<FeaturedAthlete> {
+  const existing = await this.repo.findOne({ 
+    where: { phaseId: dto.phaseId },
+  });
 
-    if (existing) {
-        existing.registrationId = dto.registrationId;
-        existing.reason = dto.reason ?? null;
-        return this.featuredAthleteRepo.save(existing);
-    }
+  if (existing) {
+    existing.registrationId = dto.registrationId;
+    existing.reason = dto.reason ?? null;
+    return this.repo.save(existing); 
+  }
 
-    return this.featuredAthleteRepo.save(
-        this.featuredAthleteRepo.create({
-        phaseId:         dto.phaseId,
-        eventCategoryId: dto.eventCategoryId,
-        registrationId:  dto.registrationId,
-        reason:          dto.reason ?? null,
-        }),
-    );
-    }
+  return this.repo.save( 
+    this.repo.create({ 
+      phaseId: dto.phaseId,
+      eventCategoryId: dto.eventCategoryId,
+      registrationId: dto.registrationId,
+      reason: dto.reason ?? null,
+    }),
+  );
+}
+
+
+  
+
+
+
 
 }

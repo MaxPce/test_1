@@ -21,6 +21,8 @@ import {
   BulkRegisterSismasterDto,
 } from './dto';
 
+import { Phase } from '../competitions/entities/phase.entity';
+
 @Injectable()
 export class EventsService {
   private readonly logger = new Logger(EventsService.name);
@@ -35,6 +37,8 @@ export class EventsService {
     private athleteRepository: Repository<Athlete>,
     @InjectRepository(Institution)
     private institutionRepository: Repository<Institution>,
+    @InjectRepository(Phase) 
+    private phaseRepository: Repository<Phase>, 
     private dataSource: DataSource,
     private sismasterService: SismasterService,
   ) {}
@@ -930,4 +934,31 @@ export class EventsService {
       await queryRunner.release();
     }
   }
+
+  async findRegistrationsByPhase(phaseId: number): Promise<Registration[]> {
+    const phase = await this.phaseRepository.findOne({ // Cambiar phaseRepo a phaseRepository
+      where: { phaseId },
+      relations: ['eventCategory'],
+    });
+    
+    if (!phase) {
+      throw new NotFoundException(`Phase #${phaseId} not found`);
+    }
+
+    return this.registrationRepository.find({ // Ya está correcto
+      where: { 
+        eventCategoryId: phase.eventCategoryId,
+        deletedAt: IsNull(),
+      },
+      relations: [
+        'athlete',
+        'athlete.institution',
+        'team',
+        'eventCategory',
+      ],
+      order: { registrationId: 'ASC' },
+    });
+  }
+
+
 }

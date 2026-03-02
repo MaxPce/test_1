@@ -12,6 +12,7 @@ import { Company } from '../companies/entities/company.entity';
 import { FeaturedAthletesController } from './featured-athletes.controller';
 import { FeaturedAthletesService } from './services/featured-athletes.service';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
+import { Phase } from '../competitions/entities/phase.entity';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { FeaturedAthlete } from './entities/featured-athlete.entity';
       Institution,
       Company,
       FeaturedAthlete,
+      Phase
     ]),
     SismasterModule,
   ],

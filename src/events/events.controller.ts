@@ -296,4 +296,13 @@ export class EventsController {
   async bulkRegisterFromSismaster(@Body() bulkDto: BulkRegisterSismasterDto) {
     return this.eventsService.bulkRegisterFromSismaster(bulkDto);
   }
+
+  @Get('registrations/phase/:phaseId')
+  @Public()
+  findRegistrationsByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.eventsService.findRegistrationsByPhase(phaseId);
+  }
+
+
+  
 }

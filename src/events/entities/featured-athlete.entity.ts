@@ -17,8 +17,8 @@ export class FeaturedAthlete {
   @Column({ name: 'registration_id' })
   registrationId: number;
 
-  @Column({ type: 'text' })
-  reason: string;
+  @Column({ type: 'text', nullable: true })
+  reason: string | null;
 
   @Column({ name: 'phase_id', type: 'int', nullable: true })
     phaseId: number | null;

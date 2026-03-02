@@ -36,11 +36,11 @@ export class FeaturedAthletesController {
 
   @Get('phase/:phaseId')
     findByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.featuredAthletesService.findByPhase(phaseId);
+    return this.service.findByPhase(phaseId); 
     }
 
     @Post('phase')
     upsertByPhase(@Body() dto: UpsertFeaturedAthleteByPhaseDto) {
-    return this.featuredAthletesService.upsertByPhase(dto);
+    return this.service.upsertByPhase(dto); 
     }
 }
