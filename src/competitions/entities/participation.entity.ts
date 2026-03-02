@@ -6,10 +6,12 @@ import {
   JoinColumn,
   Index,
   Unique,
+  OneToOne,
 } from 'typeorm';
 import { Match } from './match.entity';
 import { Registration } from '../../events/entities/registration.entity';
 import { Corner } from '../../common/enums';
+import { ClimbingScore } from './climbing-score.entity';
 
 @Entity('participations')
 @Index(['matchId'])
@@ -40,4 +42,7 @@ export class Participation {
   @ManyToOne(() => Registration)
   @JoinColumn({ name: 'registration_id' })
   registration: Registration;
+
+  @OneToOne(() => ClimbingScore, (cs) => cs.participation, { nullable: true })
+  climbingScore: ClimbingScore | null;
 }

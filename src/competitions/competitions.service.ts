@@ -72,7 +72,7 @@ export class CompetitionsService {
           'eventCategory.registrations.athlete',
           'eventCategory.registrations.athlete.institution',
           'eventCategory.registrations.team',
-          'eventCategory.registrations.team.institution', // ← agregar
+          'eventCategory.registrations.team.institution',
         ],
       });
 
@@ -82,7 +82,8 @@ export class CompetitionsService {
         (this.isPoomsaePhase(phaseWithRelations) ||
           this.isWushuTaoluPhase(phaseWithRelations) ||
           this.isTiroDeportivoPhase(phaseWithRelations) ||
-          this.isWeightliftingPhase(phaseWithRelations));
+          this.isWeightliftingPhase(phaseWithRelations) ||
+          this.isClimbingPhase(phaseWithRelations));
 
       if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
@@ -1157,6 +1158,16 @@ export class CompetitionsService {
       sportName.includes('halterofilia') ||
       sportName.includes('weightlifting') ||
       sportName.includes('levantamiento de pesas')
+    );
+  }
+
+  private isClimbingPhase(phase: Phase): boolean {
+    const sportName =
+      phase.eventCategory?.category?.sport?.name?.toLowerCase() || '';
+    return (
+      sportName.includes('escalada') ||
+      sportName.includes('climbing') ||
+      sportName.includes('boulder')
     );
   }
 
