@@ -900,7 +900,7 @@ export class EventsService {
         return [];
       }
 
-      // 5. ✅ Retornar registrations con TODAS las relaciones
+      // 5. Retornar registrations con TODAS las relaciones
       const fullRegistrations = await this.registrationRepository
         .createQueryBuilder('registration')
         .leftJoinAndSelect('registration.athlete', 'athlete')

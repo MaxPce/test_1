@@ -36,7 +36,10 @@ export const multerConfig = (destination: string) => ({
 
 @Injectable()
 export class UploadService {
-  getFileUrl(filename: string, type: 'athletes' | 'institutions' | 'events' | 'sports'): string {
+  getFileUrl(
+    filename: string,
+    type: 'athletes' | 'institutions' | 'events' | 'sports' | 'companies',
+  ): string {
     return `/uploads/${type}/${filename}`;
   }
 }

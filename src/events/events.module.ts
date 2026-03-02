@@ -7,7 +7,11 @@ import { UploadService } from '../common/services/upload.service';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
 import { SismasterModule } from '../sismaster/sismaster.module';
-import { RegistrationEnrichmentService } from './services/registration-enrichment.service'; // ← AGREGAR
+import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
+import { Company } from '../companies/entities/company.entity';
+import { FeaturedAthletesController } from './featured-athletes.controller';
+import { FeaturedAthletesService } from './services/featured-athletes.service';
+import { FeaturedAthlete } from './entities/featured-athlete.entity';
 
 @Module({
   imports: [
@@ -17,15 +21,13 @@ import { RegistrationEnrichmentService } from './services/registration-enrichmen
       Registration,
       Athlete,
       Institution,
+      Company,
+      FeaturedAthlete,
     ]),
     SismasterModule,
   ],
-  controllers: [EventsController],
-  providers: [
-    EventsService,
-    UploadService,
-    RegistrationEnrichmentService,
-  ],
-  exports: [EventsService, RegistrationEnrichmentService], 
+  controllers: [EventsController, FeaturedAthletesController],
+  providers: [EventsService, UploadService, RegistrationEnrichmentService, FeaturedAthletesService],
+  exports: [EventsService, RegistrationEnrichmentService],
 })
 export class EventsModule {}

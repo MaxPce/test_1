@@ -23,6 +23,8 @@ import { ShootingScore } from './entities/shooting-score.entity';
 import { WeightliftingController } from './weightlifting.controller';
 import { WeightliftingService } from './weightlifting.service';
 import { WeightliftingAttempt } from './entities/weightlifting-attempt.entity';
+import { ClimbingController } from './climbing.controller';
+import { ClimbingService } from './climbing.service';
 
 import {
   Match,
@@ -63,6 +65,7 @@ import {
     WushuTaoluController,
     ShootingController,
     WeightliftingController,
+    ClimbingController,
   ],
   providers: [
     CompetitionsService,
@@ -76,6 +79,7 @@ import {
     WushuTaoluService,
     ShootingService,
     WeightliftingService,
+    ClimbingService,
   ],
   exports: [
     CompetitionsService,
@@ -84,6 +88,7 @@ import {
     WushuTaoluService,
     ShootingService,
     WeightliftingService,
+    ClimbingService,
   ],
 })
 export class CompetitionsModule {}

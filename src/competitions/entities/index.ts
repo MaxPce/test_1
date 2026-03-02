@@ -9,3 +9,5 @@ export * from './individual-score.entity';
 export * from './phase-manual-rank.entity';
 export * from './phase-registration.entity';
 export * from './shooting-score.entity';
+export * from './weightlifting-attempt.entity';
+export * from './climbing-score.entity';

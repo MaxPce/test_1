@@ -6,6 +6,7 @@ import {
   JoinColumn,
   Index,
   Unique,
+  OneToOne,
 } from 'typeorm';
 import { Match } from './match.entity';
 import { Registration } from '../../events/entities/registration.entity';
