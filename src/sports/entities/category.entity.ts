@@ -79,6 +79,23 @@ export class Category {
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
 
+  @Column({
+  name: 'sismaster_idparam',
+  type: 'int',
+  nullable: true,
+  unique: true,
+  comment: 'idparam en sismaster.sport_params',
+})
+sismasterIdparam: number | null;
+
+@Column({
+  name: 'sismaster_idsport',
+  type: 'int',
+  nullable: true,
+  comment: 'idsport en sismaster.sport_params',
+})
+sismasterIdsport: number | null;
+
   @ManyToOne(() => Sport, (sport) => sport.categories)
   @JoinColumn({ name: 'sport_id' })
   sport: Sport;
