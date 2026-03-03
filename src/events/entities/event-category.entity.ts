@@ -50,6 +50,9 @@ export class EventCategory {
   })
   status: string;
 
+  @Column({ name: 'external_sport_param_id', type: 'int', nullable: true })
+  externalSportParamId: number | null;
+
   @ManyToOne(() => Event, (event) => event.eventCategories, { nullable: true })
   @JoinColumn({ name: 'event_id' })
   event: Event;

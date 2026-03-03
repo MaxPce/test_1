@@ -10,17 +10,21 @@ import {
   SismasterInstitution,
   SismasterSport,
   SismasterAccreditation,
+  SismasterSportParam,
+  SismasterAccreditationTest,
 } from './entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature(
+    TypeOrmModule.forFeature( 
       [
         SismasterEvent,
         SismasterPerson,
         SismasterInstitution,
         SismasterSport,
         SismasterAccreditation,
+        SismasterSportParam,        
+        SismasterAccreditationTest,
       ],
       'sismaster',
     ),

@@ -12,6 +12,11 @@ import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { AthleteSismasterDto } from './dto/athlete-sismaster.dto';
 import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
 import { toSismasterUrl } from './constants/sismaster.constants';
+import { SismasterSportParam }        from './entities';
+import { SportParamDto }              from './dto/sport-param.dto';
+import { AthleteByCategoryDto }       from './dto/athlete-by-category.dto';
+import { DataSource } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class SismasterService {
@@ -32,6 +37,10 @@ export class SismasterService {
 
     @InjectRepository(SismasterAccreditation, 'sismaster')
     private readonly accreditationRepo: Repository<SismasterAccreditation>,
+    @InjectRepository(SismasterSportParam, 'sismaster')
+    private readonly sportParamRepo: Repository<SismasterSportParam>,
+    @InjectDataSource()                      
+    private readonly localDataSource: DataSource,
   ) {}
 
   /**
@@ -396,4 +405,207 @@ export class SismasterService {
       avatar: toSismasterUrl(inst.avatar),
     }));
   }
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÉTODO 1: Categorías con atletas inscritos en un evento concreto
+  // ═══════════════════════════════════════════════════════════════════════════════
+  /**
+   * Retorna las sport_params (categorías) de un deporte que tienen AL MENOS un
+   * atleta acreditado (tregister='D') en el evento indicado.
+   * Incluye el conteo de atletas por categoría para mostrarlo en el selector.
+   */
+  async getSportParamsByEvent(
+    idsport: number,
+    idevent: number,
+  ): Promise<SportParamDto[]> {
+    this.logger.log(`getSportParamsByEvent → idsport=${idsport}, idevent=${idevent}`);
+
+    const results = await this.sportParamRepo
+      .createQueryBuilder('sp')
+      // Unir accreditation_test donde idtest = sp.code
+      .innerJoin(
+        'accreditation_test',
+        'atest',
+        'atest.idtest = sp.code AND atest.mstatus = 1',
+      )
+      // Unir accreditation filtrando por deporte + evento + deportistas activos
+      .innerJoin(
+        'accreditation',
+        'a',
+        [
+          'a.idacreditation = atest.idacreditation',
+          'AND a.idsport   = :idsport',
+          'AND a.idevent   = :idevent',
+          'AND a.tregister = :tregister',
+          'AND a.mstatus   = 1',
+        ].join(' '),
+        { idsport, idevent, tregister: 'D' },
+      )
+      .select([
+        'sp.idparam   AS idparam',
+        'sp.code      AS code',
+        'sp.name      AS name',
+        'sp.idsport   AS idsport',
+        'COUNT(DISTINCT a.idperson) AS athleteCount',
+      ])
+      .where('sp.idsport = :idsport', { idsport })
+      .groupBy('sp.idparam')
+      .addGroupBy('sp.code')
+      .addGroupBy('sp.name')
+      .addGroupBy('sp.idsport')
+      .orderBy('sp.name', 'ASC')
+      .getRawMany();
+
+    return results.map((row) => ({
+      ...row,
+      athleteCount: parseInt(row.athleteCount, 10) || 0,
+    }));
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÉTODO 2: Atletas inscritos en una categoría específica de un evento/deporte
+  // ═══════════════════════════════════════════════════════════════════════════════
+  /**
+   * Retorna los atletas acreditados (tregister='D') en una categoría concreta
+   * (idparam) de un deporte (idsport) para un evento (idevent).
+   * Nunca guarda nada localmente: todo viene de Sismaster al vuelo.
+   */
+  async getAthletesByCategory(
+    idevent: number,
+    idsport: number,
+    idparam: number,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByCategory → idevent=${idevent}, idsport=${idsport}, idparam=${idparam}`,
+    );
+
+    const results = await this.accreditationRepo
+      .createQueryBuilder('a')
+      .innerJoin('person',      'p', 'a.idperson      = p.idperson')
+      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
+      // accreditation_test: vincula la acreditación con la categoría inscrita
+      .innerJoin(
+        'accreditation_test',
+        'atest',
+        'atest.idacreditation = a.idacreditation AND atest.mstatus = 1',
+      )
+      // sport_params: filtramos por la categoría seleccionada (idparam) y deporte
+      .innerJoin(
+        'sport_params',
+        'sp',
+        'sp.code = atest.idtest AND sp.idsport = :idsport AND sp.idparam = :idparam',
+        { idsport, idparam },
+      )
+      .select([
+        'a.idacreditation          AS idacreditation',
+        'a.idevent                 AS idevent',
+        'a.idsport                 AS idsport',
+        'a.idinstitution           AS idinstitution',
+        'a.idperson                AS idperson',
+        'a.photo                   AS photo',
+        'p.docnumber               AS docnumber',
+        'p.firstname               AS firstname',
+        'p.lastname                AS lastname',
+        'p.surname                 AS surname',
+        'p.birthday                AS birthday',
+        'p.gender                  AS gender',
+        `CASE
+          WHEN p.gender = 'M' THEN 'Masculino'
+          WHEN p.gender = 'F' THEN 'Femenino'
+          ELSE 'No especificado'
+        END                       AS gender_text`,
+        'i.business_name           AS institutionName',
+        'i.abrev                   AS institutionAbrev',
+        'i.avatar                  AS institutionLogo',
+        'sp.name                   AS division_inscrita',
+        'sp.idparam                AS idparam',
+      ])
+      .where('a.idsport   = :idsport',   { idsport })
+      .andWhere('a.idevent   = :idevent',   { idevent })
+      .andWhere('a.tregister = :tregister', { tregister: 'D' })
+      .andWhere('a.mstatus   = 1')
+      .andWhere('p.mstatus   = 1')
+      .orderBy('p.lastname',  'ASC')
+      .addOrderBy('p.firstname', 'ASC')
+      .getRawMany();
+
+    return results.map((row) => ({
+      ...row,
+      photo:          toSismasterUrl(row.photo),
+      institutionLogo: toSismasterUrl(row.institutionLogo),
+      fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
+      age: this.calculateAge(row.birthday),
+    }));
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÉTODO 3: Wrapper que resuelve local sport ID → sismaster_sport_id internamente
+  // ═══════════════════════════════════════════════════════════════════════════════
+  /**
+   * El frontend pasa su localSportId (el de la URL).
+   * Aquí hacemos el mapping a sismaster_sport_id leyendo la BD local,
+   * y luego delegamos en getSportParamsByEvent().
+   */
+  async getSportParamsByLocalSportId(
+    localSportId: number,
+    sismasterEventId: number,
+  ): Promise<SportParamDto[]> {
+    this.logger.log(
+      `getSportParamsByLocalSportId → localSportId=${localSportId}, sismasterEventId=${sismasterEventId}`,
+    );
+
+    const rows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id
+      FROM sports
+      WHERE sport_id = ? AND deleted_at IS NULL
+      LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!rows.length || !rows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+
+    return this.getSportParamsByEvent(rows[0].sismaster_sport_id, sismasterEventId);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÉTODO 4: Atletas por categoría usando local sport ID
+  // ═══════════════════════════════════════════════════════════════════════════════
+  async getAthletesByCategoryLocal(
+    sismasterEventId: number,
+    localSportId: number,
+    idparam: number,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByCategoryLocal → sismasterEventId=${sismasterEventId}, localSportId=${localSportId}, idparam=${idparam}`,
+    );
+
+    const rows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id
+      FROM sports
+      WHERE sport_id = ? AND deleted_at IS NULL
+      LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!rows.length || !rows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+
+    return this.getAthletesByCategory(
+      sismasterEventId,
+      rows[0].sismaster_sport_id,
+      idparam,
+    );
+  }
+
 }
