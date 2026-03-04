@@ -10,6 +10,8 @@ import {
   SismasterInstitution,
   SismasterSport,
   SismasterAccreditation,
+  SismasterEventSport,
+  SismasterSportParam,
 } from './entities';
 
 @Module({
@@ -21,6 +23,8 @@ import {
         SismasterInstitution,
         SismasterSport,
         SismasterAccreditation,
+        SismasterEventSport,
+        SismasterSportParam,
       ],
       'sismaster',
     ),

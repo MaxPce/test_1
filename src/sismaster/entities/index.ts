@@ -3,3 +3,5 @@ export * from './sismaster-person.entity';
 export * from './sismaster-institution.entity';
 export * from './sismaster-sport.entity';
 export * from './sismaster-accreditation.entity';
+export * from './sismaster-event-sport.entity';
+export * from './sismaster-sport-param.entity';

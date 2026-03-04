@@ -7,11 +7,15 @@ import {
   SismasterInstitution,
   SismasterSport,
   SismasterAccreditation,
+  SismasterEventSport,
+  SismasterSportParam,
 } from './entities';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { AthleteSismasterDto } from './dto/athlete-sismaster.dto';
 import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
 import { toSismasterUrl } from './constants/sismaster.constants';
+import { DataSource } from 'typeorm';
+import { InjectDataSource } from '@nestjs/typeorm';
 
 @Injectable()
 export class SismasterService {
@@ -32,6 +36,15 @@ export class SismasterService {
 
     @InjectRepository(SismasterAccreditation, 'sismaster')
     private readonly accreditationRepo: Repository<SismasterAccreditation>,
+
+    @InjectRepository(SismasterEventSport, 'sismaster')
+    private readonly eventSportRepo: Repository<SismasterEventSport>,
+
+    @InjectRepository(SismasterSportParam, 'sismaster')
+    private readonly sportParamRepo: Repository<SismasterSportParam>,
+
+    @InjectDataSource()                    
+    private readonly localDataSource: DataSource,
   ) {}
 
   /**
@@ -125,6 +138,28 @@ export class SismasterService {
   ): Promise<AthleteSismasterDto[]> {
     this.logger.log(`Consultando acreditaciones: ${JSON.stringify(filters)}`);
 
+    // ── NUEVO: Resolver localSportId → sismaster_sport_id ──────────────────
+    let resolvedSportId: number | undefined;
+    if (filters.localSportId) {
+      const rows = await this.localDataSource.query<
+        { sismaster_sport_id: number | null }[]
+      >(
+        `SELECT sismaster_sport_id
+        FROM sports
+        WHERE sport_id = ? AND deleted_at IS NULL
+        LIMIT 1`,
+        [filters.localSportId],
+      );
+      if (rows.length && rows[0].sismaster_sport_id) {
+        resolvedSportId = rows[0].sismaster_sport_id;
+      } else {
+        this.logger.warn(
+          `localSportId #${filters.localSportId} no tiene sismaster_sport_id configurado, se ignorará el filtro de deporte`,
+        );
+      }
+    }
+    // ───────────────────────────────────────────────────────────────────────
+
     const query = this.accreditationRepo
       .createQueryBuilder('a')
       .innerJoin('person', 'p', 'a.idperson = p.idperson')
@@ -150,7 +185,6 @@ export class SismasterService {
       .andWhere('p.mstatus = 1')
       .andWhere('a.tregister = :tregister', { tregister: 'D' });
 
-    // Filtros opcionales
     if (filters.idinstitution) {
       query.andWhere('a.idinstitution = :idinstitution', {
         idinstitution: filters.idinstitution,
@@ -160,6 +194,12 @@ export class SismasterService {
     if (filters.gender) {
       query.andWhere('p.gender = :gender', { gender: filters.gender });
     }
+
+    // ── NUEVO: Filtrar por deporte si se resolvió el sismaster_sport_id ────
+    if (resolvedSportId) {
+      query.andWhere('a.idsport = :idsport', { idsport: resolvedSportId });
+    }
+    // ───────────────────────────────────────────────────────────────────────
 
     query
       .groupBy('p.idperson')
@@ -175,16 +215,15 @@ export class SismasterService {
 
     const results = await query.getRawMany();
 
-    // Transformar y calcular campos adicionales
     return results.map((row) => ({
       ...row,
       photo: toSismasterUrl(row.photo),
       institutionLogo: toSismasterUrl(row.institutionLogo),
-      fullName:
-        `${row.firstname} ${row.lastname || ''} ${row.surname || ''}`.trim(),
+      fullName: `${row.firstname} ${row.lastname || ''} ${row.surname || ''}`.trim(),
       age: this.calculateAge(row.birthday),
     }));
   }
+
 
   /**
    * Calcular edad
@@ -396,4 +435,36 @@ export class SismasterService {
       avatar: toSismasterUrl(inst.avatar),
     }));
   }
+
+  // ─── Deportes de un evento 
+  async getSportsByEvent(idevent: number) {
+    return this.eventSportRepo
+      .createQueryBuilder('es')
+      .innerJoin('sport', 's', 's.idsport = es.idsport')
+      .select([
+        'es.idsport      AS idsport',
+        's.name          AS name',
+        's.slug          AS slug',
+        's.acronym       AS acronym',
+        's.logo          AS logo',
+      ])
+      .where('es.idevent = :idevent', { idevent })
+      .andWhere('es.mstatus = 1')
+      .groupBy('es.idsport')
+      .addGroupBy('s.name')
+      .addGroupBy('s.slug')
+      .addGroupBy('s.acronym')
+      .addGroupBy('s.logo')
+      .orderBy('s.name', 'ASC')
+      .getRawMany();
+  }
+
+  // ─── Todas las categorías de un deporte 
+  async getAllSportParams(idsport: number) {
+    return this.sportParamRepo.find({
+      where: { idsport },
+      order: { name: 'ASC' },
+    });
+  }
+
 }

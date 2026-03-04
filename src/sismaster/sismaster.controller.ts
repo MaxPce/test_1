@@ -60,11 +60,13 @@ export class SismasterController {
     @Query('idevent', ParseIntPipe) idevent: number,
     @Query('gender') gender?: 'M' | 'F',
     @Query('idinstitution') idinstitution?: number,
+    @Query('localSportId') localSportId?: number,
   ) {
     return await this.sismasterService.getAccreditedAthletes({
       idevent,
       gender,
       idinstitution: idinstitution ? Number(idinstitution) : undefined,
+      localSportId: localSportId ? Number(localSportId) : undefined,
     });
   }
 
@@ -129,4 +131,23 @@ export class SismasterController {
   async getAllInstitutions() {
     return await this.sismasterService.getAllInstitutions();
   }
+
+  /**
+   * GET /sismaster/events/:idevent/sports
+   * Deportes configurados para un evento 
+   */
+  @Get('events/:idevent/sports')
+  async getSportsByEvent(@Param('idevent', ParseIntPipe) idevent: number) {
+    return this.sismasterService.getSportsByEvent(idevent);
+  }
+
+  /**
+   * GET /sismaster/sports/:id/params
+   * TODAS las categorías de un deporte 
+   */
+  @Get('sports/:id/params')
+  async getAllSportParams(@Param('id', ParseIntPipe) idsport: number) {
+    return this.sismasterService.getAllSportParams(idsport);
+  }
+
 }
