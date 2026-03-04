@@ -17,6 +17,7 @@ import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
 import { toSismasterUrl } from './constants/sismaster.constants';
 import { DataSource } from 'typeorm';
 import { InjectDataSource } from '@nestjs/typeorm';
+import { SportParamDto } from './dto/sport-param.dto';
 
 @Injectable()
 export class SismasterService {
@@ -583,6 +584,111 @@ export class SismasterService {
     // 3. Delegar en el método existente
     return this.getAthletesByCategory(sismasterEventId, sissportId, param.idparam);
   }
+
+  async getSportParamsByEvent(
+    idsport: number,
+    idevent: number,
+  ): Promise<SportParamDto[]> {
+    this.logger.log(`getSportParamsByEvent → idsport=${idsport}, idevent=${idevent}`);
+
+    // Query nativa directa contra Sismaster (evita problemas de alias/conexión)
+    const results = await this.sportParamRepo.query(`
+      SELECT 
+        sp.idparam,
+        sp.code,
+        sp.name,
+        sp.idsport,
+        COUNT(DISTINCT a.idperson) AS athleteCount
+      FROM sport_params sp
+      INNER JOIN accreditation_test atest ON atest.idtest = sp.code AND atest.mstatus = 1
+      INNER JOIN accreditation a ON a.idacreditation = atest.idacreditation 
+        AND a.idsport = ? 
+        AND a.idevent = ? 
+        AND a.tregister = 'D' 
+        AND a.mstatus = 1
+      WHERE sp.idsport = ?
+      GROUP BY sp.idparam, sp.code, sp.name, sp.idsport
+      HAVING COUNT(DISTINCT a.idperson) > 0
+      ORDER BY sp.name ASC
+    `, [idsport, idevent, idsport]);
+
+    return results.map((row: any) => ({
+      idparam: parseInt(row.idparam),
+      code: row.code,
+      name: row.name,
+      idsport: parseInt(row.idsport),
+      athleteCount: parseInt(row.athleteCount) || 0,
+    }));
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // MÉTODO 2: Wrapper que resuelve local sport ID → sismaster_sport_id
+  // ═══════════════════════════════════════════════════════════════════════════════
+  async getSportParamsByLocalSportId(
+    localSportId: number,
+    sismasterEventId: number,
+  ): Promise<SportParamDto[]> {
+    this.logger.log(
+      `getSportParamsByLocalSportId → localSportId=${localSportId}, sismasterEventId=${sismasterEventId}`,
+    );
+
+    const rows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id
+      FROM sports
+      WHERE sport_id = ? AND deleted_at IS NULL
+      LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!rows.length || !rows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+
+    return this.getSportParamsByEvent(rows[0].sismaster_sport_id, sismasterEventId);
+  }
+
+
+  /**
+   * Atletas por categoría usando local sport ID (wrapper de getAthletesByCategory)
+   */
+  async getAthletesByCategoryLocal(
+    sismasterEventId: number,
+    localSportId: number,
+    idparam: number,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByCategoryLocal → sismasterEventId=${sismasterEventId}, localSportId=${localSportId}, idparam=${idparam}`,
+    );
+
+    // 1. Resolver local → sismaster_sport_id
+    const rows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id
+      FROM sports
+      WHERE sport_id = ? AND deleted_at IS NULL
+      LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!rows.length || !rows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+
+    const sismasterSportId = rows[0].sismaster_sport_id;
+
+    // 2. Delegar en el método existente
+    return this.getAthletesByCategory(sismasterEventId, sismasterSportId, idparam);
+  }
+
+
 
 
 }

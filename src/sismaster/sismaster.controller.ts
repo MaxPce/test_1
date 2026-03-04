@@ -11,9 +11,12 @@ import {
   Req,
 } from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
+import { BadRequestException } from '@nestjs/common';
+
 
 @Controller('sismaster')
 export class SismasterController {
+  logger: any;
   constructor(private readonly sismasterService: SismasterService) {}
 
   /**
@@ -169,6 +172,53 @@ export class SismasterController {
       categoryName,
     );
   }
+
+  /**
+   * GET /sismaster/sports/local/:localSportId/params/by-event/:sismasterEventId
+   * Categorías con atletas inscritos. Recibe localSportId y sismasterEventId.
+   */
+  @Get('sports/local/:localSportId/params/by-event/:sismasterEventId')
+  async getSportParamsByLocalSport(
+    @Param('localSportId', ParseIntPipe) localSportId: number,
+    @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
+  ) {
+    return await this.sismasterService.getSportParamsByLocalSportId(
+      localSportId,
+      sismasterEventId,
+    );
+  }
+
+  /**
+   * GET /sismaster/athletes/by-category-local
+   * Atletas por categoría específica usando localSportId e idparam de Sismaster.
+   * Ejemplo: /sismaster/athletes/by-category-local?sismasterEventId=200&localSportId=3&idparam=262
+   */
+  @Get('athletes/by-category-local')
+  async getAthletesByCategoryLocal(
+    @Query('sismasterEventId') sismasterEventIdRaw: string,
+    @Query('localSportId') localSportIdRaw: string,
+    @Query('idparam') idparamRaw: string,
+  ) {
+    const sismasterEventId = sismasterEventIdRaw ? parseInt(sismasterEventIdRaw) : 0;
+    const localSportId = localSportIdRaw ? parseInt(localSportIdRaw) : 0;
+    const idparam = idparamRaw ? parseInt(idparamRaw) : 0;
+
+    console.log('🚀 POSTMAN RAW:', { sismasterEventIdRaw, localSportIdRaw, idparamRaw });
+    console.log('🚀 POSTMAN PARSED:', { sismasterEventId, localSportId, idparam });
+
+    if (!sismasterEventId || !localSportId || !idparam) {
+      throw new BadRequestException('Faltan parámetros requeridos');
+    }
+
+    return await this.sismasterService.getAthletesByCategoryLocal(
+      sismasterEventId,
+      localSportId,
+      idparam,
+    );
+  }
+
+
+
 
 
 }
