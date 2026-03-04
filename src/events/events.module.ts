@@ -9,8 +9,6 @@ import { Institution } from '../institutions/entities/institution.entity';
 import { SismasterModule } from '../sismaster/sismaster.module';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { Company } from '../companies/entities/company.entity';
-import { FeaturedAthletesController } from './featured-athletes.controller';
-import { FeaturedAthletesService } from './services/featured-athletes.service';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
 
 @Module({
@@ -26,8 +24,8 @@ import { FeaturedAthlete } from './entities/featured-athlete.entity';
     ]),
     SismasterModule,
   ],
-  controllers: [EventsController, FeaturedAthletesController],
-  providers: [EventsService, UploadService, RegistrationEnrichmentService, FeaturedAthletesService],
+  controllers: [EventsController],
+  providers: [EventsService, UploadService, RegistrationEnrichmentService],
   exports: [EventsService, RegistrationEnrichmentService],
 })
 export class EventsModule {}
