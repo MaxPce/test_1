@@ -150,4 +150,29 @@ export class SismasterController {
     return this.sismasterService.getAllSportParams(idsport);
   }
 
+  
+
+  @Get('athletes/by-category-name')
+  async getAthletesByCategoryName(
+    
+    @Query('sismasterEventId') sismasterEventIdRaw: string,
+    @Query('localSportId') localSportIdRaw: string,
+    @Query('categoryName') categoryName: string,
+  ) {
+    console.log('🔍 by-category-name query:', {
+      sismasterEventIdRaw,
+      localSportIdRaw,
+      categoryName,
+    });
+    const sismasterEventId = Number(sismasterEventIdRaw);
+    const localSportId = Number(localSportIdRaw);
+
+    return await this.sismasterService.getAthletesByCategoryName(
+      sismasterEventId,
+      localSportId,
+      categoryName,
+    );
+  }
+
+
 }

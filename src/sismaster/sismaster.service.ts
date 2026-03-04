@@ -12,6 +12,7 @@ import {
 } from './entities';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { AthleteSismasterDto } from './dto/athlete-sismaster.dto';
+import { AthleteByCategoryDto } from './dto/athlete-by-category.dto';
 import { AccreditationFilters } from './interfaces/sismaster-filters.interface';
 import { toSismasterUrl } from './constants/sismaster.constants';
 import { DataSource } from 'typeorm';
@@ -467,5 +468,121 @@ export class SismasterService {
       order: { name: 'ASC' },
     });
   }
+
+  async getAthletesByCategory(
+    idevent: number,
+    idsport: number,
+    idparam: number,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByCategory → idevent=${idevent}, idsport=${idsport}, idparam=${idparam}`,
+    );
+
+    const results = await this.accreditationRepo
+      .createQueryBuilder('a')
+      .innerJoin('person',      'p', 'a.idperson      = p.idperson')
+      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
+      .innerJoin(
+        'accreditation_test',
+        'atest',
+        'atest.idacreditation = a.idacreditation AND atest.mstatus = 1',
+      )
+      .innerJoin(
+        'sport_params',
+        'sp',
+        'sp.code = atest.idtest AND sp.idsport = :idsport AND sp.idparam = :idparam',
+        { idsport, idparam },
+      )
+      .select([
+        'a.idacreditation          AS idacreditation',
+        'a.idevent                 AS idevent',
+        'a.idsport                 AS idsport',
+        'a.idinstitution           AS idinstitution',
+        'a.idperson                AS idperson',
+        'a.photo                   AS photo',
+        'p.docnumber               AS docnumber',
+        'p.firstname               AS firstname',
+        'p.lastname                AS lastname',
+        'p.surname                 AS surname',
+        'p.birthday                AS birthday',
+        'p.gender                  AS gender',
+        `CASE
+          WHEN p.gender = 'M' THEN 'Masculino'
+          WHEN p.gender = 'F' THEN 'Femenino'
+          ELSE 'No especificado'
+        END                       AS gender_text`,
+        'i.business_name           AS institutionName',
+        'i.abrev                   AS institutionAbrev',
+        'i.avatar                  AS institutionLogo',
+        'sp.name                   AS division_inscrita',
+        'sp.idparam                AS idparam',
+      ])
+      .where('a.idsport   = :idsport',   { idsport })
+      .andWhere('a.idevent   = :idevent',   { idevent })
+      .andWhere('a.tregister = :tregister', { tregister: 'D' })
+      .andWhere('a.mstatus   = 1')
+      .andWhere('p.mstatus   = 1')
+      .orderBy('p.lastname',  'ASC')
+      .addOrderBy('p.firstname', 'ASC')
+      .getRawMany();
+
+    return results.map((row) => ({
+      ...row,
+      photo:           toSismasterUrl(row.photo),
+      institutionLogo: toSismasterUrl(row.institutionLogo),
+      fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
+      age: this.calculateAge(row.birthday),
+    }));
+  }
+
+
+  async getAthletesByCategoryName(
+    sismasterEventId: number,
+    localSportId: number,
+    categoryName: string,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByCategoryName → sismasterEventId=${sismasterEventId}, localSportId=${localSportId}, categoryName="${categoryName}"`,
+    );
+
+    // 1. Resolver local sport → sismaster_sport_id
+    const sportRows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id FROM sports WHERE sport_id = ? AND deleted_at IS NULL LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!sportRows.length || !sportRows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+
+    const sissportId = sportRows[0].sismaster_sport_id;
+
+    // 2. Resolver categoryName → idparam en sport_params (TRIM + LOWER para tolerancia)
+    const param = await this.sportParamRepo
+      .createQueryBuilder('sp')
+      .where('sp.idsport = :idsport', { idsport: sissportId })
+      .andWhere('LOWER(TRIM(sp.name)) = LOWER(TRIM(:name))', { name: categoryName })
+      
+      .getOne();
+      this.logger.log('🔍 Buscando sport_param por nombre', {
+        idsport: sissportId,
+        categoryName,
+      });
+
+    if (!param) {
+      this.logger.warn(
+        `Categoría "${categoryName}" no encontrada en sismaster para deporte ${sissportId}. Retornando vacío.`,
+      );
+      return [];
+    }
+
+    // 3. Delegar en el método existente
+    return this.getAthletesByCategory(sismasterEventId, sissportId, param.idparam);
+  }
+
 
 }
