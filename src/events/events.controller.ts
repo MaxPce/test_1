@@ -310,4 +310,6 @@ export class EventsController {
     return this.eventsService.registerEventCategories(sismasterEventId);
   }
 
+  //ss
+
 }
