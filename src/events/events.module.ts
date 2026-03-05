@@ -10,7 +10,8 @@ import { SismasterModule } from '../sismaster/sismaster.module';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { Company } from '../companies/entities/company.entity';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
-
+import { Sport } from '../sports/entities/sport.entity';
+import { Category } from '../sports/entities/category.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -21,6 +22,8 @@ import { FeaturedAthlete } from './entities/featured-athlete.entity';
       Institution,
       Company,
       FeaturedAthlete,
+      Category,  
+      Sport,
     ]),
     SismasterModule,
   ],

@@ -26,6 +26,9 @@ export class Sport {
   @Column({ name: 'icon_url', length: 255, nullable: true })
   iconUrl: string;
 
+  @Column({ name: 'sismaster_sport_id', type: 'int', nullable: true })
+  sismasterSportId: number | null;
+
   @ManyToOne(() => SportType, (sportType) => sportType.sports)
   @JoinColumn({ name: 'sport_type_id' })
   sportType: SportType;
