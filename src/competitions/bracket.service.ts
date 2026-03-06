@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Match, Participation } from './entities';
+import { Match, Participation, PhaseRegistration } from './entities';
 import { GenerateBracketDto, AdvanceWinnerDto } from './dto';
 import { MatchStatus, Corner } from '../common/enums';
 
@@ -16,6 +16,8 @@ export class BracketService {
     private matchRepository: Repository<Match>,
     @InjectRepository(Participation)
     private participationRepository: Repository<Participation>,
+    @InjectRepository(PhaseRegistration)                          
+    private phaseRegistrationRepository: Repository<PhaseRegistration>,
     private dataSource: DataSource,
   ) {}
 
@@ -35,7 +37,7 @@ export class BracketService {
 
     try {
       const registrations = dto.registrationIds || [];
-      const isEmptyBracket = registrations.length === 0;
+      const isEmptyBracket = !!dto.bracketSize;
 
       let numParticipants: number;
 
@@ -55,14 +57,14 @@ export class BracketService {
         }
       }
 
-      // ✅ NUEVO: Calcular bracket size (próxima potencia de 2)
+      // Calcular bracket size (próxima potencia de 2)
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const totalRounds = Math.log2(nextPowerOf2);
       const numByes = nextPowerOf2 - numParticipants;
 
       console.log(`📊 Bracket Info: ${numParticipants} participantes, ${nextPowerOf2} slots, ${numByes} BYEs`);
 
-      // ✅ NUEVO: Obtener registrations con seed_number
+      // Obtener registrations con seed_number
       let seededRegistrations: Array<{ registrationId: number; seedNumber: number | null }> = [];
       
       if (!isEmptyBracket) {
@@ -88,10 +90,33 @@ export class BracketService {
         console.log('🎯 Seeded Registrations:', seededRegistrations);
       }
 
+      // ── Guardar pool en phase_registrations ──────────────────────────────
+      // SIEMPRE que vengan registrationIds los guardamos.
+      // AssignParticipantsModal lee GET /phases/:id/registrations y filtra
+      // su dropdown a solo estos participantes — tanto para bracket
+      // "con participantes" como "vacío".
+      if (registrations.length > 0) {
+        const existingPhaseRegs = await queryRunner.manager.find(
+          PhaseRegistration,
+          { where: { phaseId: dto.phaseId } },
+        );
+        if (existingPhaseRegs.length > 0) {
+          await queryRunner.manager.remove(PhaseRegistration, existingPhaseRegs);
+        }
+
+        const phaseRegs = registrations.map((registrationId) =>
+          queryRunner.manager.create(PhaseRegistration, {
+            phaseId: dto.phaseId,
+            registrationId,
+          }),
+        );
+        await queryRunner.manager.save(PhaseRegistration, phaseRegs);
+      }
+
       const mainBracket: Match[] = [];
       let currentMatchNumber = 1;
 
-      // ✅ NUEVO: Generar matches por ronda con distribución de seeding
+      // Generar matches por ronda con distribución de seeding
       for (let round = 0; round < totalRounds; round++) {
         const matchesInRound = nextPowerOf2 / Math.pow(2, round + 1);
         const roundName = this.getRoundName(matchesInRound);

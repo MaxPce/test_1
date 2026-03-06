@@ -688,7 +688,224 @@ export class SismasterService {
     return this.getAthletesByCategory(sismasterEventId, sismasterSportId, idparam);
   }
 
+  async getNivCatOptions(
+    sismasterEventId: number,
+    sismasterSportId: number,
+    eventCategoryId?: number,
+  ) {
+    let sql = `
+      SELECT DISTINCT atest.idniv, atest.idcat,
+            COUNT(DISTINCT a.idperson) AS total
+      FROM accreditation_test atest
+      INNER JOIN accreditation a
+        ON a.idacreditation = atest.idacreditation
+      AND a.idsport   = ?
+      AND a.idevent   = ?
+      AND a.tregister = 'D'
+      AND a.mstatus   = 1
+      INNER JOIN person p ON p.idperson = a.idperson
+    `;
 
+    const params: any[] = [sismasterSportId, sismasterEventId];
+
+    if (eventCategoryId) {
+      sql += `
+      INNER JOIN formatos_db.registrations r
+        ON r.external_athlete_id = p.idperson
+      AND r.event_category_id   = ?
+      AND r.deleted_at IS NULL
+      `;
+      params.push(eventCategoryId);
+    }
+
+    sql += `
+      WHERE atest.mstatus = 1
+        AND atest.idniv IS NOT NULL
+        AND atest.idcat IS NOT NULL
+      GROUP BY atest.idniv, atest.idcat
+      ORDER BY atest.idniv ASC, atest.idcat ASC
+    `;
+
+    const rows = await this.accreditationRepo.query(sql, params);
+    return {
+      niv:    [...new Set<string>(rows.map((r: any) => r.idniv))],
+      cat:    [...new Set<string>(rows.map((r: any) => r.idcat))],
+      combos: rows.map((r: any) => ({
+        idniv: r.idniv,
+        idcat: r.idcat,
+        total: Number(r.total),
+      })),
+    };
+  }
+
+
+
+
+  async getAthletesByNivAndCat(
+    sismasterEventId: number,
+    localSportId: number,
+    idniv: string,
+    idcat: string,
+  ): Promise<AthleteByCategoryDto[]> {
+    this.logger.log(
+      `getAthletesByNivAndCat → event=${sismasterEventId}, sport=${localSportId}, idniv=${idniv}, idcat=${idcat}`,
+    );
+
+    const sportRows = await this.localDataSource.query<
+      { sismaster_sport_id: number | null }[]
+    >(
+      `SELECT sismaster_sport_id FROM sports
+      WHERE sport_id = ? AND deleted_at IS NULL LIMIT 1`,
+      [localSportId],
+    );
+
+    if (!sportRows.length || !sportRows[0].sismaster_sport_id) {
+      throw new NotFoundException(
+        `El deporte local #${localSportId} no tiene sismaster_sport_id configurado`,
+      );
+    }
+    const idsport = sportRows[0].sismaster_sport_id;
+
+    const results = await this.accreditationRepo
+      .createQueryBuilder('a')
+      .innerJoin('person',      'p', 'a.idperson      = p.idperson')
+      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
+      .innerJoin(
+        'accreditation_test', 'atest',
+        'atest.idacreditation = a.idacreditation AND atest.mstatus = 1',
+      )
+      .select([
+        'a.idacreditation          AS idacreditation',
+        'a.idevent                 AS idevent',
+        'a.idsport                 AS idsport',
+        'a.idinstitution           AS idinstitution',
+        'a.idperson                AS idperson',
+        'a.photo                   AS photo',
+        'p.docnumber               AS docnumber',
+        'p.firstname               AS firstname',
+        'p.lastname                AS lastname',
+        'p.surname                 AS surname',
+        'p.birthday                AS birthday',
+        'p.gender                  AS gender',
+        `CASE
+          WHEN p.gender = 'M' THEN 'Masculino'
+          WHEN p.gender = 'F' THEN 'Femenino'
+          ELSE 'No especificado'
+        END                       AS gender_text`,
+        'i.business_name           AS institutionName',
+        'i.abrev                   AS institutionAbrev',
+        'i.avatar                  AS institutionLogo',
+        'atest.idniv               AS idniv',
+        'atest.idcat               AS idcat',
+        'atest.idtest              AS idtest',
+      ])
+      .where('a.idsport   = :idsport',   { idsport })
+      .andWhere('a.idevent   = :idevent',   { idevent: sismasterEventId })
+      .andWhere('a.tregister = :tregister', { tregister: 'D' })
+      .andWhere('a.mstatus   = 1')
+      .andWhere('p.mstatus   = 1')
+      .andWhere('atest.idniv = :idniv',   { idniv })
+      .andWhere('atest.idcat = :idcat',   { idcat })
+      .orderBy('p.lastname',  'ASC')
+      .addOrderBy('p.firstname', 'ASC')
+      .getRawMany();
+
+    return results.map((row) => ({
+      ...row,
+      photo:           toSismasterUrl(row.photo),
+      institutionLogo: toSismasterUrl(row.institutionLogo),
+      fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
+      age: this.calculateAge(row.birthday),
+    }));
+  }
+
+  /**
+   * Retorna registration_ids locales filtrando desde sismaster por idniv + idcat.
+   * El vínculo es: registrations.external_athlete_id = person.docnumber
+   */
+  async getRegistrationIdsByNivCat(
+    sismasterEventId: number,
+    sismasterSportId: number,
+    idniv: string,
+    idcat: string,
+    eventCategoryId?: number,
+  ): Promise<{ registrationIds: number[]; athletes: any[] }> {
+    this.logger.log(
+      `getRegistrationIdsByNivCat → event=${sismasterEventId}, sport=${sismasterSportId}, idniv=${idniv}, idcat=${idcat}`,
+    );
+
+    // 1. Obtener docnumbers desde sismaster filtrado por idniv + idcat
+    const sismasterAthletes = await this.accreditationRepo
+      .createQueryBuilder('a')
+      .innerJoin('person',             'p', 'a.idperson      = p.idperson')
+      .innerJoin('institution',        'i', 'a.idinstitution = i.idinstitution')
+      .innerJoin('accreditation_test', 'atest',
+        'atest.idacreditation = a.idacreditation AND atest.mstatus = 1',
+      )
+      .select([
+        'a.idacreditation     AS idacreditation',
+        'p.idperson           AS idperson',
+        'p.docnumber          AS docnumber',
+        'p.firstname          AS firstname',
+        'p.lastname           AS lastname',
+        'p.surname            AS surname',
+        'p.gender             AS gender',
+        'i.business_name      AS institutionName',
+        'i.abrev              AS institutionAbrev',
+        'atest.idniv          AS idniv',
+        'atest.idcat          AS idcat',
+      ])
+      .where('a.idsport   = :sport',   { sport:   sismasterSportId })
+      .andWhere('a.idevent   = :event', { event:   sismasterEventId })
+      .andWhere('a.tregister = :tr',   { tr:      'D' })
+      .andWhere('a.mstatus   = 1')
+      .andWhere('p.mstatus   = 1')
+      .andWhere('atest.idniv = :idniv', { idniv })
+      .andWhere('atest.idcat = :idcat', { idcat })
+      .orderBy('p.lastname',  'ASC')
+      .addOrderBy('p.firstname', 'ASC')
+      .getRawMany();
+
+    if (!sismasterAthletes.length) {
+      return { registrationIds: [], athletes: [] };
+    }
+
+    // 2. Cruzar con registrations locales por docnumber = external_athlete_id
+    const idpersons = sismasterAthletes.map((a) => a.idperson).filter(Boolean);
+    const placeholders  = idpersons.map(() => '?').join(',');
+
+    let sql = `
+      SELECT r.registration_id, r.external_athlete_id, r.event_category_id
+      FROM registrations r
+      WHERE r.external_athlete_id IN (${placeholders})
+        AND r.deleted_at IS NULL
+    `;
+    const params: any[] = [...idpersons];
+
+    if (eventCategoryId) {
+      sql += ` AND r.event_category_id = ?`;
+      params.push(eventCategoryId);
+    }
+
+    const localRows = await this.localDataSource.query<
+      { registration_id: number; external_athlete_id: string }[]
+    >(sql, params);
+
+    // 3. Enriquecer con registration_id local
+    const regMap = new Map(localRows.map((r) => [String(r.external_athlete_id), r.registration_id]));
+
+    const athletes = sismasterAthletes.map((a) => ({
+      ...a,
+      fullName:       `${a.firstname} ${a.lastname ?? ''} ${a.surname ?? ''}`.trim(),
+      photo:          toSismasterUrl(a.photo),
+      registration_id: regMap.get(String(a.idperson)) ?? null,
+    }));
+
+    return {
+      registrationIds: localRows.map((r) => r.registration_id),
+      athletes,
+    };
+  }
 
 
 }

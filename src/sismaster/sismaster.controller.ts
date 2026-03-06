@@ -137,6 +137,76 @@ export class SismasterController {
   }
 
   /**
+   * GET /sismaster/athletes/niv-cat-options
+   * Opciones de idniv e idcat disponibles para un evento+deporte
+   */
+  @Get('athletes/niv-cat-options')
+  async getNivCatOptions(
+    @Query('sismasterEventId', ParseIntPipe) sismasterEventId: number,
+    @Query('sismasterSportId', ParseIntPipe) sismasterSportId: number,
+    @Query('eventCategoryId') eventCategoryIdRaw?: string,
+  ) {
+    return this.sismasterService.getNivCatOptions(
+      sismasterEventId,
+      sismasterSportId,
+      eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
+    );
+  }
+
+  /**
+   * GET /sismaster/athletes/by-niv-cat
+   * Atletas filtrados por idniv + idcat
+   * Ej: ?sismasterEventId=101&localSportId=3&idniv=NV&idcat=M
+   */
+  @Get('athletes/by-niv-cat')
+  async getAthletesByNivAndCat(
+    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterEventId: number,
+    @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    localSportId: number,
+    @Query('idniv') idniv: string,
+    @Query('idcat') idcat: string,
+  ) {
+    return this.sismasterService.getAthletesByNivAndCat(
+      sismasterEventId,
+      localSportId,
+      idniv,
+      idcat,
+    );
+  }
+  /**
+   * GET /sismaster/athletes/registrations-by-niv-cat
+   * Devuelve registration_ids locales cruzando sismaster (idniv + idcat) con formatos_db
+   *
+   * Query params:
+   *   sismasterEventId  : number   (requerido)
+   *   localSportId      : number   (requerido)
+   *   idniv             : string   (requerido)  ej: 'NV', 'AZ'
+   *   idcat             : string   (requerido)  ej: 'M', 'F'
+   *   eventCategoryId   : number   (opcional)   para filtrar por categoría local
+   */
+  @Get('athletes/registrations-by-niv-cat')
+  async getRegistrationIdsByNivCat(
+    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterEventId: number,
+    @Query('sismasterSportId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterSportId: number,
+    @Query('idniv') idniv: string,
+    @Query('idcat') idcat: string,
+    @Query('eventCategoryId') eventCategoryIdRaw?: string,
+  ) {
+    return this.sismasterService.getRegistrationIdsByNivCat(
+      sismasterEventId,
+      sismasterSportId,
+      idniv,
+      idcat,
+      eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
+    );
+  }
+
+
+
+  /**
    * GET /sismaster/athletes/:id
    * Obtener un atleta por ID
    */
@@ -211,7 +281,6 @@ export class SismasterController {
 
   
 
-  //ss
 
 
 
