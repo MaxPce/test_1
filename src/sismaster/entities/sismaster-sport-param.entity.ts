@@ -1,26 +1,28 @@
-import { Entity, Column, PrimaryColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 
-@Entity('sport_params', { database: 'sismaster' })
+@Entity('sport_params') 
 export class SismasterSportParam {
-  @PrimaryColumn({ name: 'idparam' })
+  @PrimaryGeneratedColumn()
   idparam: number;
 
-  @Column({ type: 'varchar', length: 100 })
+  @Column({ length: 100 })
   name: string;
 
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ length: 20, nullable: true })
   abrev: string;
 
-  @Column({ name: 'idsport' })
+  @Column()
   idsport: number;
 
-  @Column({ name: 'idfather', default: 0 })
+  @Column({ default: 0 })
   idfather: number;
 
-  // ← VARCHAR(20), nullable — crítico, era incorrecto en el diseño anterior
-  @Column({ type: 'varchar', length: 20, nullable: true })
+  @Column({ length: 20, nullable: true })
   code: string;
 
-  @Column({ name: 'isleaf', default: 0 })
+  @Column({ default: 0 })
   isleaf: number;
+
+  @Column({ type: 'datetime' })
+  createdat: Date;
 }

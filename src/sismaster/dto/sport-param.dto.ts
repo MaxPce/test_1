@@ -1,7 +1,7 @@
-export class SportParamDto {
+export interface SportParamDto {
   idparam: number;
-  code: number;
+  code: string;
   name: string;
   idsport: number;
-  athleteCount: number; 
+  athleteCount: number;
 }

@@ -80,21 +80,21 @@ export class Category {
   deletedBy: number;
 
   @Column({
-  name: 'sismaster_idparam',
-  type: 'int',
-  nullable: true,
-  unique: true,
-  comment: 'idparam en sismaster.sport_params',
-})
-sismasterIdparam: number | null;
+    name: 'sismaster_idparam',
+    type: 'int',
+    nullable: true,
+    unique: true,
+    comment: 'idparam en sismaster.sport_params',
+  })
+  sismasterIdParam: number | null;
 
-@Column({
-  name: 'sismaster_idsport',
-  type: 'int',
-  nullable: true,
-  comment: 'idsport en sismaster.sport_params',
-})
-sismasterIdsport: number | null;
+  @Column({
+    name: 'sismaster_idsport',
+    type: 'int',
+    nullable: true,
+    comment: 'idsport en sismaster.sport_params para referencia',
+  })
+  sismasterIdSport: number | null;
 
   @ManyToOne(() => Sport, (sport) => sport.categories)
   @JoinColumn({ name: 'sport_id' })

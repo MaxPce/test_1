@@ -9,11 +9,9 @@ import { Institution } from '../institutions/entities/institution.entity';
 import { SismasterModule } from '../sismaster/sismaster.module';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { Company } from '../companies/entities/company.entity';
-import { FeaturedAthletesController } from './featured-athletes.controller';
-import { FeaturedAthletesService } from './services/featured-athletes.service';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
-import { Phase } from '../competitions/entities/phase.entity';
-
+import { Sport } from '../sports/entities/sport.entity';
+import { Category } from '../sports/entities/category.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -24,12 +22,13 @@ import { Phase } from '../competitions/entities/phase.entity';
       Institution,
       Company,
       FeaturedAthlete,
-      Phase
+      Category,  
+      Sport,
     ]),
     SismasterModule,
   ],
-  controllers: [EventsController, FeaturedAthletesController],
-  providers: [EventsService, UploadService, RegistrationEnrichmentService, FeaturedAthletesService],
+  controllers: [EventsController],
+  providers: [EventsService, UploadService, RegistrationEnrichmentService],
   exports: [EventsService, RegistrationEnrichmentService],
 })
 export class EventsModule {}

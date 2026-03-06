@@ -5,11 +5,14 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, IsNull } from 'typeorm';
+import { Repository, DataSource, IsNull, Not } from 'typeorm';
 import { Event, EventCategory, Registration } from './entities';
 import { SismasterService } from '../sismaster/sismaster.service';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
+import { Category } from '../sports/entities/category.entity';
+import { Sport } from '../sports/entities/sport.entity';
+
 import { Gender } from '../common/enums';
 import {
   CreateEventDto,
@@ -19,6 +22,8 @@ import {
   CreateRegistrationDto,
   BulkRegisterDto,
   BulkRegisterSismasterDto,
+  RegisterEventCategoriesDto,
+  RegisterEventCategoriesResponseDto,
 } from './dto';
 
 import { Phase } from '../competitions/entities/phase.entity';
@@ -37,8 +42,11 @@ export class EventsService {
     private athleteRepository: Repository<Athlete>,
     @InjectRepository(Institution)
     private institutionRepository: Repository<Institution>,
-    @InjectRepository(Phase) 
-    private phaseRepository: Repository<Phase>, 
+
+    @InjectRepository(Category)
+    private categoryRepository: Repository<Category>,
+    @InjectRepository(Sport)
+    private sportRepository: Repository<Sport>,
     private dataSource: DataSource,
     private sismasterService: SismasterService,
   ) {}
@@ -935,29 +943,94 @@ export class EventsService {
     }
   }
 
-  async findRegistrationsByPhase(phaseId: number): Promise<Registration[]> {
-    const phase = await this.phaseRepository.findOne({ // Cambiar phaseRepo a phaseRepository
-      where: { phaseId },
-      relations: ['eventCategory'],
-    });
-    
-    if (!phase) {
-      throw new NotFoundException(`Phase #${phaseId} not found`);
-    }
+  /**
+   * Registrar todas las categorías de un evento desde Sismaster
+   * POST /events/:id/register-categories
+   */
+  async registerEventCategories(
+    sismasterEventId: number,
+  ): Promise<RegisterEventCategoriesResponseDto> {
 
-    return this.registrationRepository.find({ // Ya está correcto
-      where: { 
-        eventCategoryId: phase.eventCategoryId,
+    // Sin validación local — el evento vive en sismaster
+    const sports = await this.sportRepository.find({
+      where: {
+        sismasterSportId: Not(IsNull()),
         deletedAt: IsNull(),
       },
-      relations: [
-        'athlete',
-        'athlete.institution',
-        'team',
-        'eventCategory',
-      ],
-      order: { registrationId: 'ASC' },
     });
+
+    let created = 0;
+    let skipped = 0;
+    let alreadyExists = 0;
+
+    for (const sport of sports) {
+      let params;
+      try {
+        params = await this.sismasterService.getSportParamsByLocalSportId(
+          sport.sportId,
+          sismasterEventId,
+        );
+      } catch {
+        continue;
+      }
+
+      if (!params?.length) continue;
+
+      for (const param of params) {
+        const localCategory = await this.categoryRepository.findOne({
+          where: {
+            sismasterIdParam: param.idparam,
+            deletedAt: IsNull(),
+          },
+        });
+
+        if (!localCategory) {
+          this.logger.warn(`Sin mapeo local → sismasterIdParam=${param.idparam} "${param.name}"`);
+          skipped++;
+          continue;
+        }
+
+        // ← buscar por externalEventId + categoryId (event_id es NULL)
+        const existing = await this.eventCategoryRepository.findOne({
+          where: {
+            externalEventId: sismasterEventId,
+            categoryId: localCategory.categoryId,
+          },
+        });
+
+        if (existing) {
+          alreadyExists++;
+          continue;
+        }
+
+        // ← event_id: null, usar externalEventId
+        await this.eventCategoryRepository.save(
+          this.eventCategoryRepository.create({
+            eventId: null,
+            categoryId: localCategory.categoryId,
+            status: 'pendiente',
+            externalEventId: sismasterEventId,
+            externalSportId: param.idsport,
+          }),
+        );
+
+        this.logger.log(`✅ ${localCategory.name} (categoryId=${localCategory.categoryId})`);
+        created++;
+      }
+    }
+
+    this.logger.log(
+      `registerEventCategories → sisEvent=${sismasterEventId} | created=${created} skipped=${skipped} alreadyExists=${alreadyExists}`,
+    );
+
+    return {
+      localEventId: null,
+      sismasterEventId,
+      sportsProcessed: sports.length,
+      created,
+      skipped,
+      alreadyExists,
+    };
   }
 
 

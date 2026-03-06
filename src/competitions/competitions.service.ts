@@ -576,6 +576,28 @@ export class CompetitionsService {
         );
       }
 
+      const isEmptyMode =
+        dto.registrationIds.length === 0 && dto.emptyParticipantCount;
+
+      if (isEmptyMode) {
+        const n = dto.emptyParticipantCount!;
+        const totalMatches = (n * (n - 1)) / 2;
+        let matchNumber = 1;
+
+        for (let i = 0; i < totalMatches; i++) {
+          const match = queryRunner.manager.create(Match, {
+            phaseId: dto.phaseId,
+            matchNumber: matchNumber++,
+            round: '1',
+            status: MatchStatus.PROGRAMADO,
+          });
+          await queryRunner.manager.save(match);
+        }
+
+        await queryRunner.commitTransaction();
+        return []; 
+      }
+
       // 1. Crear standings (igual que antes)
       const standings: Standing[] = [];
       for (const registrationId of dto.registrationIds) {

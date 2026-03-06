@@ -11,9 +11,13 @@ import {
   Req,
 } from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
+import { BadRequestException } from '@nestjs/common';
+
+
 
 @Controller('sismaster')
 export class SismasterController {
+  logger: any;
   constructor(private readonly sismasterService: SismasterService) {}
 
   /**
@@ -60,11 +64,13 @@ export class SismasterController {
     @Query('idevent', ParseIntPipe) idevent: number,
     @Query('gender') gender?: 'M' | 'F',
     @Query('idinstitution') idinstitution?: number,
+    @Query('localSportId') localSportId?: number,
   ) {
     return await this.sismasterService.getAccreditedAthletes({
       idevent,
       gender,
       idinstitution: idinstitution ? Number(idinstitution) : undefined,
+      localSportId: localSportId ? Number(localSportId) : undefined,
     });
   }
 
@@ -93,6 +99,112 @@ export class SismasterController {
     const count = await this.sismasterService.getAthletesCount();
     return { count };
   }
+
+  @Get('athletes/by-category-name')
+  async getAthletesByCategoryName(
+    
+    @Query('sismasterEventId') sismasterEventIdRaw: string,
+    @Query('localSportId') localSportIdRaw: string,
+    @Query('categoryName') categoryName: string,
+  ) {
+    
+    const sismasterEventId = Number(sismasterEventIdRaw);
+    const localSportId = Number(localSportIdRaw);
+
+    return await this.sismasterService.getAthletesByCategoryName(
+      sismasterEventId,
+      localSportId,
+      categoryName,
+    );
+  }
+
+  /**
+   * GET /sismaster/athletes/by-category-local
+   * Atletas por categoría específica usando localSportId e idparam de Sismaster.
+   * Ejemplo: /sismaster/athletes/by-category-local?sismasterEventId=200&localSportId=3&idparam=262
+   */
+  @Get('athletes/by-category-local')
+  async getAthletesByCategoryLocal(
+    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterEventId: number,
+    @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 })) localSportId: number,
+    @Query('idparam', new ParseIntPipe({ errorHttpStatusCode: 400 })) idparam: number,
+  ) {
+    return await this.sismasterService.getAthletesByCategoryLocal(
+      sismasterEventId,
+      localSportId,
+      idparam,
+    );
+  }
+
+  /**
+   * GET /sismaster/athletes/niv-cat-options
+   * Opciones de idniv e idcat disponibles para un evento+deporte
+   */
+  @Get('athletes/niv-cat-options')
+  async getNivCatOptions(
+    @Query('sismasterEventId', ParseIntPipe) sismasterEventId: number,
+    @Query('sismasterSportId', ParseIntPipe) sismasterSportId: number,
+    @Query('eventCategoryId') eventCategoryIdRaw?: string,
+  ) {
+    return this.sismasterService.getNivCatOptions(
+      sismasterEventId,
+      sismasterSportId,
+      eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
+    );
+  }
+
+  /**
+   * GET /sismaster/athletes/by-niv-cat
+   * Atletas filtrados por idniv + idcat
+   * Ej: ?sismasterEventId=101&localSportId=3&idniv=NV&idcat=M
+   */
+  @Get('athletes/by-niv-cat')
+  async getAthletesByNivAndCat(
+    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterEventId: number,
+    @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    localSportId: number,
+    @Query('idniv') idniv: string,
+    @Query('idcat') idcat: string,
+  ) {
+    return this.sismasterService.getAthletesByNivAndCat(
+      sismasterEventId,
+      localSportId,
+      idniv,
+      idcat,
+    );
+  }
+  /**
+   * GET /sismaster/athletes/registrations-by-niv-cat
+   * Devuelve registration_ids locales cruzando sismaster (idniv + idcat) con formatos_db
+   *
+   * Query params:
+   *   sismasterEventId  : number   (requerido)
+   *   localSportId      : number   (requerido)
+   *   idniv             : string   (requerido)  ej: 'NV', 'AZ'
+   *   idcat             : string   (requerido)  ej: 'M', 'F'
+   *   eventCategoryId   : number   (opcional)   para filtrar por categoría local
+   */
+  @Get('athletes/registrations-by-niv-cat')
+  async getRegistrationIdsByNivCat(
+    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterEventId: number,
+    @Query('sismasterSportId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
+    sismasterSportId: number,
+    @Query('idniv') idniv: string,
+    @Query('idcat') idcat: string,
+    @Query('eventCategoryId') eventCategoryIdRaw?: string,
+  ) {
+    return this.sismasterService.getRegistrationIdsByNivCat(
+      sismasterEventId,
+      sismasterSportId,
+      idniv,
+      idcat,
+      eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
+    );
+  }
+
+
 
   /**
    * GET /sismaster/athletes/:id
@@ -131,56 +243,34 @@ export class SismasterController {
   }
 
   /**
-   * GET /sismaster/sports/:id/params/by-event/:eventId
-   *
-   * Categorías de un deporte que tienen atletas inscritos en un evento concreto.
-   * Incluye athleteCount por categoría para mostrarlo en el selector del frontend.
-   *
-   * Ejemplo: /sismaster/sports/10/params/by-event/3
-   *   → categorías de KARATE (sismaster_sport_id=10) con atletas en el evento 3
+   * GET /sismaster/events/:idevent/sports
+   * Deportes configurados para un evento 
    */
-  @Get('sports/:id/params/by-event/:eventId')
-  async getSportParamsByEvent(
-    @Param('id',      ParseIntPipe) idsport: number,
-    @Param('eventId', ParseIntPipe) idevent: number,
-  ) {
-    return await this.sismasterService.getSportParamsByEvent(idsport, idevent);
+  @Get('events/:idevent/sports')
+  async getSportsByEvent(@Param('idevent', ParseIntPipe) idevent: number) {
+    return this.sismasterService.getSportsByEvent(idevent);
   }
 
   /**
-   * GET /sismaster/athletes/by-category
-   *
-   * Atletas inscritos en una categoría específica de un evento/deporte.
-   * Los tres parámetros son OBLIGATORIOS para que la query sea precisa.
-   *
-   * Ejemplo: /sismaster/athletes/by-category?idevent=3&idsport=10&idparam=55
+   * GET /sismaster/sports/:id/params
+   * TODAS las categorías de un deporte 
    */
-  @Get('athletes/by-category')
-  async getAthletesByCategory(
-    @Query('idevent',  ParseIntPipe) idevent:  number,
-    @Query('idsport',  ParseIntPipe) idsport:  number,
-    @Query('idparam',  ParseIntPipe) idparam:  number,
-  ) {
-    return await this.sismasterService.getAthletesByCategory(
-      idevent,
-      idsport,
-      idparam,
-    );
+  @Get('sports/:id/params')
+  async getAllSportParams(@Param('id', ParseIntPipe) idsport: number) {
+    return this.sismasterService.getAllSportParams(idsport);
   }
+
+  
+
+  
 
   /**
    * GET /sismaster/sports/local/:localSportId/params/by-event/:sismasterEventId
-   *
-   * Categorías con atletas inscritos. Recibe el ID local del deporte
-   * (el que viene en la URL del frontend) y el ID del evento en Sismaster.
-   * El mapping local → sismaster_sport_id se hace en el backend.
-   *
-   * Ejemplo: /sismaster/sports/local/1/params/by-event/3
-   *   → categorías de sport_id=1 (KARATE, sismaster_sport_id=10) en el evento 3
+   * Categorías con atletas inscritos. Recibe localSportId y sismasterEventId.
    */
   @Get('sports/local/:localSportId/params/by-event/:sismasterEventId')
   async getSportParamsByLocalSport(
-    @Param('localSportId',     ParseIntPipe) localSportId:     number,
+    @Param('localSportId', ParseIntPipe) localSportId: number,
     @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
   ) {
     return await this.sismasterService.getSportParamsByLocalSportId(
@@ -189,24 +279,12 @@ export class SismasterController {
     );
   }
 
-  /**
-   * GET /sismaster/athletes/by-category-local
-   *
-   * Atletas por categoría. Recibe localSportId (no el de sismaster).
-   * Ejemplo: /sismaster/athletes/by-category-local?sismasterEventId=3&localSportId=1&idparam=55
-   */
-  @Get('athletes/by-category-local')
-  async getAthletesByCategoryLocal(
-    @Query('sismasterEventId', ParseIntPipe) sismasterEventId: number,
-    @Query('localSportId',     ParseIntPipe) localSportId:     number,
-    @Query('idparam',          ParseIntPipe) idparam:          number,
-  ) {
-    return await this.sismasterService.getAthletesByCategoryLocal(
-      sismasterEventId,
-      localSportId,
-      idparam,
-    );
-  }
+  
+
+
+
+
+
 
 
 }

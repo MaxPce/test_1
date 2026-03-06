@@ -21,6 +21,7 @@ import {
   UpdateEventCategoryDto,
   CreateRegistrationDto,
   BulkRegisterDto,
+  RegisterEventCategoriesDto,
 } from './dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -297,12 +298,18 @@ export class EventsController {
     return this.eventsService.bulkRegisterFromSismaster(bulkDto);
   }
 
-  @Get('registrations/phase/:phaseId')
-  @Public()
-  findRegistrationsByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.eventsService.findRegistrationsByPhase(phaseId);
+  /**
+   * POST /events/:id/register-categories
+   * Body: { sismasterEventId: number }
+   */
+  @Post('sismaster/:sismasterEventId/register-categories')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async registerEventCategories(
+    @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
+  ) {
+    return this.eventsService.registerEventCategories(sismasterEventId);
   }
 
+  //ss
 
-  
 }
