@@ -50,143 +50,156 @@ export class CompetitionSnapshotService {
     // 1. Info del evento desde Sismaster (BD externa)
     const sismasterEvent = await this.sismasterService.getEventById(sismasterEventId);
     if (!sismasterEvent) {
-        throw new NotFoundException(`Evento Sismaster #${sismasterEventId} no encontrado`);
+      throw new NotFoundException(`Evento Sismaster #${sismasterEventId} no encontrado`);
     }
 
     // 2. Categorías locales vinculadas a este evento de Sismaster
     const eventCategories = await this.eventCategoryRepo.find({
-        where: { externalEventId: sismasterEventId },
-        relations: ['category', 'category.sport'],
+      where: { externalEventId: sismasterEventId },
+      relations: ['category', 'category.sport'],
     });
 
     let filteredCategories = eventCategories;
-        if (filters.eventCategoryId) {
-        filteredCategories = eventCategories.filter(
-            (ec) => ec.eventCategoryId === filters.eventCategoryId,
-        );
-        } else if (filters.sportId) {
-        filteredCategories = eventCategories.filter(
-            (ec) => (ec.category as any)?.sport?.sportId === filters.sportId,
-        );
-        }
+    if (filters.eventCategoryId) {
+      filteredCategories = eventCategories.filter(
+        (ec) => ec.eventCategoryId === filters.eventCategoryId,
+      );
+    } else if (filters.sportId) {
+      filteredCategories = eventCategories.filter(
+        (ec) => (ec.category as any)?.sport?.sportId === filters.sportId,
+      );
+    }
     const eventCategoryIds = filteredCategories.map((ec) => ec.eventCategoryId);
 
     if (!eventCategoryIds.length) {
-        return this.buildEmptySnapshot(sismasterEvent);
+      return this.buildEmptySnapshot(sismasterEvent);
     }
 
     // 3. Registraciones
     const registrations = await this.registrationRepo
-        .createQueryBuilder('r')
-        .leftJoinAndSelect('r.athlete', 'athlete')
-        .leftJoinAndSelect('r.team', 'team')
-        .where('r.event_category_id IN (:...ids)', { ids: eventCategoryIds })
-        .andWhere('r.deleted_at IS NULL')
-        .getMany();
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.athlete', 'athlete')
+      .leftJoinAndSelect('r.team', 'team')
+      .where('r.event_category_id IN (:...ids)', { ids: eventCategoryIds })
+      .andWhere('r.deleted_at IS NULL')
+      .getMany();
 
     // 4. Enriquecer con Sismaster en paralelo
     const externalIds = [
-        ...new Set(
+      ...new Set(
         registrations
-            .filter((r) => r.externalAthleteId)
-            .map((r) => r.externalAthleteId),
-        ),
+          .filter((r) => r.externalAthleteId)
+          .map((r) => r.externalAthleteId),
+      ),
     ];
 
-    const settled = await Promise.allSettled(
+    const institutionIds = [
+      ...new Set(
+        registrations
+          .filter((r) => r.externalInstitutionId)
+          .map((r) => r.externalInstitutionId),
+      ),
+    ];
+
+    const [settledPersons, institutions] = await Promise.all([
+      Promise.allSettled(
         externalIds.map((id) => this.sismasterService.getAthleteById(id)),
-    );
+      ),
+      this.sismasterService.getInstitutionsByIds(institutionIds),
+    ]);
+
     const personMap: Record<number, any> = {};
     externalIds.forEach((id, i) => {
-        if (settled[i].status === 'fulfilled')
-        personMap[id] = (settled[i] as PromiseFulfilledResult<any>).value;
+      if (settledPersons[i].status === 'fulfilled')
+        personMap[id] = (settledPersons[i] as PromiseFulfilledResult<any>).value;
+    });
+
+    const institutionMap: Record<number, any> = {};
+    institutions.forEach((inst) => {
+      institutionMap[inst.idinstitution] = inst;
     });
 
     // 5. Fases
     const phaseQuery = this.phaseRepo
-        .createQueryBuilder('p')
-        .where('p.event_category_id IN (:...ids)', { ids: eventCategoryIds })
-        .andWhere('p.deleted_at IS NULL')
-        .orderBy('p.display_order', 'ASC');
+      .createQueryBuilder('p')
+      .where('p.event_category_id IN (:...ids)', { ids: eventCategoryIds })
+      .andWhere('p.deleted_at IS NULL')
+      .orderBy('p.display_order', 'ASC');
 
-        if (filters.phaseId) {
-        phaseQuery.andWhere('p.phase_id = :phaseId', { phaseId: filters.phaseId });
-        }
+    if (filters.phaseId) {
+      phaseQuery.andWhere('p.phase_id = :phaseId', { phaseId: filters.phaseId });
+    }
 
-        const phases = await phaseQuery.getMany();
+    const phases = await phaseQuery.getMany();
     const phaseIds = phases.map((p) => p.phaseId);
 
     // 6. Matches + Participaciones
     const matches = phaseIds.length
-        ? await this.matchRepo
-            .createQueryBuilder('m')
-            .leftJoinAndSelect('m.participations', 'participation')
-            .where('m.phase_id IN (:...phaseIds)', { phaseIds })
-            .andWhere('m.deleted_at IS NULL')
-            .orderBy('m.phase_id', 'ASC')
-            .addOrderBy('m.match_number', 'ASC')
-            .getMany()
-        : [];
+      ? await this.matchRepo
+          .createQueryBuilder('m')
+          .leftJoinAndSelect('m.participations', 'participation')
+          .where('m.phase_id IN (:...phaseIds)', { phaseIds })
+          .andWhere('m.deleted_at IS NULL')
+          .orderBy('m.phase_id', 'ASC')
+          .addOrderBy('m.match_number', 'ASC')
+          .getMany()
+      : [];
 
     // 7. Standings
     const standings = phaseIds.length
-        ? await this.standingRepo
-            .createQueryBuilder('s')
-            .where('s.phase_id IN (:...phaseIds)', { phaseIds })
-            .orderBy('s.rank_position', 'ASC')
-            .getMany()
-        : [];
+      ? await this.standingRepo
+          .createQueryBuilder('s')
+          .where('s.phase_id IN (:...phaseIds)', { phaseIds })
+          .orderBy('s.rank_position', 'ASC')
+          .getMany()
+      : [];
 
-    // ── Lookup maps ────────────────────────────────────────────────────────
-    const regMap = this.buildRegistrationMap(registrations, personMap);
-    const matchesByPhaseId = this.groupBy(matches, 'phaseId');
-    const standingsByPhaseId = this.groupBy(standings, 'phaseId');
-    const phasesByEcId = this.groupBy(phases, 'eventCategoryId');
-    const regsByEcId = this.groupBy(registrations, 'eventCategoryId');
-
-    const DONE = ['completado', 'COMPLETADO', 'finished', 'FINISHED'];
+    // ── Lookup maps ──────────────────────────────────────────────────────────
+    const regMap = this.buildRegistrationMap(registrations, personMap, institutionMap);
+    const matchesByPhaseId  = this.groupBy(matches,       'phaseId');
+    const standingsByPhaseId = this.groupBy(standings,    'phaseId');
+    const phasesByEcId       = this.groupBy(phases,       'eventCategoryId');
+    const regsByEcId         = this.groupBy(registrations,'eventCategoryId');
 
     return {
-        meta: {
+      meta: {
         generatedAt: new Date().toISOString(),
         version: '1.0',
         source: 'competition-system',
-        },
-        event: {
-            sismasterEventId: sismasterEvent.idevent,
-            name: sismasterEvent.name,
-            startDate: sismasterEvent.startdate,
-            endDate: sismasterEvent.enddate,
-            place: sismasterEvent.place ?? null,
-            logo: sismasterEvent.logo ?? null,
-            modality: sismasterEvent.modality ?? null,
-            tipo: sismasterEvent.tipo ?? null,
-            level: sismasterEvent.level ?? null,
-        },
-
-        summary: {
+      },
+      event: {
+        sismasterEventId: sismasterEvent.idevent,
+        name:             sismasterEvent.name,
+        startDate:        sismasterEvent.startdate,
+        endDate:          sismasterEvent.enddate,
+        place:            sismasterEvent.place    ?? null,
+        logo:             sismasterEvent.logo     ?? null,
+        modality:         sismasterEvent.modality ?? null,
+        tipo:             sismasterEvent.tipo     ?? null,
+        level:            sismasterEvent.level    ?? null,
+      },
+      summary: {
         totalSports: new Set(
-            eventCategories
+          eventCategories
             .map((ec) => (ec.category as any)?.sport?.sportId)
             .filter(Boolean),
         ).size,
-        totalCategories: eventCategories.length,
+        totalCategories:    eventCategories.length,
         totalRegistrations: registrations.length,
-        totalPhases: phases.length,
-        totalMatches: matches.length,
-        
-        
-        },
-        sports: this.buildSportsTree(
+        totalPhases:        phases.length,
+        totalMatches:       matches.length,
+      },
+      sports: this.buildSportsTree(
         filteredCategories,
         regsByEcId,
         regMap,
         phasesByEcId,
         matchesByPhaseId,
         standingsByPhaseId,
-        ),
+      ),
     };
-    }
+  }
+
 
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -196,11 +209,15 @@ export class CompetitionSnapshotService {
   private buildRegistrationMap(
     registrations: Registration[],
     personMap: Record<number, any>,
+    institutionMap: Record<number, any> = {},
   ): Record<number, any> {
     const map: Record<number, any> = {};
 
     for (const reg of registrations) {
       const person = reg.externalAthleteId ? personMap[reg.externalAthleteId] : null;
+      const institution = reg.externalInstitutionId
+        ? institutionMap[reg.externalInstitutionId]
+        : null;
 
       let athleteInfo: any = null;
 
@@ -208,15 +225,15 @@ export class CompetitionSnapshotService {
         athleteInfo = {
           source: 'sismaster',
           personId: reg.externalAthleteId,
-          fullName: [person.apepat, person.apema, person.nombres]
+          fullName: [person.lastname, person.surname, person.firstname]
             .filter(Boolean)
             .join(' '),
-          document: person.nrodoc ?? null,
-          gender: person.sexo ?? null,
-          birthDate: person.fechnac ?? null,
+          document: person.docnumber ?? null,   
+          gender: person.gender ?? null,        
+          birthDate: person.birthday ?? null,   
           institution: {
             id: reg.externalInstitutionId ?? null,
-            name: person.institname ?? null,
+            name: institution?.businessName ?? institution?.business ?? null,
           },
         };
       } else if (reg.athlete) {
