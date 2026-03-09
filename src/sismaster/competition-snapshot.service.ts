@@ -84,7 +84,7 @@ export class CompetitionSnapshotService {
       .andWhere('r.deleted_at IS NULL')
       .getMany();
 
-    // 4. Enriquecer con Sismaster en paralelo
+    // 4. Sismaster en paralelo
     const externalIds = [
       ...new Set(
         registrations
