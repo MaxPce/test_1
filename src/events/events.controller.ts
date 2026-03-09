@@ -125,7 +125,7 @@ export class EventsController {
   }
 
   @Get('registrations/deleted')
-  @Roles(UserRole.ADMIN)
+  @Public()
   findDeletedRegistrations() {
     return this.eventsService.findDeletedRegistrations();
   }
@@ -254,7 +254,7 @@ export class EventsController {
    * Ver atletas disponibles en Sismaster para sincronizar
    */
   @Get('categories/:id/available-athletes-sismaster')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   async getAvailableAthletes(
     @Param('id', ParseIntPipe) eventCategoryId: number,
   ) {

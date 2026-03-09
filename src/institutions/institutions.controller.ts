@@ -153,7 +153,7 @@ export class InstitutionsController {
   }
 
   @Get('teams')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   findAllTeams(
     @Query('institutionId') institutionId?: string,
     @Query('categoryId') categoryId?: string,
@@ -169,13 +169,13 @@ export class InstitutionsController {
   }
 
   @Get('teams/deleted')
-  @Roles(UserRole.ADMIN)
+  @Public()
   findDeletedTeams() {
     return this.institutionsService.findDeletedTeams();
   }
 
   @Get('teams/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   findOneTeam(@Param('id', ParseIntPipe) id: number) {
     return this.institutionsService.findOneTeam(id);
   }

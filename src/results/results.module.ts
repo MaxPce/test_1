@@ -3,11 +3,11 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { ResultsService } from './results.service';
 import { ResultsController } from './results.controller';
 import { Result, Attempt } from './entities';
-import { Match, Participation, Standing } from '../competitions/entities';
+import { Match, Participation, Standing, PhaseManualRank } from '../competitions/entities';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Result, Attempt, Match, Participation, Standing]),
+    TypeOrmModule.forFeature([Result, Attempt, Match, Participation, Standing, PhaseManualRank,]),
   ],
   controllers: [ResultsController],
   providers: [ResultsService],

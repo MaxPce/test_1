@@ -232,7 +232,7 @@ export class CompetitionsController {
 
   
   @Get('phases/:phaseId/manual-ranks')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   getManualRanks(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return this.competitionsService.getManualRanks(phaseId);
   }
@@ -346,13 +346,13 @@ export class CompetitionsController {
   }
 
   @Get('phases/:phaseId/poomsae-table')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   async getPoomsaeScoreTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return this.taekwondoPoomsaeService.getPhaseScores(phaseId);
   }
 
   @Get('participations/:participationId/poomsae-score')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Public()
   async getPoomsaeScore(
     @Param('participationId', ParseIntPipe) participationId: number,
   ) {

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Match, Participation, PhaseRegistration } from './entities';
+import { Match, Participation, PhaseRegistration, PhaseManualRank } from './entities';
 import { GenerateBracketDto, AdvanceWinnerDto } from './dto';
 import { MatchStatus, Corner } from '../common/enums';
 
@@ -18,6 +18,8 @@ export class BracketService {
     private participationRepository: Repository<Participation>,
     @InjectRepository(PhaseRegistration)                          
     private phaseRegistrationRepository: Repository<PhaseRegistration>,
+    @InjectRepository(PhaseManualRank)              
+    private phaseManualRankRepository: Repository<PhaseManualRank>,
     private dataSource: DataSource,
   ) {}
 
@@ -161,7 +163,6 @@ export class BracketService {
 
         thirdPlaceMatch = await queryRunner.manager.save(thirdPlaceMatch);
       }
-
       await queryRunner.commitTransaction();
 
       const bracketInfo = {
@@ -365,7 +366,7 @@ export class BracketService {
           dto.winnerRegistrationId,
         );
       }
-
+      await this.autoRegisterEliminationRanks(queryRunner, match.phaseId);
       await queryRunner.commitTransaction();
 
       return {
@@ -801,4 +802,72 @@ export class BracketService {
       finalizedAt: thirdPlaceMatch.updatedAt,
     };
   }
+
+  private async autoRegisterEliminationRanks(
+    queryRunner: any,
+    phaseId: number,
+  ): Promise<void> {
+    const allMatches = await queryRunner.manager.find(Match, {
+      where: { phaseId },
+      relations: ['participations'],
+    });
+
+    const ranksToSave: Array<{ registrationId: number; rank: number }> = [];
+
+    // 1ro y 2do desde la final
+    const finalMatch = allMatches.find((m: Match) => m.round === 'final');
+    if (
+      finalMatch?.status === MatchStatus.FINALIZADO &&
+      finalMatch.winnerRegistrationId
+    ) {
+      ranksToSave.push({ registrationId: finalMatch.winnerRegistrationId, rank: 1 });
+
+      const finalLoser = finalMatch.participations.find(
+        (p: Participation) => p.registrationId !== finalMatch.winnerRegistrationId,
+      )?.registrationId;
+
+      if (finalLoser) ranksToSave.push({ registrationId: finalLoser, rank: 2 });
+    }
+
+    // 3ro: tercer_lugar o perdedores de semifinal
+    const thirdMatch = allMatches.find((m: Match) => m.round === 'tercer_lugar');
+    if (thirdMatch) {
+      if (
+        thirdMatch.status === MatchStatus.FINALIZADO &&
+        thirdMatch.winnerRegistrationId
+      ) {
+        ranksToSave.push({ registrationId: thirdMatch.winnerRegistrationId, rank: 3 });
+      }
+    } else {
+      const semiMatches = allMatches.filter((m: Match) => m.round === 'semifinal');
+      for (const semi of semiMatches) {
+        if (semi.status !== MatchStatus.FINALIZADO || !semi.winnerRegistrationId) continue;
+        const loser = semi.participations.find(
+          (p: Participation) => p.registrationId !== semi.winnerRegistrationId,
+        )?.registrationId;
+        if (loser) ranksToSave.push({ registrationId: loser, rank: 3 });
+      }
+    }
+
+    if (ranksToSave.length === 0) return;
+
+    for (const { registrationId, rank } of ranksToSave) {
+      const existing = await queryRunner.manager.findOne(PhaseManualRank, {
+        where: { phaseId, registrationId },
+      });
+      if (existing) {
+        existing.manualRankPosition = rank;
+        await queryRunner.manager.save(existing);
+      } else {
+        await queryRunner.manager.save(
+          queryRunner.manager.create(PhaseManualRank, {
+            phaseId,
+            registrationId,
+            manualRankPosition: rank,
+          }),
+        );
+      }
+    }
+  }
+
 }

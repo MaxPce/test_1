@@ -6,7 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { Result, Attempt } from './entities';
-import { Match, Participation, Standing } from '../competitions/entities';
+import { Match, Participation, Standing, PhaseManualRank } from '../competitions/entities';
 import {
   CreateResultDto,
   UpdateResultDto,
@@ -30,6 +30,8 @@ export class ResultsService {
     private participationRepository: Repository<Participation>,
     @InjectRepository(Standing)
     private standingRepository: Repository<Standing>,
+    @InjectRepository(PhaseManualRank)            
+    private phaseManualRankRepository: Repository<PhaseManualRank>,
     private dataSource: DataSource,
   ) {}
 
@@ -223,6 +225,7 @@ export class ResultsService {
           match,
           dto.winnerRegistrationId,
         );
+        await this.autoRegisterEliminationRanks(queryRunner, match.phaseId);
       }
 
       await queryRunner.commitTransaction();
@@ -369,6 +372,91 @@ export class ResultsService {
           corner,
         });
         await queryRunner.manager.save(newParticipation);
+      }
+    }
+  }
+
+  /**
+   * Cuando todos los matches de una fase ELIMINACION están FINALIZADO,
+   * registra automáticamente 1ro, 2do y 3ro en phase_manual_ranks.
+   */
+  private async autoRegisterEliminationRanks(
+    queryRunner: any,
+    phaseId: number,
+  ): Promise<void> {
+    const allMatches = await queryRunner.manager.find(Match, {
+      where: { phaseId },
+      relations: ['participations'],
+    });
+
+    const ranksToSave: Array<{ registrationId: number; rank: number }> = [];
+
+    // ── 1ro y 2do: de la gran final ─────────────────────────────────────
+    const finalMatch = allMatches.find((m: Match) => m.round === 'final');
+
+    if (
+      finalMatch?.status === MatchStatus.FINALIZADO &&
+      finalMatch.winnerRegistrationId
+    ) {
+      ranksToSave.push({ registrationId: finalMatch.winnerRegistrationId, rank: 1 });
+
+      const finalLoser = finalMatch.participations.find(
+        (p: Participation) => p.registrationId !== finalMatch.winnerRegistrationId,
+      )?.registrationId;
+
+      if (finalLoser) {
+        ranksToSave.push({ registrationId: finalLoser, rank: 2 });
+      }
+    }
+
+    // ── 3ro: match de tercer_lugar o perdedores de semifinal ─────────────
+    const thirdMatch = allMatches.find((m: Match) => m.round === 'tercer_lugar');
+
+    if (thirdMatch) {
+      // Hay match de 3er lugar: solo registrar cuando esté finalizado
+      if (
+        thirdMatch.status === MatchStatus.FINALIZADO &&
+        thirdMatch.winnerRegistrationId
+      ) {
+        ranksToSave.push({ registrationId: thirdMatch.winnerRegistrationId, rank: 3 });
+      }
+      // Si aún no terminó, esperamos (no registramos nada para el 3ro todavía)
+    } else {
+      // Sin match de 3er lugar: ambos perdedores de semifinal comparten el bronce
+      const semiMatches = allMatches.filter((m: Match) => m.round === 'semifinal');
+      for (const semi of semiMatches) {
+        if (
+          semi.status !== MatchStatus.FINALIZADO ||
+          !semi.winnerRegistrationId
+        ) continue;
+
+        const loser = semi.participations.find(
+          (p: Participation) => p.registrationId !== semi.winnerRegistrationId,
+        )?.registrationId;
+
+        if (loser) ranksToSave.push({ registrationId: loser, rank: 3 });
+      }
+    }
+
+    if (ranksToSave.length === 0) return;
+
+    // ── Upsert en phase_manual_ranks ─────────────────────────────────────
+    for (const { registrationId, rank } of ranksToSave) {
+      const existing = await queryRunner.manager.findOne(PhaseManualRank, {
+        where: { phaseId, registrationId },
+      });
+
+      if (existing) {
+        existing.manualRankPosition = rank;
+        await queryRunner.manager.save(existing);
+      } else {
+        await queryRunner.manager.save(
+          queryRunner.manager.create(PhaseManualRank, {
+            phaseId,
+            registrationId,
+            manualRankPosition: rank,
+          }),
+        );
       }
     }
   }
