@@ -13,7 +13,7 @@ import {
 import { SismasterService } from './sismaster.service';
 import { BadRequestException } from '@nestjs/common';
 import { CompetitionSnapshotService } from './competition-snapshot.service';
-
+import { CompetitionPhaseReportService } from './competition-phase-report.service';
 
 
 @Controller('sismaster')
@@ -23,7 +23,41 @@ export class SismasterController {
   constructor(
     private readonly sismasterService: SismasterService,
     private readonly competitionSnapshotService: CompetitionSnapshotService, 
+    private readonly competitionPhaseReportService: CompetitionPhaseReportService,
   ) {}
+
+  /**
+   * GET /sismaster/phase-report/:eventId
+   *
+   * Vista alternativa v2.0: orientada a fases.
+   * Incluye participantes por deporte, por categoría y por fase,
+   * brackets con scores y ganador, y podio con medallas.
+   *
+    * # Todo el evento
+    GET /sismaster/phase-report/200
+
+    # Solo un deporte
+    GET /sismaster/phase-report/200?sportId=4
+
+    # Solo una categoría específica
+    GET /sismaster/phase-report/200?eventCategoryId=155
+
+    # Solo la fase de una categoría
+    GET /sismaster/phase-report/200?eventCategoryId=155&phaseId=212
+   */
+  @Get('competition-report/:eventId')
+  async getPhaseReport(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Query('sportId') sportId?: string,
+    @Query('eventCategoryId') eventCategoryId?: string,
+    @Query('phaseId') phaseId?: string,
+  ) {
+    return this.competitionPhaseReportService.getPhaseReport(eventId, {
+      sportId:         sportId         ? Number(sportId)         : undefined,
+      eventCategoryId: eventCategoryId ? Number(eventCategoryId) : undefined,
+      phaseId:         phaseId         ? Number(phaseId)         : undefined,
+    });
+  }
 
   /**
    * GET /sismaster/competition-snapshot/:eventId

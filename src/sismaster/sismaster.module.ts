@@ -22,6 +22,10 @@ import { Phase } from '../competitions/entities/phase.entity';
 import { Match } from '../competitions/entities/match.entity';
 import { Participation } from '../competitions/entities/participation.entity';
 import { Standing } from '../competitions/entities/standing.entity';
+import { PhaseManualRank } from '../competitions/entities/phase-manual-rank.entity';
+
+import { CompetitionPhaseReportService } from './competition-phase-report.service';
+import { PhaseRegistration } from 'src/competitions/entities';
 
 @Module({
   imports: [
@@ -32,12 +36,12 @@ import { Standing } from '../competitions/entities/standing.entity';
     ),
     TypeOrmModule.forFeature([
       EventCategory, Registration,
-      Phase, Match, Participation, Standing,
+      Phase, Match, Participation, Standing, PhaseManualRank,PhaseRegistration,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
   controllers: [SismasterController],
-  providers: [SismasterService, SismasterCacheService,CompetitionSnapshotService,],
-  exports: [SismasterService, SismasterCacheService,CompetitionSnapshotService,],
+  providers: [SismasterService, SismasterCacheService,CompetitionSnapshotService,CompetitionPhaseReportService,],
+  exports: [SismasterService, SismasterCacheService,CompetitionSnapshotService,CompetitionPhaseReportService,],
 })
 export class SismasterModule {}
