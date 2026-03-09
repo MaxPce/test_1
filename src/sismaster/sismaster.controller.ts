@@ -12,13 +12,42 @@ import {
 } from '@nestjs/common';
 import { SismasterService } from './sismaster.service';
 import { BadRequestException } from '@nestjs/common';
+import { CompetitionSnapshotService } from './competition-snapshot.service';
 
 
 
 @Controller('sismaster')
 export class SismasterController {
+  
   logger: any;
-  constructor(private readonly sismasterService: SismasterService) {}
+  constructor(
+    private readonly sismasterService: SismasterService,
+    private readonly competitionSnapshotService: CompetitionSnapshotService, 
+  ) {}
+
+  /**
+   * GET /sismaster/competition-snapshot/:eventId
+   *
+   * JSON completo de la competencia para consumo externo (sismaster).
+   * Incluye: evento → deportes → categorías → inscripciones (enriquecidas
+   * con sismaster) → fases → matches (participantes + puntajes) → standings.
+   *
+   * Ejemplo: GET /sismaster/competition-snapshot/1
+   */
+  @Get('competition-snapshot/:eventId')
+  async getCompetitionSnapshot(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Query('sportId') sportId?: string,
+    @Query('eventCategoryId') eventCategoryId?: string,
+    @Query('phaseId') phaseId?: string,
+  ) {
+    return this.competitionSnapshotService.getCompetitionSnapshot(eventId, {
+      sportId: sportId ? Number(sportId) : undefined,
+      eventCategoryId: eventCategoryId ? Number(eventCategoryId) : undefined,
+      phaseId: phaseId ? Number(phaseId) : undefined,
+    });
+  }
+
 
   /**
    * GET /sismaster/events
