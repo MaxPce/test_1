@@ -411,31 +411,11 @@ export class ResultsService {
 
     // ── 3ro: match de tercer_lugar o perdedores de semifinal ─────────────
     const thirdMatch = allMatches.find((m: Match) => m.round === 'tercer_lugar');
-
-    if (thirdMatch) {
-      // Hay match de 3er lugar: solo registrar cuando esté finalizado
-      if (
-        thirdMatch.status === MatchStatus.FINALIZADO &&
-        thirdMatch.winnerRegistrationId
-      ) {
-        ranksToSave.push({ registrationId: thirdMatch.winnerRegistrationId, rank: 3 });
-      }
-      // Si aún no terminó, esperamos (no registramos nada para el 3ro todavía)
-    } else {
-      // Sin match de 3er lugar: ambos perdedores de semifinal comparten el bronce
-      const semiMatches = allMatches.filter((m: Match) => m.round === 'semifinal');
-      for (const semi of semiMatches) {
-        if (
-          semi.status !== MatchStatus.FINALIZADO ||
-          !semi.winnerRegistrationId
-        ) continue;
-
-        const loser = semi.participations.find(
-          (p: Participation) => p.registrationId !== semi.winnerRegistrationId,
-        )?.registrationId;
-
-        if (loser) ranksToSave.push({ registrationId: loser, rank: 3 });
-      }
+    if (
+      thirdMatch?.status === MatchStatus.FINALIZADO &&
+      thirdMatch.winnerRegistrationId
+    ) {
+      ranksToSave.push({ registrationId: thirdMatch.winnerRegistrationId, rank: 3 });
     }
 
     if (ranksToSave.length === 0) return;
