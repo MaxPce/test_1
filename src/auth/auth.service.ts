@@ -67,6 +67,10 @@ export class AuthService {
       .andWhere('user.deletedAt IS NULL')
       .getOne();
 
+      console.log('USER FOUND:', user ? 'SI' : 'NO');
+      console.log('PASSWORD HASH:', user?.password ? 'TIENE HASH' : 'UNDEFINED/NULL');
+      console.log('IS ACTIVE:', user?.isActive);
+
     if (!user) {
       throw new UnauthorizedException('Credenciales inválidas');
     }

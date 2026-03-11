@@ -592,7 +592,7 @@ export class BracketService {
 
     // Calcular ronda siguiente
     const nextRoundName = this.getNextRoundName(currentRound);
-    if (!nextRoundName) return null; // Es la final
+    if (!nextRoundName) return null; 
 
     const nextRoundMatches = matchesByRound[nextRoundName];
     if (!nextRoundMatches) return null;

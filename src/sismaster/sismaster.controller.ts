@@ -34,16 +34,16 @@ export class SismasterController {
    * brackets con scores y ganador, y podio con medallas.
    *
     * # Todo el evento
-    GET /sismaster/phase-report/200
+    GET /sismaster/competition-report/200
 
     # Solo un deporte
-    GET /sismaster/phase-report/200?sportId=4
+    GET /sismaster/competition-report/200?sportId=4
 
     # Solo una categoría específica
-    GET /sismaster/phase-report/200?eventCategoryId=155
+    GET /sismaster/competition-report/200?eventCategoryId=155
 
-    # Solo la fase de una categoría
-    GET /sismaster/phase-report/200?eventCategoryId=155&phaseId=212
+    # Solo la fase de una categoría&
+    GET /sismaster/competition-report/200?eventCategoryId=155&phaseId=212
    */
   @Get('competition-report/:eventId')
   async getPhaseReport(
