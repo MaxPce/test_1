@@ -92,4 +92,12 @@ export class AthleticsController {
   reset(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.resetPhaseRegistration(id);
   }
+
+  // GET /competitions/phases/:phaseId/athletics-track-table
+    @Get('phases/:phaseId/athletics-track-table')
+    @Public()
+    getFullTrackTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.findFullTrackTable(phaseId);
+    }
+
 }

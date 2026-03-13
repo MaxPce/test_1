@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, IsNull, In } from 'typeorm';
 import { AthleticsResult } from './entities/athletics-result.entity';
 import { PhaseRegistration } from './entities/phase-registration.entity';
 import { CreateAthleticsResultDto } from './dto/create-athletics-result.dto';
@@ -35,11 +35,14 @@ export class AthleticsService {
     if (dto.attemptNumber != null) {
       const existing = await this.athleticsResultRepo.findOne({
         where: {
-          phaseRegistrationId: dto.phaseRegistrationId,
-          attemptNumber: dto.attemptNumber,
-          combinedEvent: dto.combinedEvent ?? null,
+            phaseRegistrationId: dto.phaseRegistrationId,
+            attemptNumber: dto.attemptNumber ?? undefined,
+            combinedEvent: dto.combinedEvent
+            ? dto.combinedEvent
+            : IsNull(),                          
         },
-      });
+        });
+
       if (existing) {
         throw new BadRequestException(
           `Ya existe intento #${dto.attemptNumber} para este registro${dto.combinedEvent ? ` en ${dto.combinedEvent}` : ''}`,
@@ -165,4 +168,51 @@ export class AthleticsService {
     await this.athleticsResultRepo.remove(results);
     return { deleted: results.length };
   }
+
+  // Nuevo método al final del servicio:
+    async findFullTrackTable(phaseId: number): Promise<any[]> {
+    // 1. Todos los inscritos en esta fase
+    const phaseRegs = await this.phaseRegistrationRepo.find({
+        where: { phaseId },
+        relations: [
+        'registration',
+        'registration.athlete',
+        'registration.athlete.institution',
+        ],
+    });
+
+    if (phaseRegs.length === 0) return [];
+
+    // 2. Resultados existentes de atletismo para estos registros
+    const prIds = phaseRegs.map((pr) => pr.phaseRegistrationId);
+    const existingResults = await this.athleticsResultRepo.find({
+        where: { phaseRegistrationId: In(prIds) },
+    });
+
+    const resultMap = new Map<number, AthleticsResult>();
+    for (const r of existingResults) {
+        resultMap.set(r.phaseRegistrationId, r);
+    }
+
+    // 3. Merge: retorna TODOS los inscritos con su resultado (si existe)
+    return phaseRegs.map((pr) => {
+        const reg = (pr as any).registration;
+        const athlete = reg?.athlete;
+        const institution = athlete?.institution;
+        const result = resultMap.get(pr.phaseRegistrationId);
+
+        return {
+        phaseRegistrationId: pr.phaseRegistrationId,
+        registrationId: pr.registrationId,
+        athleteName: athlete?.name ?? `Registro ${pr.registrationId}`,
+        institutionName: institution?.name ?? '',
+        athleticsResultId: result?.athleticsResultId ?? null,
+        lane: result?.lane ?? null,
+        section: result?.section ?? null,
+        time: result?.time ?? null,
+        notes: result?.notes ?? null,
+        };
+    });
+    }
+
 }

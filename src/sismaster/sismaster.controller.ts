@@ -332,6 +332,7 @@ export class SismasterController {
    * Categorías con atletas inscritos. Recibe localSportId y sismasterEventId.
    */
   @Get('sports/local/:localSportId/params/by-event/:sismasterEventId')
+  
   async getSportParamsByLocalSport(
     @Param('localSportId', ParseIntPipe) localSportId: number,
     @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
