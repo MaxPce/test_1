@@ -169,7 +169,6 @@ export class AthleticsService {
     return { deleted: results.length };
   }
 
-  // Nuevo método al final del servicio:
     async findFullTrackTable(phaseId: number): Promise<any[]> {
     // 1. Todos los inscritos en esta fase
     const phaseRegs = await this.phaseRegistrationRepo.find({
