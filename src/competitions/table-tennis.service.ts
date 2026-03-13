@@ -741,6 +741,9 @@ export class TableTennisService {
     match.status = 'finalizado' as any;
     match.winnerRegistrationId = result.winner.registrationId; 
 
+    match.participant1Score = result.team1.wins;
+    match.participant2Score = result.team2.wins;
+
     await this.matchRepository.save(match);
 
     return {

@@ -457,6 +457,34 @@ export class TaekwondoPoomsaeService {
     return score;
   }
 
+  async initializeGroupPhase(phaseId: number, registrationIds: number[]) {
+    const phase = await this.phaseRepository.findOne({ where: { phaseId } });
+    if (!phase) throw new NotFoundException(`Phase ${phaseId} no encontrada`);
+
+    // Verificar que no exista ya un match
+    const existing = await this.matchRepository.findOne({ where: { phaseId } });
+    if (existing) throw new BadRequestException('La fase ya fue inicializada');
+
+    // Crear el único match del grupo
+    const match = this.matchRepository.create({
+      phaseId,
+      matchNumber: 1,
+      status: MatchStatus.PROGRAMADO,
+    });
+    await this.matchRepository.save(match);
+
+    // Crear una participación por cada inscrito
+    for (const registrationId of registrationIds) {
+      const participation = this.participationRepository.create({
+        matchId: match.matchId,
+        registrationId,
+      });
+      await this.participationRepository.save(participation);
+    }
+
+    return { matchId: match.matchId, participationsCreated: registrationIds.length };
+  }
+
   private async recalculateRankings(matchId: number): Promise<void> {
     const participation = await this.participationRepository.findOne({
       where: { matchId },
@@ -490,4 +518,7 @@ export class TaekwondoPoomsaeService {
       });
     }
   }
+
+  
+
 }

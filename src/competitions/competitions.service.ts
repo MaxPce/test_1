@@ -79,9 +79,8 @@ export class CompetitionsService {
       // ── incluir Taolu además de Poomsae ──────────────────────────
       const isScoreTablePhase =
         phaseWithRelations &&
-        (this.isPoomsaePhase(phaseWithRelations) ||
+        (
           this.isWushuTaoluPhase(phaseWithRelations) ||
-          this.isTiroDeportivoPhase(phaseWithRelations) ||
           this.isWeightliftingPhase(phaseWithRelations) ||
           this.isClimbingPhase(phaseWithRelations));
 

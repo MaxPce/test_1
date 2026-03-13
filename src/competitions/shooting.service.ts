@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ShootingScore } from './entities/shooting-score.entity';
 import { Participation } from './entities/participation.entity';
 import { Phase } from './entities/phase.entity';
 import { UpdateShootingScoreDto } from './dto/update-shooting-score.dto';
+import { Match } from './entities/match.entity';      
+import { MatchStatus } from '../common/enums'; 
 
 @Injectable()
 export class ShootingService {
@@ -15,6 +17,8 @@ export class ShootingService {
     private readonly participationRepository: Repository<Participation>,
     @InjectRepository(Phase)
     private readonly phaseRepository: Repository<Phase>,
+    @InjectRepository(Match)
+    private readonly matchRepository: Repository<Match>,
   ) {}
 
   async updateShootingScore(
@@ -163,6 +167,56 @@ export class ShootingService {
 
     return score;
   }
+
+  async initializeGroupPhase(
+    phaseId: number,
+    registrationIds: number[],
+  ): Promise<{ matchId: number; participationsCreated: number; participationsSkipped: number }> {
+    const phase = await this.phaseRepository.findOne({ where: { phaseId } });
+    if (!phase) {
+      throw new NotFoundException(`Phase ${phaseId} no encontrada`);
+    }
+
+    // Buscar match existente o crear uno nuevo
+    let match = await this.matchRepository.findOne({ where: { phaseId } });
+
+    if (!match) {
+      match = this.matchRepository.create({
+        phaseId,
+        matchNumber: 1,
+        status: MatchStatus.PROGRAMADO,
+      });
+      await this.matchRepository.save(match);
+    }
+
+    // Evitar duplicados: solo agregar registrations que no estén ya asignadas
+    const existingParticipations = await this.participationRepository.find({
+      where: { matchId: match.matchId },
+    });
+    const existingRegistrationIds = new Set(
+      existingParticipations.map((p) => p.registrationId),
+    );
+
+    const newRegistrationIds = registrationIds.filter(
+      (id) => !existingRegistrationIds.has(id),
+    );
+
+    for (const registrationId of newRegistrationIds) {
+      const participation = this.participationRepository.create({
+        matchId: match.matchId,
+        registrationId,
+      });
+      await this.participationRepository.save(participation);
+    }
+
+    return {
+      matchId: match.matchId,
+      participationsCreated: newRegistrationIds.length,
+      participationsSkipped: registrationIds.length - newRegistrationIds.length,
+    };
+  }
+
+
 
   private async recalculateRankings(participationId: number): Promise<void> {
     const participation = await this.participationRepository.findOne({

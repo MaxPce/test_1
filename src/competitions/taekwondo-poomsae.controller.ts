@@ -5,6 +5,7 @@ import {
   Param,
   Body,
   ParseIntPipe,
+  Post,
 } from '@nestjs/common';
 import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
@@ -82,4 +83,14 @@ export class TaekwondoPoomsaeController {
   async getBracketMatchScores(@Param('matchId', ParseIntPipe) matchId: number) {
     return await this.poomsaeService.getBracketMatchScores(matchId);
   }
+
+  // POST /competitions/taekwondo/poomsae/phases/:phaseId/initialize-group
+  @Post('phases/:phaseId/initialize-group')
+  async initializeGroupPhase(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() body: { registrationIds: number[] },
+  ) {
+    return await this.poomsaeService.initializeGroupPhase(phaseId, body.registrationIds);
+  }
 }
+

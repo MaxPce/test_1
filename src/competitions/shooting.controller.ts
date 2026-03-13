@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Param,
   Body,
   ParseIntPipe,
@@ -40,5 +41,13 @@ export class ShootingController {
     @Param('participationId', ParseIntPipe) participationId: number,
   ) {
     return this.shootingService.getParticipationScore(participationId);
+  }
+
+  @Post('phases/:phaseId/initialize-group')
+  async initializeGroupPhase(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() body: { registrationIds: number[] },
+  ) {
+    return this.shootingService.initializeGroupPhase(phaseId, body.registrationIds);
   }
 }

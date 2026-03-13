@@ -8,6 +8,9 @@ import { Match } from '../competitions/entities/match.entity';
 import { Standing } from '../competitions/entities/standing.entity';
 import { PhaseManualRank } from '../competitions/entities/phase-manual-rank.entity';
 import { PhaseRegistration } from '../competitions/entities/phase-registration.entity';
+import { IndividualScore } from '../competitions/entities/individual-score.entity';
+import { ShootingScore } from '../competitions/entities/shooting-score.entity';
+import { MatchGame } from '../competitions/entities/match-game.entity';
 import { SismasterService } from './sismaster.service';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { MatchStatus } from '../common/enums';
@@ -41,6 +44,15 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(PhaseRegistration)
     private readonly phaseRegistrationRepo: Repository<PhaseRegistration>,
+
+    @InjectRepository(MatchGame)
+    private readonly matchGameRepo: Repository<MatchGame>,
+
+    @InjectRepository(IndividualScore)
+    private readonly individualScoreRepo: Repository<IndividualScore>,
+
+    @InjectRepository(ShootingScore)
+    private readonly shootingScoreRepo: Repository<ShootingScore>,
 
     private readonly sismasterService: SismasterService,
   ) {}
@@ -87,8 +99,10 @@ export class CompetitionPhaseReportService {
     // 3. Registraciones
     const registrations = await this.registrationRepo
       .createQueryBuilder('r')
-      .leftJoinAndSelect('r.athlete', 'athlete')
-      .leftJoinAndSelect('r.team', 'team')
+      .leftJoinAndSelect('r.athlete', 'athlete')                   
+      .leftJoinAndSelect('r.team', 'team')                         
+      .leftJoinAndSelect('team.members', 'teamMembers')
+      .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .where('r.event_category_id IN (:...ids)', { ids: eventCategoryIds })
       .andWhere('r.deleted_at IS NULL')
       .getMany();
@@ -154,7 +168,19 @@ export class CompetitionPhaseReportService {
           .getMany()
       : [];
 
-    // 7. Standings + ManualRanks + PhaseRegistrations en paralelo
+    // 7. MatchGames (rondas/sets) para todos los matches encontrados
+    const matchIds = matches.map((m) => m.matchId);
+
+    const matchGames = matchIds.length
+      ? await this.matchGameRepo
+          .createQueryBuilder('mg')
+          .where('mg.match_id IN (:...matchIds)', { matchIds })
+          .orderBy('mg.match_id', 'ASC')
+          .addOrderBy('mg.game_number', 'ASC')
+          .getMany()
+      : [];
+
+    // 8. Standings + ManualRanks + PhaseRegistrations en paralelo
     const [standings, manualRanks, phaseRegs] = phaseIds.length
       ? await Promise.all([
           this.standingRepo
@@ -174,14 +200,37 @@ export class CompetitionPhaseReportService {
             .getMany(),
         ])
       : [[], [] as PhaseManualRank[], [] as PhaseRegistration[]];
+    // 9. Scores de Poomsae y Tiro Deportivo
+    // Obtener todas las participaciones de los matches de las fases
+    const allParticipationIds = matches.flatMap(
+      (m) => (m.participations ?? []).map((p) => p.participationId)
+    );
+
+    const [individualScores, shootingScores] = allParticipationIds.length
+      ? await Promise.all([
+          this.individualScoreRepo.find({
+            where: allParticipationIds.map((id) => ({ participationId: id })),
+          }),
+          this.shootingScoreRepo.find({
+            where: allParticipationIds.map((id) => ({ participationId: id })),
+          }),
+        ])
+      : [[], []];
+
+    const individualScoresByParticipationId = this.groupBy(individualScores, 'participationId');
+    const shootingScoresByParticipationId   = this.groupBy(shootingScores,   'participationId');
+
 
     // ── Mapas de búsqueda ────────────────────────────────────────────────────
     const regMap               = this.buildRegistrationMap(registrations, personMap, institutionMap);
-    const matchesByPhaseId     = this.groupBy(matches,     'phaseId');
-    const standingsByPhaseId   = this.groupBy(standings,   'phaseId');
-    const manualRanksByPhaseId = this.groupBy(manualRanks, 'phaseId');
-    const phaseRegsByPhaseId   = this.groupBy(phaseRegs,   'phaseId');
-    const phasesByEcId         = this.groupBy(phases,      'eventCategoryId');
+    const athleteIdToRegId = this.buildAthleteIdToRegIdMap(registrations);
+    const teamMemberMap = this.buildAthleteIdToTeamMemberMap(registrations);
+    const matchesByPhaseId     = this.groupBy(matches,      'phaseId');
+    const gamesByMatchId       = this.groupBy(matchGames,   'matchId');
+    const standingsByPhaseId   = this.groupBy(standings,    'phaseId');
+    const manualRanksByPhaseId = this.groupBy(manualRanks,  'phaseId');
+    const phaseRegsByPhaseId   = this.groupBy(phaseRegs,    'phaseId');
+    const phasesByEcId         = this.groupBy(phases,        'eventCategoryId');
     const regsByEcId           = this.groupBy(registrations, 'eventCategoryId');
 
     return {
@@ -195,11 +244,16 @@ export class CompetitionPhaseReportService {
         filteredCategories,
         regsByEcId,
         regMap,
+        athleteIdToRegId,
+        teamMemberMap,
         phasesByEcId,
         matchesByPhaseId,
+        gamesByMatchId,
         standingsByPhaseId,
         manualRanksByPhaseId,
         phaseRegsByPhaseId,
+        individualScoresByParticipationId, 
+        shootingScoresByParticipationId,
       ),
     };
   }
@@ -226,11 +280,16 @@ export class CompetitionPhaseReportService {
     eventCategories: EventCategory[],
     regsByEcId: Record<number, Registration[]>,
     regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>,
     phasesByEcId: Record<number, Phase[]>,
     matchesByPhaseId: Record<number, Match[]>,
+    gamesByMatchId: Record<number, MatchGame[]>,
     standingsByPhaseId: Record<number, Standing[]>,
     manualRanksByPhaseId: Record<number, PhaseManualRank[]>,
     phaseRegsByPhaseId: Record<number, PhaseRegistration[]>,
+    individualScoresByParticipationId: Record<number, IndividualScore[]>,
+    shootingScoresByParticipationId: Record<number, ShootingScore[]>,
   ) {
     const sportMap: Record<string, any> = {};
 
@@ -268,12 +327,34 @@ export class CompetitionPhaseReportService {
       }
       sportMap[sportKey].totalParticipants = sportMap[sportKey].participants.length;
 
+      // ── Flags de detección calculados aquí donde sí tenemos sport/category ──
+      const sportName    = sport?.name?.toLowerCase()                 ?? '';
+      const categoryName = (ec.category as any)?.name?.toLowerCase() ?? '';
+      const resultType   = (ec.category as any)?.resultType          ?? null;
+
+      const isPoomsae =
+        // Taekwondo con resultType "score" → es Poomsae (no Kyorugui que es "combat")
+        (sportName.includes('taekwondo') && resultType === 'score') ||
+        // Wushu Taolu también usa score table
+        (sportName.includes('wushu') && resultType === 'score')     ||
+        // Fallback por nombre de categoría
+        categoryName.includes('poomsae') ||
+        categoryName.includes('formas')  ||
+        categoryName.includes('forma');
+
+      const isShooting =
+        sportName.includes('tiro deportivo') ||
+        sportName.includes('tiro al blanco') ||
+        sportName.includes('shooting');
+      // ─────────────────────────────────────────────────────────────────────
+
       sportMap[sportKey].categories.push({
         eventCategoryId:   ec.eventCategoryId,
         categoryId:        ec.categoryId,
         categoryName:      (ec.category as any)?.name     ?? null,
         gender:            (ec.category as any)?.gender   ?? null,
         ageGroup:          (ec.category as any)?.ageGroup ?? null,
+        resultType,
         status:            ec.status,
         totalParticipants: regsForCategory.length,
         participants: regsForCategory
@@ -283,10 +364,17 @@ export class CompetitionPhaseReportService {
           this.buildPhase(
             phase,
             matchesByPhaseId,
+            gamesByMatchId,
             standingsByPhaseId,
             manualRanksByPhaseId,
             phaseRegsByPhaseId,
             regMap,
+            athleteIdToRegId,
+            teamMemberMap,
+            individualScoresByParticipationId,
+            shootingScoresByParticipationId,
+            isPoomsae,
+            isShooting,
           ),
         ),
       });
@@ -295,13 +383,22 @@ export class CompetitionPhaseReportService {
     return Object.values(sportMap);
   }
 
+
+
   private buildPhase(
     phase: Phase,
     matchesByPhaseId: Record<number, Match[]>,
+    gamesByMatchId: Record<number, MatchGame[]>,
     standingsByPhaseId: Record<number, Standing[]>,
     manualRanksByPhaseId: Record<number, PhaseManualRank[]>,
     phaseRegsByPhaseId: Record<number, PhaseRegistration[]>,
     regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>, 
+    individualScoresByParticipationId: Record<number, IndividualScore[]>,
+    shootingScoresByParticipationId: Record<number, ShootingScore[]>,
+    isPoomsae: boolean,
+    isShooting: boolean,
   ) {
     const phaseMatches     = matchesByPhaseId[phase.phaseId]     ?? [];
     const phaseStandings   = standingsByPhaseId[phase.phaseId]   ?? [];
@@ -309,8 +406,6 @@ export class CompetitionPhaseReportService {
     const phaseRegs        = phaseRegsByPhaseId[phase.phaseId]   ?? [];
 
     // ── Participantes de la fase ──────────────────────────────────────────
-    // Fuente 1 (preferida): phase_registrations
-    // Fuente 2 (fallback):  participations en matches
     let participantIds: number[];
 
     if (phaseRegs.length > 0) {
@@ -329,17 +424,88 @@ export class CompetitionPhaseReportService {
       .map((rid) => regMap[rid] ?? { registrationId: rid })
       .sort((a, b) => (a.seedNumber ?? 999) - (b.seedNumber ?? 999));
 
-    // ── Podio: phase_manual_ranks tiene prioridad sobre standings ─────────
+    // ── Score Table (Poomsae / Tiro Deportivo) ────────────────────────────
+    let scoreTable: any[] | null = null;
+
+    if (isPoomsae || isShooting) {
+      const rows: any[] = [];
+
+      for (const match of phaseMatches) {
+        for (const participation of match.participations ?? []) {
+          const athlete =
+            participation.registrationId != null
+              ? regMap[participation.registrationId] ?? {
+                  registrationId: participation.registrationId,
+                }
+              : null;
+
+          if (isPoomsae) {
+            const scores = individualScoresByParticipationId[participation.participationId] ?? [];
+            const score  = scores[0] ?? null;
+            rows.push({
+              participationId: participation.participationId,
+              registrationId:  participation.registrationId ?? null,
+              athlete,
+              accuracy:     score?.accuracy     != null ? Number(score.accuracy)     : null,
+              presentation: score?.presentation != null ? Number(score.presentation) : null,
+              total:        score?.total        != null ? Number(score.total)        : null,
+              rank:         score?.rank         ?? null,
+            });
+          }
+
+          if (isShooting) {
+            const scores = shootingScoresByParticipationId[participation.participationId] ?? [];
+            const score  = scores[0] ?? null;
+            rows.push({
+              participationId: participation.participationId,
+              registrationId:  participation.registrationId ?? null,
+              athlete,
+              series: score?.series ?? [],
+              total:  score?.total  != null ? Number(score.total) : null,
+              dns:    score?.dns    ?? false,
+              rank:   score?.rank   ?? null,
+            });
+          }
+        }
+      }
+
+      // Ordenar por rank ascendente, nulls al final
+      scoreTable = rows.sort((a, b) => {
+        if (a.rank == null && b.rank == null) return 0;
+        if (a.rank == null) return 1;
+        if (b.rank == null) return -1;
+        return a.rank - b.rank;
+      });
+    }
+
+    // ── Podio ─────────────────────────────────────────────────────────────
     let podium: any[];
 
-    if (phaseManualRanks.length > 0) {
-      // Fuente: phase_manual_ranks → Judo, Karate, Taekwondo, bracket puro
+    if (isPoomsae || isShooting) {
+      // Para estas disciplinas el podio se deriva del scoreTable ya ordenado
+      podium = (scoreTable ?? [])
+        .filter((row) => row.rank != null)
+        .slice(0, 3)
+        .map((row) => ({
+          rank:    row.rank,
+          athlete: row.athlete,
+          ...(isPoomsae && {
+            accuracy:     row.accuracy,
+            presentation: row.presentation,
+            total:        row.total,
+          }),
+          ...(isShooting && {
+            series: row.series,
+            total:  row.total,
+            dns:    row.dns,
+          }),
+        }));
+    } else if (phaseManualRanks.length > 0) {
       podium = phaseManualRanks.map((mr) => ({
         rank:    mr.manualRankPosition,
         athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
       }));
     } else {
-      // Fuente: standings → Round-robin, grupos, natación, atletismo
       podium = phaseStandings
         .map((s) => ({
           rank:          s.manualRankPosition ?? s.rankPosition ?? null,
@@ -355,35 +521,37 @@ export class CompetitionPhaseReportService {
         .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
     }
 
-    // ── totalBrackets: contar series únicas + matches sin serie ───────────
-    const uniqueBracketCount = this.countUniqueBrackets(phaseMatches);
-
     return {
       phaseId:           phase.phaseId,
       phaseName:         phase.name         ?? null,
       phaseType:         phase.type         ?? null,
       displayOrder:      phase.displayOrder ?? null,
+      isPoomsae,
+      isShooting,
       totalParticipants: phaseParticipants.length,
-      totalBrackets:     uniqueBracketCount,
+      totalBrackets:     this.countUniqueBrackets(phaseMatches),
       participants:      phaseParticipants,
-      brackets:          this.buildBrackets(phaseMatches, regMap),
+      brackets: this.buildBrackets(phaseMatches, gamesByMatchId, regMap, athleteIdToRegId, teamMemberMap),
+      scoreTable,   
       podium,
     };
   }
+
 
   // ─────────────────────────────────────────────────────────────────────────
   // BRACKET BUILDERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Decide si un match es parte de una serie (Taekwondo, Tenis, etc.)
-   * o es un match individual (Judo, Karate, etc.) y delega al builder correcto.
-   */
-  private buildBrackets(matches: Match[], regMap: Record<number, any>): any[] {
+  private buildBrackets(
+    matches: Match[],
+    gamesByMatchId: Record<number, MatchGame[]>,
+    regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>,   
+  ): any[] {
     const standalone = matches.filter((m) => !m.seriesId);
     const inSeries   = matches.filter((m) =>  m.seriesId);
 
-    // Agrupar por seriesId
     const seriesMap: Record<string, Match[]> = {};
     for (const m of inSeries) {
       if (!seriesMap[m.seriesId]) seriesMap[m.seriesId] = [];
@@ -391,23 +559,42 @@ export class CompetitionPhaseReportService {
     }
 
     const result: any[] = [
-      // Matches individuales (Judo, Karate, Poomsae, etc.)
-      ...standalone.map((m) => this.buildBracket(m, regMap)),
-      // Series agrupadas (Taekwondo por rondas, Tenis por sets, etc.)
+      ...standalone.map((m) =>
+        this.buildBracket(m, gamesByMatchId[m.matchId] ?? [], regMap, athleteIdToRegId, teamMemberMap),
+      ),
       ...Object.entries(seriesMap).map(([seriesId, seriesMatches]) =>
-        this.buildSeriesBracket(seriesId, seriesMatches, regMap),
+        this.buildSeriesBracket(seriesId, seriesMatches, gamesByMatchId, regMap, athleteIdToRegId, teamMemberMap),
       ),
     ];
 
-    // Reordenar globalmente por matchNumber
     return result.sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0));
   }
 
   /**
-   * Match individual — sin serie.
-   * Usado por: Judo, Karate, Poomsae, Lucha, Wushu, etc.
+   * Match individual (con o sin rondas en match_games).
+   * Usado por: Taekwondo, Judo, Karate, Poomsae, Lucha, etc.
+   * Si tiene MatchGames → rounds[] aparece con el detalle por ronda.
+   * Si no tiene MatchGames → rounds: null (deportes de score único).
    */
-  private buildBracket(match: Match, regMap: Record<number, any>) {
+  private buildBracket(
+    match: Match,
+    games: MatchGame[],
+    regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>,  
+  ) {
+    const p1Score = match.participant1Score != null
+      ? Number(match.participant1Score)
+      : games.length > 0
+        ? games.reduce((sum, g) => sum + (g.score1 ?? 0), 0)
+        : null;
+
+    const p2Score = match.participant2Score != null
+      ? Number(match.participant2Score)
+      : games.length > 0
+        ? games.reduce((sum, g) => sum + (g.score2 ?? 0), 0)
+        : null;
+
     return {
       bracketId:      match.matchId,
       isSeries:       false,
@@ -429,12 +616,12 @@ export class CompetitionPhaseReportService {
       })),
       scores: {
         participant1: {
-          score:        match.participant1Score        != null ? Number(match.participant1Score)        : null,
+          score:        p1Score,
           accuracy:     match.participant1Accuracy     != null ? Number(match.participant1Accuracy)     : null,
           presentation: match.participant1Presentation != null ? Number(match.participant1Presentation) : null,
         },
         participant2: {
-          score:        match.participant2Score        != null ? Number(match.participant2Score)        : null,
+          score:        p2Score,
           accuracy:     match.participant2Accuracy     != null ? Number(match.participant2Accuracy)     : null,
           presentation: match.participant2Presentation != null ? Number(match.participant2Presentation) : null,
         },
@@ -442,25 +629,74 @@ export class CompetitionPhaseReportService {
       winner: match.winnerRegistrationId
         ? regMap[match.winnerRegistrationId] ?? { registrationId: match.winnerRegistrationId }
         : null,
+      rounds: games.length > 0
+        ? games.map((g) => this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap)) 
+        : null,
     };
   }
 
+
+
+  private buildAthleteIdToRegIdMap(
+    registrations: Registration[],
+  ): Record<number, number> {
+    const map: Record<number, number> = {};
+    for (const reg of registrations) {
+      const athleteId = (reg.athlete as any)?.athleteId;
+      if (athleteId != null) {
+        map[athleteId] = reg.registrationId;
+      }
+    }
+    return map;
+  }
+
+  private buildAthleteIdToTeamMemberMap(
+    registrations: Registration[],
+  ): Record<number, any> {
+    const map: Record<number, any> = {};
+
+    for (const reg of registrations) {
+      if (!reg.team) continue;
+      const members = (reg.team as any).members ?? [];
+
+      for (const member of members) {
+        if (member.athleteId == null) continue;
+        map[member.athleteId] = {
+          athleteId:      member.athleteId,
+          tmId:           member.tmId,
+          rol:            member.rol              ?? null,
+          name:           member.athlete?.name    ?? null,
+          photoUrl:       member.athlete?.photoUrl ?? null,
+          teamId:         reg.teamId,
+          teamName:       (reg.team as any).name  ?? null,
+          registrationId: reg.registrationId,
+        };
+      }
+    }
+
+    return map;
+  }
+
+
+
   /**
-   * Serie agrupada — múltiples matches bajo el mismo seriesId.
-   * Usado por: Taekwondo (rondas), Tenis (sets), mejor-de-3, etc.
+   * Serie de matches agrupados por seriesId.
+   * Usado por: deportes con "mejor de N" donde cada match es una fila separada.
+   * Cada match de la serie puede tener sus propios match_games internos.
    */
   private buildSeriesBracket(
     seriesId: string,
     matches: Match[],
+    gamesByMatchId: Record<number, MatchGame[]>,
     regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>,   
   ) {
-    // Ordenar por número de match dentro de la serie
     const sorted = [...matches].sort(
       (a, b) => (a.seriesMatchNumber ?? 0) - (b.seriesMatchNumber ?? 0),
     );
     const first = sorted[0];
 
-    // Participantes tomados del primer match de la serie
     const participants = (first.participations ?? []).map((p) => ({
       participationId: p.participationId,
       corner:  p.corner ?? null,
@@ -470,14 +706,11 @@ export class CompetitionPhaseReportService {
           : null,
     }));
 
-    // Ganador de la serie completa
     const seriesWinnerId = first.seriesWinnerRegistrationId ?? null;
-
-    // Conteo de rondas/sets ganados por cada participante
-    const seriesScore = this.resolveSeriesScore(sorted, first.participations ?? []);
+    const seriesScore    = this.resolveSeriesScore(sorted, first.participations ?? []);
 
     return {
-      bracketId:      null,           // La serie no tiene un ID único propio
+      bracketId:      null,
       isSeries:       true,
       seriesId,
       matchNumber:    first.matchNumber    ?? null,
@@ -486,11 +719,7 @@ export class CompetitionPhaseReportService {
       scheduledTime:  first.scheduledTime  ?? null,
       platformNumber: first.platformNumber ?? null,
       participants,
-
-      // Marcador global de la serie (ej: "2-1" en un mejor de 3)
       seriesScore,
-
-      // Cada ronda o set individual
       rounds: sorted.map((m) => ({
         roundNumber:    m.seriesMatchNumber ?? null,
         matchId:        m.matchId,
@@ -513,22 +742,64 @@ export class CompetitionPhaseReportService {
         winner: m.winnerRegistrationId
           ? regMap[m.winnerRegistrationId] ?? { registrationId: m.winnerRegistrationId }
           : null,
+        games: (gamesByMatchId[m.matchId] ?? []).length > 0
+          ? (gamesByMatchId[m.matchId] ?? []).map((g) => this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap))  
+          : null,
       })),
-
-      // Ganador de la serie completa
       seriesWinner: seriesWinnerId
         ? regMap[seriesWinnerId] ?? { registrationId: seriesWinnerId }
         : null,
     };
   }
 
+
+  /**
+   * Construye una ronda/set individual desde MatchGame.
+   * El winnerId en MatchGame almacena registrationId (ver taekwondo-kyorugui.service.ts).
+   */
+  private buildRound(
+    game: MatchGame,
+    regMap: Record<number, any>,
+    athleteIdToRegId: Record<number, number>,
+    teamMemberMap: Record<number, any>,   
+  ) {
+    const resolveParticipant = (id: number | null) => {
+      if (id == null) return null;
+      // 1. Directo en regMap (registrationId)
+      if (regMap[id]) return regMap[id];
+      // 2. athleteId individual → registrationId
+      const regId = athleteIdToRegId[id];
+      if (regId && regMap[regId]) return regMap[regId];
+      // 3. athleteId de miembro de equipo → info del miembro  
+      if (teamMemberMap[id]) return teamMemberMap[id];
+      return { athleteId: id };
+    };
+
+    return {
+      roundNumber: game.gameNumber,
+      status:      game.status,
+      scores: {
+        participant1: { score: game.score1 ?? null },
+        participant2: { score: game.score2 ?? null },
+      },
+      sets: game.sets
+        ? game.sets.map((s) => ({
+            setNumber:    s.setNumber,
+            player1Score: s.player1Score,
+            player2Score: s.player2Score,
+            winner:       resolveParticipant(s.winnerId ?? null),
+          }))
+        : null,
+      winner: resolveParticipant(game.winnerId),
+    };
+  }
+
+
+
   // ─────────────────────────────────────────────────────────────────────────
   // SERIES HELPERS
   // ─────────────────────────────────────────────────────────────────────────
 
-  /**
-   * Resuelve el estado global de una serie basándose en sus matches.
-   */
   private resolveSeriesStatus(matches: Match[]): MatchStatus {
     if (matches.every((m) => m.status === MatchStatus.FINALIZADO))
       return MatchStatus.FINALIZADO;
@@ -537,17 +808,11 @@ export class CompetitionPhaseReportService {
     return MatchStatus.PROGRAMADO;
   }
 
-  /**
-   * Cuenta cuántas rondas/sets ha ganado cada participante en la serie.
-   * Retorna { participant1Wins, participant2Wins } usando el orden de
-   * participations del primer match como referencia.
-   */
   private resolveSeriesScore(
     matches: Match[],
     firstParticipations: { registrationId?: number | null }[],
   ): { participant1Wins: number; participant2Wins: number } {
     const [p1, p2] = firstParticipations.map((p) => p.registrationId ?? null);
-
     let p1Wins = 0;
     let p2Wins = 0;
 
@@ -560,9 +825,6 @@ export class CompetitionPhaseReportService {
     return { participant1Wins: p1Wins, participant2Wins: p2Wins };
   }
 
-  /**
-   * Cuenta brackets únicos: series cuentan como 1, matches sueltos cuentan individualmente.
-   */
   private countUniqueBrackets(matches: Match[]): number {
     const seriesIds = new Set(
       matches.filter((m) => m.seriesId).map((m) => m.seriesId),
@@ -612,10 +874,19 @@ export class CompetitionPhaseReportService {
           institution: null,
         };
       } else if (reg.team) {
+        const members = ((reg.team as any).members ?? []).map((m: any) => ({
+          tmId:      m.tmId,
+          athleteId: m.athleteId,
+          rol:       m.rol              ?? null,
+          name:      m.athlete?.name    ?? null,
+          photoUrl:  m.athlete?.photoUrl ?? null,
+        }));
+
         athleteInfo = {
           source:   'team',
           teamId:   reg.teamId,
           teamName: (reg.team as any).name ?? null,
+          members,   
         };
       }
 
@@ -645,8 +916,8 @@ export class CompetitionPhaseReportService {
 
   private buildEmptyReport(event: EventSismasterDto) {
     return {
-      meta:  { generatedAt: new Date().toISOString(), version: '2.0', source: 'competition-system' },
-      event: this.buildEventInfo(event),
+      meta:   { generatedAt: new Date().toISOString(), version: '2.0', source: 'competition-system' },
+      event:  this.buildEventInfo(event),
       sports: [],
     };
   }

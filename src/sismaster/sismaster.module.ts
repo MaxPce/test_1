@@ -23,9 +23,10 @@ import { Match } from '../competitions/entities/match.entity';
 import { Participation } from '../competitions/entities/participation.entity';
 import { Standing } from '../competitions/entities/standing.entity';
 import { PhaseManualRank } from '../competitions/entities/phase-manual-rank.entity';
+import { MatchGame } from '../competitions/entities/match-game.entity';
 
 import { CompetitionPhaseReportService } from './competition-phase-report.service';
-import { PhaseRegistration } from 'src/competitions/entities';
+import { IndividualScore, PhaseRegistration, ShootingScore } from 'src/competitions/entities';
 
 @Module({
   imports: [
@@ -36,7 +37,7 @@ import { PhaseRegistration } from 'src/competitions/entities';
     ),
     TypeOrmModule.forFeature([
       EventCategory, Registration,
-      Phase, Match, Participation, Standing, PhaseManualRank,PhaseRegistration,
+      Phase, Match, Participation, Standing, PhaseManualRank,PhaseRegistration,MatchGame, ShootingScore,IndividualScore
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
