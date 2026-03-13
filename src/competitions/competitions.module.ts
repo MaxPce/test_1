@@ -25,6 +25,9 @@ import { WeightliftingService } from './weightlifting.service';
 import { WeightliftingAttempt } from './entities/weightlifting-attempt.entity';
 import { ClimbingController } from './climbing.controller';
 import { ClimbingService } from './climbing.service';
+import { AthleticsController } from './athletics.controller';
+import { AthleticsService } from './athletics.service';
+import { AthleticsResult } from './entities/athletics-result.entity';
 
 import {
   Match,
@@ -53,6 +56,7 @@ import {
       PhaseRegistration,
       ShootingScore,
       WeightliftingAttempt,
+      AthleticsResult
     ]),
   ],
   controllers: [
@@ -66,6 +70,7 @@ import {
     ShootingController,
     WeightliftingController,
     ClimbingController,
+    AthleticsController,
   ],
   providers: [
     CompetitionsService,
@@ -80,6 +85,7 @@ import {
     ShootingService,
     WeightliftingService,
     ClimbingService,
+    AthleticsService,
   ],
   exports: [
     CompetitionsService,
@@ -89,6 +95,7 @@ import {
     ShootingService,
     WeightliftingService,
     ClimbingService,
+    AthleticsService,
   ],
 })
 export class CompetitionsModule {}

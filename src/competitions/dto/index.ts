@@ -13,3 +13,5 @@ export * from './update-kyorugui-round.dto';
 export * from './set-walkover.dto';
 export * from './update-shooting-score.dto';
 export * from './update-climbing-score.dto';
+export * from './create-athletics-result.dto';
+export * from './update-athletics-result.dto';
