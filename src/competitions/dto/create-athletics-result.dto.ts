@@ -27,14 +27,13 @@ export class CreateAthleticsResultDto {
   lane?: number;
 
   @IsOptional()
-  @IsString()
-  section?: string;
+  @IsInt()
+  athleticsSectionId?: number | null;
 
   // ── Saltos / lanzamientos ─────────────────────────
   @IsOptional()
   @IsInt()
   @Min(1)
-  @Max(6)
   attemptNumber?: number;
 
   @IsOptional()

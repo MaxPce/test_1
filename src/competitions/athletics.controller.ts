@@ -18,58 +18,82 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import {
+  CreateAthleticsSectionDto,
+  UpdateAthleticsSectionDto,
+} from './dto/athletics-section.dto';
+import {
+  AssignSectionEntriesDto,
+  UpsertSectionEntryDto,
+} from './dto/athletics-section-entry.dto';
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AthleticsController {
   constructor(private readonly athleticsService: AthleticsService) {}
 
+  // ==================== ATHLETICS RESULTS ====================
+
   // POST /competitions/athletics
+  // ==================== ATHLETICS RESULTS ====================
+
   @Post('athletics')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   create(@Body() dto: CreateAthleticsResultDto) {
     return this.athleticsService.create(dto);
   }
 
-  // GET /competitions/phases/:phaseId/athletics-table
-  @Get('phases/:phaseId/athletics-table')
+  // ── Secciones — estáticas PRIMERO ────────────────────────────────────────────
+
+  @Get('athletics/sections')
   @Public()
-  findByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.athleticsService.findByPhase(phaseId);
+  getSectionsByPhase(@Query('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.getSectionsByPhase(phaseId);
   }
 
-  // GET /competitions/phases/:phaseId/athletics-ranking/track?section=A
-  @Get('phases/:phaseId/athletics-ranking/track')
-  @Public()
-  getRankingTrack(
-    @Param('phaseId', ParseIntPipe) phaseId: number,
-    @Query('section') section?: string,
+  @Post('athletics/sections')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  createSection(@Body() dto: CreateAthleticsSectionDto) {
+    return this.athleticsService.createSection(dto);
+  }
+
+  @Post('athletics/sections/assign')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  assignSectionEntries(@Body() dto: AssignSectionEntriesDto) {
+    return this.athleticsService.assignSectionEntries(dto);
+  }
+
+  @Patch('athletics/sections/entry')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  upsertSectionEntry(@Body() dto: UpsertSectionEntryDto) {
+    return this.athleticsService.upsertSectionEntry(dto);
+  }
+
+  // ── Secciones — dinámicas DESPUÉS ────────────────────────────────────────────
+
+  @Patch('athletics/sections/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  updateSection(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateAthleticsSectionDto,
   ) {
-    return this.athleticsService.getRankingTrack(phaseId, section);
+    return this.athleticsService.updateSection(id, dto);
   }
 
-  // GET /competitions/phases/:phaseId/athletics-ranking/field
-  @Get('phases/:phaseId/athletics-ranking/field')
-  @Public()
-  getRankingField(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.athleticsService.getRankingField(phaseId);
+  @Delete('athletics/sections/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  deleteSection(@Param('id', ParseIntPipe) id: number) {
+    return this.athleticsService.deleteSection(id);
   }
 
-  // GET /competitions/phase-registrations/:id/athletics
-  @Get('phase-registrations/:id/athletics')
-  @Public()
-  findByPhaseRegistration(@Param('id', ParseIntPipe) id: number) {
-    return this.athleticsService.findByPhaseRegistration(id);
-  }
+  // ── Resultados individuales ───────────────────────────────────────────────────
 
-  // GET /competitions/athletics/:id
   @Get('athletics/:id')
   @Public()
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.findOne(id);
   }
 
-  // PATCH /competitions/athletics/:id
   @Patch('athletics/:id')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   update(
@@ -79,25 +103,60 @@ export class AthleticsController {
     return this.athleticsService.update(id, dto);
   }
 
-  // DELETE /competitions/athletics/:id
   @Delete('athletics/:id')
   @Roles(UserRole.ADMIN)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.remove(id);
   }
 
-  // DELETE /competitions/phase-registrations/:id/athletics/reset
+  // ==================== PHASES (athletics) ====================
+
+  // GET /competitions/phases/:phaseId/athletics-field-table
+  @Get('phases/:phaseId/athletics-field-table')
+  @Public()
+  getFullFieldTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.findFullFieldTable(phaseId);
+  }
+
+  @Get('phases/:phaseId/athletics-table')
+  @Public()
+  findByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.findByPhase(phaseId);
+  }
+
+  @Get('phases/:phaseId/athletics-track-table')
+  @Public()
+  getFullTrackTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.findFullTrackTable(phaseId);
+  }
+
+  @Get('phases/:phaseId/athletics-ranking/track')
+  @Public()
+  getRankingTrack(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Query('sectionId', new ParseIntPipe({ optional: true }))
+    sectionId?: number,
+  ) {
+    return this.athleticsService.getRankingTrack(phaseId, sectionId);
+  }
+
+  @Get('phases/:phaseId/athletics-ranking/field')
+  @Public()
+  getRankingField(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.athleticsService.getRankingField(phaseId);
+  }
+
+  // ==================== PHASE REGISTRATIONS ====================
+
+  @Get('phase-registrations/:id/athletics')
+  @Public()
+  findByPhaseRegistration(@Param('id', ParseIntPipe) id: number) {
+    return this.athleticsService.findByPhaseRegistration(id);
+  }
+
   @Delete('phase-registrations/:id/athletics/reset')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   reset(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.resetPhaseRegistration(id);
   }
-
-  // GET /competitions/phases/:phaseId/athletics-track-table
-    @Get('phases/:phaseId/athletics-track-table')
-    @Public()
-    getFullTrackTable(@Param('phaseId', ParseIntPipe) phaseId: number) {
-    return this.athleticsService.findFullTrackTable(phaseId);
-    }
-
 }

@@ -9,10 +9,11 @@ import {
   Index,
 } from 'typeorm';
 import { PhaseRegistration } from './phase-registration.entity';
+import { AthleticsSection } from './athletics-section.entity';
 
 export enum HeightResult {
-  O    = 'O',
-  X    = 'X',
+  O = 'O',
+  X = 'X',
   SKIP = '-',
 }
 
@@ -32,9 +33,6 @@ export class AthleticsResult {
 
   @Column({ name: 'lane', type: 'tinyint', nullable: true })
   lane: number | null;
-
-  @Column({ name: 'section', type: 'varchar', length: 20, nullable: true })
-  section: string | null;
 
   // ── Saltos de distancia y lanzamientos ────────────
   @Column({ name: 'attempt_number', type: 'tinyint', nullable: true })
@@ -80,7 +78,12 @@ export class AthleticsResult {
   heightResult: HeightResult | null;
 
   // ── Heptatlón / Decatlón ──────────────────────────
-  @Column({ name: 'combined_event', type: 'varchar', length: 50, nullable: true })
+  @Column({
+    name: 'combined_event',
+    type: 'varchar',
+    length: 50,
+    nullable: true,
+  })
   combinedEvent: string | null;
 
   @Column({

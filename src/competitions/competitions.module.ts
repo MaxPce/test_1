@@ -40,6 +40,8 @@ import {
   PhaseManualRank,
   PhaseRegistration,
 } from './entities';
+import { AthleticsSection } from './entities/athletics-section.entity';
+import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity';
 
 @Module({
   imports: [
@@ -56,7 +58,9 @@ import {
       PhaseRegistration,
       ShootingScore,
       WeightliftingAttempt,
-      AthleticsResult
+      AthleticsResult,
+      AthleticsSection,
+      AthleticsSectionEntry,
     ]),
   ],
   controllers: [
