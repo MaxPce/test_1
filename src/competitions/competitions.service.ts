@@ -79,10 +79,8 @@ export class CompetitionsService {
       // ── incluir Taolu además de Poomsae ──────────────────────────
       const isScoreTablePhase =
         phaseWithRelations &&
-        (
-          this.isWushuTaoluPhase(phaseWithRelations) ||
-          this.isWeightliftingPhase(phaseWithRelations) ||
-          this.isClimbingPhase(phaseWithRelations));
+        (this.isWushuTaoluPhase(phaseWithRelations) ||
+          this.isWeightliftingPhase(phaseWithRelations));
 
       if (isScoreTablePhase && phaseWithRelations.type === PhaseType.GRUPO) {
         await this.createPoomsaeParticipations(phaseWithRelations, queryRunner);
@@ -594,7 +592,7 @@ export class CompetitionsService {
         }
 
         await queryRunner.commitTransaction();
-        return []; 
+        return [];
       }
 
       // 1. Crear standings (igual que antes)

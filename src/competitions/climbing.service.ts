@@ -4,7 +4,10 @@ import { Repository } from 'typeorm';
 import { IndividualScore } from './entities/individual-score.entity';
 import { Participation } from './entities/participation.entity';
 import { Phase } from './entities/phase.entity';
+import { Match } from './entities/match.entity';
+import { PhaseRegistration } from './entities/phase-registration.entity';
 import { UpdateClimbingScoreDto } from './dto/update-climbing-score.dto';
+import { MatchStatus } from '../common/enums';
 
 @Injectable()
 export class ClimbingService {
@@ -15,6 +18,12 @@ export class ClimbingService {
     private readonly participationRepository: Repository<Participation>,
     @InjectRepository(Phase)
     private readonly phaseRepository: Repository<Phase>,
+    // ▼▼▼ NUEVOS REPOSITORIOS ▼▼▼
+    @InjectRepository(Match)
+    private readonly matchRepository: Repository<Match>,
+    @InjectRepository(PhaseRegistration)
+    private readonly phaseRegistrationRepository: Repository<PhaseRegistration>,
+    // ▲▲▲ FIN NUEVOS REPOSITORIOS ▲▲▲
   ) {}
 
   async getPhaseScores(phaseId: number) {
@@ -98,5 +107,78 @@ export class ClimbingService {
     if (dto.rank !== undefined) (score as any).rank = dto.rank;
 
     return this.individualScoreRepository.save(score);
+  }
+
+  // ▼▼▼ MÉTODOS NUEVOS ▼▼▼
+
+  /**
+   * Asigna un atleta a la fase de escalada.
+   * 1. Crea PhaseRegistration (idempotente)
+   * 2. Busca o crea el match grupal único de la fase
+   * 3. Crea Participation en ese match (idempotente)
+   */
+  async assignParticipant(phaseId: number, registrationId: number) {
+    // 1. PhaseRegistration
+    const existingPR = await this.phaseRegistrationRepository.findOne({
+      where: { phaseId, registrationId },
+    });
+    if (!existingPR) {
+      await this.phaseRegistrationRepository.save(
+        this.phaseRegistrationRepository.create({ phaseId, registrationId }),
+      );
+    }
+
+    // 2. Match grupal único — buscarlo o crearlo
+    let match = await this.matchRepository.findOne({
+      where: { phaseId },
+    });
+    if (!match) {
+      match = await this.matchRepository.save(
+        this.matchRepository.create({
+          phaseId,
+          matchNumber: 1,
+          round: 'Final',
+          status: MatchStatus.EN_CURSO,
+        }),
+      );
+    }
+
+    // 3. Participation
+    const existingP = await this.participationRepository.findOne({
+      where: { matchId: match.matchId, registrationId },
+    });
+    if (!existingP) {
+      await this.participationRepository.save(
+        this.participationRepository.create({
+          matchId: match.matchId,
+          registrationId,
+        }),
+      );
+    }
+
+    return { ok: true, phaseId, registrationId, matchId: match.matchId };
+  }
+
+  /**
+   * Quita un atleta de la fase de escalada.
+   * Elimina PhaseRegistration y Participation del match grupal.
+   */
+  async removeParticipant(phaseId: number, registrationId: number) {
+    // 1. Quitar PhaseRegistration
+    const pr = await this.phaseRegistrationRepository.findOne({
+      where: { phaseId, registrationId },
+    });
+    if (pr) await this.phaseRegistrationRepository.remove(pr);
+
+    // 2. Quitar Participation del match grupal
+    const match = await this.matchRepository.findOne({ where: { phaseId } });
+    if (match) {
+      const p = await this.participationRepository.findOne({
+        where: { matchId: match.matchId, registrationId },
+      });
+      if (p) await this.participationRepository.remove(p);
+    }
+
+    return { ok: true };
   }
 }

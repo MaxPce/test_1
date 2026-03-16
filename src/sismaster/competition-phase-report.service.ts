@@ -11,6 +11,9 @@ import { PhaseRegistration } from '../competitions/entities/phase-registration.e
 import { IndividualScore } from '../competitions/entities/individual-score.entity';
 import { ShootingScore } from '../competitions/entities/shooting-score.entity';
 import { MatchGame } from '../competitions/entities/match-game.entity';
+import { AthleticsSection } from '../competitions/entities/athletics-section.entity';
+import { AthleticsSectionEntry } from '../competitions/entities/athletics-section-entry.entity';
+import { AthleticsResult } from '../competitions/entities/athletics-result.entity';
 import { SismasterService } from './sismaster.service';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { MatchStatus } from '../common/enums';
@@ -20,6 +23,12 @@ interface PhaseReportFilters {
   eventCategoryId?: number;
   phaseId?: number;
 }
+const ATHLETICS_PHASE_TYPES = [
+  'combined_pista',
+  'combined_distancia',
+  'combined_altura',
+] as const;
+type AthleticsPhaseType = (typeof ATHLETICS_PHASE_TYPES)[number];
 
 @Injectable()
 export class CompetitionPhaseReportService {
@@ -53,6 +62,15 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(ShootingScore)
     private readonly shootingScoreRepo: Repository<ShootingScore>,
+
+    @InjectRepository(AthleticsSection)
+    private readonly athleticsSectionRepo: Repository<AthleticsSection>,
+
+    @InjectRepository(AthleticsSectionEntry)
+    private readonly athleticsSectionEntryRepo: Repository<AthleticsSectionEntry>,
+
+    @InjectRepository(AthleticsResult)
+    private readonly athleticsResultRepo: Repository<AthleticsResult>,
 
     private readonly sismasterService: SismasterService,
   ) {}
@@ -99,8 +117,8 @@ export class CompetitionPhaseReportService {
     // 3. Registraciones
     const registrations = await this.registrationRepo
       .createQueryBuilder('r')
-      .leftJoinAndSelect('r.athlete', 'athlete')                   
-      .leftJoinAndSelect('r.team', 'team')                         
+      .leftJoinAndSelect('r.athlete', 'athlete')
+      .leftJoinAndSelect('r.team', 'team')
       .leftJoinAndSelect('team.members', 'teamMembers')
       .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .where('r.event_category_id IN (:...ids)', { ids: eventCategoryIds })
@@ -134,7 +152,9 @@ export class CompetitionPhaseReportService {
     const personMap: Record<number, any> = {};
     externalIds.forEach((id, i) => {
       if (settledPersons[i].status === 'fulfilled')
-        personMap[id] = (settledPersons[i] as PromiseFulfilledResult<any>).value;
+        personMap[id] = (
+          settledPersons[i] as PromiseFulfilledResult<any>
+        ).value;
     });
 
     const institutionMap: Record<number, any> = {};
@@ -150,10 +170,12 @@ export class CompetitionPhaseReportService {
       .orderBy('p.display_order', 'ASC');
 
     if (filters.phaseId) {
-      phaseQuery.andWhere('p.phase_id = :phaseId', { phaseId: filters.phaseId });
+      phaseQuery.andWhere('p.phase_id = :phaseId', {
+        phaseId: filters.phaseId,
+      });
     }
 
-    const phases   = await phaseQuery.getMany();
+    const phases = await phaseQuery.getMany();
     const phaseIds = phases.map((p) => p.phaseId);
 
     // 6. Matches con participaciones
@@ -202,8 +224,8 @@ export class CompetitionPhaseReportService {
       : [[], [] as PhaseManualRank[], [] as PhaseRegistration[]];
     // 9. Scores de Poomsae y Tiro Deportivo
     // Obtener todas las participaciones de los matches de las fases
-    const allParticipationIds = matches.flatMap(
-      (m) => (m.participations ?? []).map((p) => p.participationId)
+    const allParticipationIds = matches.flatMap((m) =>
+      (m.participations ?? []).map((p) => p.participationId),
     );
 
     const [individualScores, shootingScores] = allParticipationIds.length
@@ -217,21 +239,77 @@ export class CompetitionPhaseReportService {
         ])
       : [[], []];
 
-    const individualScoresByParticipationId = this.groupBy(individualScores, 'participationId');
-    const shootingScoresByParticipationId   = this.groupBy(shootingScores,   'participationId');
-
+    const individualScoresByParticipationId = this.groupBy(
+      individualScores,
+      'participationId',
+    );
+    const shootingScoresByParticipationId = this.groupBy(
+      shootingScores,
+      'participationId',
+    );
 
     // ── Mapas de búsqueda ────────────────────────────────────────────────────
-    const regMap               = this.buildRegistrationMap(registrations, personMap, institutionMap);
+    const regMap = this.buildRegistrationMap(
+      registrations,
+      personMap,
+      institutionMap,
+    );
     const athleteIdToRegId = this.buildAthleteIdToRegIdMap(registrations);
     const teamMemberMap = this.buildAthleteIdToTeamMemberMap(registrations);
-    const matchesByPhaseId     = this.groupBy(matches,      'phaseId');
-    const gamesByMatchId       = this.groupBy(matchGames,   'matchId');
-    const standingsByPhaseId   = this.groupBy(standings,    'phaseId');
-    const manualRanksByPhaseId = this.groupBy(manualRanks,  'phaseId');
-    const phaseRegsByPhaseId   = this.groupBy(phaseRegs,    'phaseId');
-    const phasesByEcId         = this.groupBy(phases,        'eventCategoryId');
-    const regsByEcId           = this.groupBy(registrations, 'eventCategoryId');
+    const matchesByPhaseId = this.groupBy(matches, 'phaseId');
+    const gamesByMatchId = this.groupBy(matchGames, 'matchId');
+    const standingsByPhaseId = this.groupBy(standings, 'phaseId');
+    const manualRanksByPhaseId = this.groupBy(manualRanks, 'phaseId');
+    const phaseRegsByPhaseId = this.groupBy(phaseRegs, 'phaseId');
+    const phasesByEcId = this.groupBy(phases, 'eventCategoryId');
+    const regsByEcId = this.groupBy(registrations, 'eventCategoryId');
+
+    // ── Atletismo: secciones, entries y resultados ──────────────────────────
+    const athleticsPhaseIds = phases
+      .filter((p) =>
+        ATHLETICS_PHASE_TYPES.includes(p.type as AthleticsPhaseType),
+      )
+      .map((p) => p.phaseId);
+
+    const [athleticsSections, athleticsResults] = athleticsPhaseIds.length
+      ? await Promise.all([
+          this.athleticsSectionRepo.find({
+            where: athleticsPhaseIds.map((id) => ({ phaseId: id })),
+            order: { sortOrder: 'ASC', createdAt: 'ASC' },
+          }),
+          this.athleticsResultRepo
+            .createQueryBuilder('ar')
+            .innerJoin('ar.phaseRegistration', 'pr')
+            .where('pr.phase_id IN (:...ids)', { ids: athleticsPhaseIds })
+            .orderBy('ar.phaseRegistrationId', 'ASC')
+            .addOrderBy('ar.attemptNumber', 'ASC')
+            .getMany(),
+        ])
+      : [[], []];
+
+    const athleticsSectionIds = athleticsSections.map(
+      (s) => s.athleticsSectionId,
+    );
+
+    const athleticsEntries = athleticsSectionIds.length
+      ? await this.athleticsSectionEntryRepo.find({
+          where: athleticsSectionIds.map((id) => ({ athleticsSectionId: id })),
+        })
+      : [];
+
+    // Mapas para lookup rápido
+    const athleticsSectionsByPhaseId = this.groupBy(
+      athleticsSections,
+      'phaseId',
+    );
+    const athleticsEntriesBySectionId = this.groupBy(
+      athleticsEntries,
+      'athleticsSectionId',
+    );
+    const athleticsResultsByPrId = this.groupBy(
+      athleticsResults,
+      'phaseRegistrationId',
+    );
 
     return {
       meta: {
@@ -239,7 +317,7 @@ export class CompetitionPhaseReportService {
         version: '2.0',
         source: 'competition-system',
       },
-      event:  this.buildEventInfo(sismasterEvent),
+      event: this.buildEventInfo(sismasterEvent),
       sports: this.buildSports(
         filteredCategories,
         regsByEcId,
@@ -252,8 +330,11 @@ export class CompetitionPhaseReportService {
         standingsByPhaseId,
         manualRanksByPhaseId,
         phaseRegsByPhaseId,
-        individualScoresByParticipationId, 
+        individualScoresByParticipationId,
         shootingScoresByParticipationId,
+        athleticsSectionsByPhaseId,
+        athleticsEntriesBySectionId,
+        athleticsResultsByPrId,
       ),
     };
   }
@@ -265,14 +346,14 @@ export class CompetitionPhaseReportService {
   private buildEventInfo(event: EventSismasterDto) {
     return {
       sismasterEventId: event.idevent,
-      name:      event.name,
+      name: event.name,
       startDate: event.startdate,
-      endDate:   event.enddate,
-      place:     event.place    ?? null,
-      logo:      event.logo     ?? null,
-      modality:  event.modality ?? null,
-      tipo:      event.tipo     ?? null,
-      level:     event.level    ?? null,
+      endDate: event.enddate,
+      place: event.place ?? null,
+      logo: event.logo ?? null,
+      modality: event.modality ?? null,
+      tipo: event.tipo ?? null,
+      level: event.level ?? null,
     };
   }
 
@@ -290,26 +371,29 @@ export class CompetitionPhaseReportService {
     phaseRegsByPhaseId: Record<number, PhaseRegistration[]>,
     individualScoresByParticipationId: Record<number, IndividualScore[]>,
     shootingScoresByParticipationId: Record<number, ShootingScore[]>,
+    athleticsSectionsByPhaseId: Record<number, AthleticsSection[]>,
+    athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
+    athleticsResultsByPrId: Record<number, AthleticsResult[]>,
   ) {
     const sportMap: Record<string, any> = {};
 
     for (const ec of eventCategories) {
-      const sport    = (ec.category as any)?.sport;
+      const sport = (ec.category as any)?.sport;
       const sportKey = String(sport?.sportId ?? 'sin_deporte');
 
       if (!sportMap[sportKey]) {
         sportMap[sportKey] = {
-          sportId:           sport?.sportId    ?? null,
-          sportName:         sport?.name       ?? 'Sin deporte',
-          sportCode:         sport?.code       ?? null,
-          formatType:        sport?.formatType ?? null,
+          sportId: sport?.sportId ?? null,
+          sportName: sport?.name ?? 'Sin deporte',
+          sportCode: sport?.code ?? null,
+          formatType: sport?.formatType ?? null,
           totalParticipants: 0,
-          participants:      [],
-          categories:        [],
+          participants: [],
+          categories: [],
         };
       }
 
-      const regsForCategory   = regsByEcId[ec.eventCategoryId]   ?? [];
+      const regsForCategory = regsByEcId[ec.eventCategoryId] ?? [];
       const phasesForCategory = phasesByEcId[ec.eventCategoryId] ?? [];
 
       // Acumular participantes únicos a nivel deporte
@@ -325,22 +409,28 @@ export class CompetitionPhaseReportService {
           }
         }
       }
-      sportMap[sportKey].totalParticipants = sportMap[sportKey].participants.length;
+      sportMap[sportKey].totalParticipants =
+        sportMap[sportKey].participants.length;
 
       // ── Flags de detección calculados aquí donde sí tenemos sport/category ──
-      const sportName    = sport?.name?.toLowerCase()                 ?? '';
+      const sportName = sport?.name?.toLowerCase() ?? '';
       const categoryName = (ec.category as any)?.name?.toLowerCase() ?? '';
-      const resultType   = (ec.category as any)?.resultType          ?? null;
+      const resultType = (ec.category as any)?.resultType ?? null;
 
       const isPoomsae =
         // Taekwondo con resultType "score" → es Poomsae (no Kyorugui que es "combat")
         (sportName.includes('taekwondo') && resultType === 'score') ||
         // Wushu Taolu también usa score table
-        (sportName.includes('wushu') && resultType === 'score')     ||
+        (sportName.includes('wushu') && resultType === 'score') ||
         // Fallback por nombre de categoría
         categoryName.includes('poomsae') ||
-        categoryName.includes('formas')  ||
+        categoryName.includes('formas') ||
         categoryName.includes('forma');
+
+      const isClimbing =
+        sportName.includes('escalada') ||
+        sportName.includes('climbing') ||
+        sportName.includes('boulder');
 
       const isShooting =
         sportName.includes('tiro deportivo') ||
@@ -349,13 +439,13 @@ export class CompetitionPhaseReportService {
       // ─────────────────────────────────────────────────────────────────────
 
       sportMap[sportKey].categories.push({
-        eventCategoryId:   ec.eventCategoryId,
-        categoryId:        ec.categoryId,
-        categoryName:      (ec.category as any)?.name     ?? null,
-        gender:            (ec.category as any)?.gender   ?? null,
-        ageGroup:          (ec.category as any)?.ageGroup ?? null,
+        eventCategoryId: ec.eventCategoryId,
+        categoryId: ec.categoryId,
+        categoryName: (ec.category as any)?.name ?? null,
+        gender: (ec.category as any)?.gender ?? null,
+        ageGroup: (ec.category as any)?.ageGroup ?? null,
         resultType,
-        status:            ec.status,
+        status: ec.status,
         totalParticipants: regsForCategory.length,
         participants: regsForCategory
           .map((r) => regMap[r.registrationId])
@@ -375,6 +465,11 @@ export class CompetitionPhaseReportService {
             shootingScoresByParticipationId,
             isPoomsae,
             isShooting,
+            isClimbing,
+            athleticsSectionsByPhaseId[phase.phaseId] ?? [],
+            athleticsEntriesBySectionId,
+            athleticsResultsByPrId,
+            phaseRegsByPhaseId[phase.phaseId] ?? [],
           ),
         ),
       });
@@ -382,8 +477,6 @@ export class CompetitionPhaseReportService {
 
     return Object.values(sportMap);
   }
-
-
 
   private buildPhase(
     phase: Phase,
@@ -394,16 +487,41 @@ export class CompetitionPhaseReportService {
     phaseRegsByPhaseId: Record<number, PhaseRegistration[]>,
     regMap: Record<number, any>,
     athleteIdToRegId: Record<number, number>,
-    teamMemberMap: Record<number, any>, 
+    teamMemberMap: Record<number, any>,
     individualScoresByParticipationId: Record<number, IndividualScore[]>,
     shootingScoresByParticipationId: Record<number, ShootingScore[]>,
     isPoomsae: boolean,
     isShooting: boolean,
+    isClimbing: boolean,
+    athleticsSectionsForPhase: AthleticsSection[],
+    athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
+    athleticsResultsByPrId: Record<number, AthleticsResult[]>,
+    phaseRegsForAthletics: PhaseRegistration[],
   ) {
-    const phaseMatches     = matchesByPhaseId[phase.phaseId]     ?? [];
-    const phaseStandings   = standingsByPhaseId[phase.phaseId]   ?? [];
+    const phaseMatches = matchesByPhaseId[phase.phaseId] ?? [];
+    const phaseStandings = standingsByPhaseId[phase.phaseId] ?? [];
     const phaseManualRanks = manualRanksByPhaseId[phase.phaseId] ?? [];
-    const phaseRegs        = phaseRegsByPhaseId[phase.phaseId]   ?? [];
+    const phaseRegs = phaseRegsByPhaseId[phase.phaseId] ?? [];
+
+    if (ATHLETICS_PHASE_TYPES.includes(phase.type as AthleticsPhaseType)) {
+      return this.buildAthleticsPhase(
+        phase,
+        phaseRegsForAthletics,
+        regMap,
+        athleticsSectionsForPhase,
+        athleticsEntriesBySectionId,
+        athleticsResultsByPrId,
+      );
+    }
+
+    if (isClimbing && phase.type === 'grupo') {
+      return this.buildClimbingPhase(
+        phase,
+        phaseMatches,
+        regMap,
+        individualScoresByParticipationId,
+      );
+    }
 
     // ── Participantes de la fase ──────────────────────────────────────────
     let participantIds: number[];
@@ -434,36 +552,42 @@ export class CompetitionPhaseReportService {
         for (const participation of match.participations ?? []) {
           const athlete =
             participation.registrationId != null
-              ? regMap[participation.registrationId] ?? {
+              ? (regMap[participation.registrationId] ?? {
                   registrationId: participation.registrationId,
-                }
+                })
               : null;
 
           if (isPoomsae) {
-            const scores = individualScoresByParticipationId[participation.participationId] ?? [];
-            const score  = scores[0] ?? null;
+            const scores =
+              individualScoresByParticipationId[
+                participation.participationId
+              ] ?? [];
+            const score = scores[0] ?? null;
             rows.push({
               participationId: participation.participationId,
-              registrationId:  participation.registrationId ?? null,
+              registrationId: participation.registrationId ?? null,
               athlete,
-              accuracy:     score?.accuracy     != null ? Number(score.accuracy)     : null,
-              presentation: score?.presentation != null ? Number(score.presentation) : null,
-              total:        score?.total        != null ? Number(score.total)        : null,
-              rank:         score?.rank         ?? null,
+              accuracy: score?.accuracy != null ? Number(score.accuracy) : null,
+              presentation:
+                score?.presentation != null ? Number(score.presentation) : null,
+              total: score?.total != null ? Number(score.total) : null,
+              rank: score?.rank ?? null,
             });
           }
 
           if (isShooting) {
-            const scores = shootingScoresByParticipationId[participation.participationId] ?? [];
-            const score  = scores[0] ?? null;
+            const scores =
+              shootingScoresByParticipationId[participation.participationId] ??
+              [];
+            const score = scores[0] ?? null;
             rows.push({
               participationId: participation.participationId,
-              registrationId:  participation.registrationId ?? null,
+              registrationId: participation.registrationId ?? null,
               athlete,
               series: score?.series ?? [],
-              total:  score?.total  != null ? Number(score.total) : null,
-              dns:    score?.dns    ?? false,
-              rank:   score?.rank   ?? null,
+              total: score?.total != null ? Number(score.total) : null,
+              dns: score?.dns ?? false,
+              rank: score?.rank ?? null,
             });
           }
         }
@@ -487,56 +611,65 @@ export class CompetitionPhaseReportService {
         .filter((row) => row.rank != null)
         .slice(0, 3)
         .map((row) => ({
-          rank:    row.rank,
+          rank: row.rank,
           athlete: row.athlete,
           ...(isPoomsae && {
-            accuracy:     row.accuracy,
+            accuracy: row.accuracy,
             presentation: row.presentation,
-            total:        row.total,
+            total: row.total,
           }),
           ...(isShooting && {
             series: row.series,
-            total:  row.total,
-            dns:    row.dns,
+            total: row.total,
+            dns: row.dns,
           }),
         }));
     } else if (phaseManualRanks.length > 0) {
       podium = phaseManualRanks.map((mr) => ({
-        rank:    mr.manualRankPosition,
-        athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
+        rank: mr.manualRankPosition,
+        athlete: regMap[mr.registrationId] ?? {
+          registrationId: mr.registrationId,
+        },
       }));
     } else {
       podium = phaseStandings
         .map((s) => ({
-          rank:          s.manualRankPosition ?? s.rankPosition ?? null,
+          rank: s.manualRankPosition ?? s.rankPosition ?? null,
           matchesPlayed: s.matchesPlayed,
-          wins:          s.wins,
-          draws:         s.draws,
-          losses:        s.losses,
-          points:        Number(s.points),
-          scoreFor:      s.scoreFor,
-          scoreAgainst:  s.scoreAgainst,
-          athlete:       regMap[s.registrationId] ?? { registrationId: s.registrationId },
+          wins: s.wins,
+          draws: s.draws,
+          losses: s.losses,
+          points: Number(s.points),
+          scoreFor: s.scoreFor,
+          scoreAgainst: s.scoreAgainst,
+          athlete: regMap[s.registrationId] ?? {
+            registrationId: s.registrationId,
+          },
         }))
         .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
     }
 
     return {
-      phaseId:           phase.phaseId,
-      phaseName:         phase.name         ?? null,
-      phaseType:         phase.type         ?? null,
-      displayOrder:      phase.displayOrder ?? null,
+      phaseId: phase.phaseId,
+      phaseName: phase.name ?? null,
+      phaseType: phase.type ?? null,
+      displayOrder: phase.displayOrder ?? null,
       isPoomsae,
       isShooting,
       totalParticipants: phaseParticipants.length,
-      totalBrackets:     this.countUniqueBrackets(phaseMatches),
-      participants:      phaseParticipants,
-      brackets: this.buildBrackets(phaseMatches, gamesByMatchId, regMap, athleteIdToRegId, teamMemberMap),
-      scoreTable,   
+      totalBrackets: this.countUniqueBrackets(phaseMatches),
+      participants: phaseParticipants,
+      brackets: this.buildBrackets(
+        phaseMatches,
+        gamesByMatchId,
+        regMap,
+        athleteIdToRegId,
+        teamMemberMap,
+      ),
+      scoreTable,
       podium,
     };
   }
-
 
   // ─────────────────────────────────────────────────────────────────────────
   // BRACKET BUILDERS
@@ -547,10 +680,10 @@ export class CompetitionPhaseReportService {
     gamesByMatchId: Record<number, MatchGame[]>,
     regMap: Record<number, any>,
     athleteIdToRegId: Record<number, number>,
-    teamMemberMap: Record<number, any>,   
+    teamMemberMap: Record<number, any>,
   ): any[] {
     const standalone = matches.filter((m) => !m.seriesId);
-    const inSeries   = matches.filter((m) =>  m.seriesId);
+    const inSeries = matches.filter((m) => m.seriesId);
 
     const seriesMap: Record<string, Match[]> = {};
     for (const m of inSeries) {
@@ -560,10 +693,23 @@ export class CompetitionPhaseReportService {
 
     const result: any[] = [
       ...standalone.map((m) =>
-        this.buildBracket(m, gamesByMatchId[m.matchId] ?? [], regMap, athleteIdToRegId, teamMemberMap),
+        this.buildBracket(
+          m,
+          gamesByMatchId[m.matchId] ?? [],
+          regMap,
+          athleteIdToRegId,
+          teamMemberMap,
+        ),
       ),
       ...Object.entries(seriesMap).map(([seriesId, seriesMatches]) =>
-        this.buildSeriesBracket(seriesId, seriesMatches, gamesByMatchId, regMap, athleteIdToRegId, teamMemberMap),
+        this.buildSeriesBracket(
+          seriesId,
+          seriesMatches,
+          gamesByMatchId,
+          regMap,
+          athleteIdToRegId,
+          teamMemberMap,
+        ),
       ),
     ];
 
@@ -581,61 +727,78 @@ export class CompetitionPhaseReportService {
     games: MatchGame[],
     regMap: Record<number, any>,
     athleteIdToRegId: Record<number, number>,
-    teamMemberMap: Record<number, any>,  
+    teamMemberMap: Record<number, any>,
   ) {
-    const p1Score = match.participant1Score != null
-      ? Number(match.participant1Score)
-      : games.length > 0
-        ? games.reduce((sum, g) => sum + (g.score1 ?? 0), 0)
-        : null;
+    const p1Score =
+      match.participant1Score != null
+        ? Number(match.participant1Score)
+        : games.length > 0
+          ? games.reduce((sum, g) => sum + (g.score1 ?? 0), 0)
+          : null;
 
-    const p2Score = match.participant2Score != null
-      ? Number(match.participant2Score)
-      : games.length > 0
-        ? games.reduce((sum, g) => sum + (g.score2 ?? 0), 0)
-        : null;
+    const p2Score =
+      match.participant2Score != null
+        ? Number(match.participant2Score)
+        : games.length > 0
+          ? games.reduce((sum, g) => sum + (g.score2 ?? 0), 0)
+          : null;
 
     return {
-      bracketId:      match.matchId,
-      isSeries:       false,
-      matchNumber:    match.matchNumber    ?? null,
-      round:          match.round          ?? null,
-      status:         match.status,
-      scheduledTime:  match.scheduledTime  ?? null,
+      bracketId: match.matchId,
+      isSeries: false,
+      matchNumber: match.matchNumber ?? null,
+      round: match.round ?? null,
+      status: match.status,
+      scheduledTime: match.scheduledTime ?? null,
       platformNumber: match.platformNumber ?? null,
-      isWalkover:     match.isWalkover,
+      isWalkover: match.isWalkover,
       walkoverReason: match.walkoverReason ?? null,
-      victoryType:    match.victoryType    ?? null,
+      victoryType: match.victoryType ?? null,
       participants: (match.participations ?? []).map((p) => ({
         participationId: p.participationId,
-        corner:  p.corner ?? null,
+        corner: p.corner ?? null,
         athlete:
           p.registrationId != null
-            ? regMap[p.registrationId] ?? { registrationId: p.registrationId }
+            ? (regMap[p.registrationId] ?? { registrationId: p.registrationId })
             : null,
       })),
       scores: {
         participant1: {
-          score:        p1Score,
-          accuracy:     match.participant1Accuracy     != null ? Number(match.participant1Accuracy)     : null,
-          presentation: match.participant1Presentation != null ? Number(match.participant1Presentation) : null,
+          score: p1Score,
+          accuracy:
+            match.participant1Accuracy != null
+              ? Number(match.participant1Accuracy)
+              : null,
+          presentation:
+            match.participant1Presentation != null
+              ? Number(match.participant1Presentation)
+              : null,
         },
         participant2: {
-          score:        p2Score,
-          accuracy:     match.participant2Accuracy     != null ? Number(match.participant2Accuracy)     : null,
-          presentation: match.participant2Presentation != null ? Number(match.participant2Presentation) : null,
+          score: p2Score,
+          accuracy:
+            match.participant2Accuracy != null
+              ? Number(match.participant2Accuracy)
+              : null,
+          presentation:
+            match.participant2Presentation != null
+              ? Number(match.participant2Presentation)
+              : null,
         },
       },
       winner: match.winnerRegistrationId
-        ? regMap[match.winnerRegistrationId] ?? { registrationId: match.winnerRegistrationId }
+        ? (regMap[match.winnerRegistrationId] ?? {
+            registrationId: match.winnerRegistrationId,
+          })
         : null,
-      rounds: games.length > 0
-        ? games.map((g) => this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap)) 
-        : null,
+      rounds:
+        games.length > 0
+          ? games.map((g) =>
+              this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap),
+            )
+          : null,
     };
   }
-
-
 
   private buildAthleteIdToRegIdMap(
     registrations: Registration[],
@@ -662,13 +825,13 @@ export class CompetitionPhaseReportService {
       for (const member of members) {
         if (member.athleteId == null) continue;
         map[member.athleteId] = {
-          athleteId:      member.athleteId,
-          tmId:           member.tmId,
-          rol:            member.rol              ?? null,
-          name:           member.athlete?.name    ?? null,
-          photoUrl:       member.athlete?.photoUrl ?? null,
-          teamId:         reg.teamId,
-          teamName:       (reg.team as any).name  ?? null,
+          athleteId: member.athleteId,
+          tmId: member.tmId,
+          rol: member.rol ?? null,
+          name: member.athlete?.name ?? null,
+          photoUrl: member.athlete?.photoUrl ?? null,
+          teamId: reg.teamId,
+          teamName: (reg.team as any).name ?? null,
           registrationId: reg.registrationId,
         };
       }
@@ -676,8 +839,6 @@ export class CompetitionPhaseReportService {
 
     return map;
   }
-
-
 
   /**
    * Serie de matches agrupados por seriesId.
@@ -690,7 +851,7 @@ export class CompetitionPhaseReportService {
     gamesByMatchId: Record<number, MatchGame[]>,
     regMap: Record<number, any>,
     athleteIdToRegId: Record<number, number>,
-    teamMemberMap: Record<number, any>,   
+    teamMemberMap: Record<number, any>,
   ) {
     const sorted = [...matches].sort(
       (a, b) => (a.seriesMatchNumber ?? 0) - (b.seriesMatchNumber ?? 0),
@@ -699,59 +860,80 @@ export class CompetitionPhaseReportService {
 
     const participants = (first.participations ?? []).map((p) => ({
       participationId: p.participationId,
-      corner:  p.corner ?? null,
+      corner: p.corner ?? null,
       athlete:
         p.registrationId != null
-          ? regMap[p.registrationId] ?? { registrationId: p.registrationId }
+          ? (regMap[p.registrationId] ?? { registrationId: p.registrationId })
           : null,
     }));
 
     const seriesWinnerId = first.seriesWinnerRegistrationId ?? null;
-    const seriesScore    = this.resolveSeriesScore(sorted, first.participations ?? []);
+    const seriesScore = this.resolveSeriesScore(
+      sorted,
+      first.participations ?? [],
+    );
 
     return {
-      bracketId:      null,
-      isSeries:       true,
+      bracketId: null,
+      isSeries: true,
       seriesId,
-      matchNumber:    first.matchNumber    ?? null,
-      round:          first.round          ?? null,
-      status:         this.resolveSeriesStatus(sorted),
-      scheduledTime:  first.scheduledTime  ?? null,
+      matchNumber: first.matchNumber ?? null,
+      round: first.round ?? null,
+      status: this.resolveSeriesStatus(sorted),
+      scheduledTime: first.scheduledTime ?? null,
       platformNumber: first.platformNumber ?? null,
       participants,
       seriesScore,
       rounds: sorted.map((m) => ({
-        roundNumber:    m.seriesMatchNumber ?? null,
-        matchId:        m.matchId,
-        status:         m.status,
-        isWalkover:     m.isWalkover,
+        roundNumber: m.seriesMatchNumber ?? null,
+        matchId: m.matchId,
+        status: m.status,
+        isWalkover: m.isWalkover,
         walkoverReason: m.walkoverReason ?? null,
-        victoryType:    m.victoryType    ?? null,
+        victoryType: m.victoryType ?? null,
         scores: {
           participant1: {
-            score:        m.participant1Score        != null ? Number(m.participant1Score)        : null,
-            accuracy:     m.participant1Accuracy     != null ? Number(m.participant1Accuracy)     : null,
-            presentation: m.participant1Presentation != null ? Number(m.participant1Presentation) : null,
+            score:
+              m.participant1Score != null ? Number(m.participant1Score) : null,
+            accuracy:
+              m.participant1Accuracy != null
+                ? Number(m.participant1Accuracy)
+                : null,
+            presentation:
+              m.participant1Presentation != null
+                ? Number(m.participant1Presentation)
+                : null,
           },
           participant2: {
-            score:        m.participant2Score        != null ? Number(m.participant2Score)        : null,
-            accuracy:     m.participant2Accuracy     != null ? Number(m.participant2Accuracy)     : null,
-            presentation: m.participant2Presentation != null ? Number(m.participant2Presentation) : null,
+            score:
+              m.participant2Score != null ? Number(m.participant2Score) : null,
+            accuracy:
+              m.participant2Accuracy != null
+                ? Number(m.participant2Accuracy)
+                : null,
+            presentation:
+              m.participant2Presentation != null
+                ? Number(m.participant2Presentation)
+                : null,
           },
         },
         winner: m.winnerRegistrationId
-          ? regMap[m.winnerRegistrationId] ?? { registrationId: m.winnerRegistrationId }
+          ? (regMap[m.winnerRegistrationId] ?? {
+              registrationId: m.winnerRegistrationId,
+            })
           : null,
-        games: (gamesByMatchId[m.matchId] ?? []).length > 0
-          ? (gamesByMatchId[m.matchId] ?? []).map((g) => this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap))  
-          : null,
+        games:
+          (gamesByMatchId[m.matchId] ?? []).length > 0
+            ? (gamesByMatchId[m.matchId] ?? []).map((g) =>
+                this.buildRound(g, regMap, athleteIdToRegId, teamMemberMap),
+              )
+            : null,
       })),
       seriesWinner: seriesWinnerId
-        ? regMap[seriesWinnerId] ?? { registrationId: seriesWinnerId }
+        ? (regMap[seriesWinnerId] ?? { registrationId: seriesWinnerId })
         : null,
     };
   }
-
 
   /**
    * Construye una ronda/set individual desde MatchGame.
@@ -761,7 +943,7 @@ export class CompetitionPhaseReportService {
     game: MatchGame,
     regMap: Record<number, any>,
     athleteIdToRegId: Record<number, number>,
-    teamMemberMap: Record<number, any>,   
+    teamMemberMap: Record<number, any>,
   ) {
     const resolveParticipant = (id: number | null) => {
       if (id == null) return null;
@@ -770,31 +952,29 @@ export class CompetitionPhaseReportService {
       // 2. athleteId individual → registrationId
       const regId = athleteIdToRegId[id];
       if (regId && regMap[regId]) return regMap[regId];
-      // 3. athleteId de miembro de equipo → info del miembro  
+      // 3. athleteId de miembro de equipo → info del miembro
       if (teamMemberMap[id]) return teamMemberMap[id];
       return { athleteId: id };
     };
 
     return {
       roundNumber: game.gameNumber,
-      status:      game.status,
+      status: game.status,
       scores: {
         participant1: { score: game.score1 ?? null },
         participant2: { score: game.score2 ?? null },
       },
       sets: game.sets
         ? game.sets.map((s) => ({
-            setNumber:    s.setNumber,
+            setNumber: s.setNumber,
             player1Score: s.player1Score,
             player2Score: s.player2Score,
-            winner:       resolveParticipant(s.winnerId ?? null),
+            winner: resolveParticipant(s.winnerId ?? null),
           }))
         : null,
       winner: resolveParticipant(game.winnerId),
     };
   }
-
-
 
   // ─────────────────────────────────────────────────────────────────────────
   // SERIES HELPERS
@@ -845,57 +1025,68 @@ export class CompetitionPhaseReportService {
     const map: Record<number, any> = {};
 
     for (const reg of registrations) {
-      const person      = reg.externalAthleteId     ? personMap[reg.externalAthleteId]          : null;
-      const institution = reg.externalInstitutionId ? institutionMap[reg.externalInstitutionId] : null;
+      const person = reg.externalAthleteId
+        ? personMap[reg.externalAthleteId]
+        : null;
+      const institution = reg.externalInstitutionId
+        ? institutionMap[reg.externalInstitutionId]
+        : null;
 
       let athleteInfo: any = null;
 
       if (person) {
         athleteInfo = {
-          source:    'sismaster',
-          personId:  reg.externalAthleteId,
-          fullName:  [person.lastname, person.surname, person.firstname].filter(Boolean).join(' '),
-          document:  person.docnumber ?? null,
-          gender:    person.gender    ?? null,
-          birthDate: person.birthday  ?? null,
+          source: 'sismaster',
+          personId: reg.externalAthleteId,
+          fullName: [person.lastname, person.surname, person.firstname]
+            .filter(Boolean)
+            .join(' '),
+          document: person.docnumber ?? null,
+          gender: person.gender ?? null,
+          birthDate: person.birthday ?? null,
           institution: {
-            id:   reg.externalInstitutionId ?? null,
+            id: reg.externalInstitutionId ?? null,
             name: institution?.businessName ?? institution?.business ?? null,
           },
         };
       } else if (reg.athlete) {
         athleteInfo = {
-          source:    'local',
-          personId:  null,
-          fullName:  [(reg.athlete as any).lastName, (reg.athlete as any).firstName].filter(Boolean).join(', '),
-          document:  (reg.athlete as any).docNumber ?? null,
-          gender:    (reg.athlete as any).gender    ?? null,
+          source: 'local',
+          personId: null,
+          fullName: [
+            (reg.athlete as any).lastName,
+            (reg.athlete as any).firstName,
+          ]
+            .filter(Boolean)
+            .join(', '),
+          document: (reg.athlete as any).docNumber ?? null,
+          gender: (reg.athlete as any).gender ?? null,
           birthDate: (reg.athlete as any).birthDate ?? null,
           institution: null,
         };
       } else if (reg.team) {
         const members = ((reg.team as any).members ?? []).map((m: any) => ({
-          tmId:      m.tmId,
+          tmId: m.tmId,
           athleteId: m.athleteId,
-          rol:       m.rol              ?? null,
-          name:      m.athlete?.name    ?? null,
-          photoUrl:  m.athlete?.photoUrl ?? null,
+          rol: m.rol ?? null,
+          name: m.athlete?.name ?? null,
+          photoUrl: m.athlete?.photoUrl ?? null,
         }));
 
         athleteInfo = {
-          source:   'team',
-          teamId:   reg.teamId,
+          source: 'team',
+          teamId: reg.teamId,
           teamName: (reg.team as any).name ?? null,
-          members,   
+          members,
         };
       }
 
       map[reg.registrationId] = {
-        registrationId:          reg.registrationId,
-        seedNumber:              reg.seedNumber              ?? null,
-        weightClass:             reg.weightClass             ?? null,
-        externalAthleteId:       reg.externalAthleteId       ?? null,
-        externalInstitutionId:   reg.externalInstitutionId   ?? null,
+        registrationId: reg.registrationId,
+        seedNumber: reg.seedNumber ?? null,
+        weightClass: reg.weightClass ?? null,
+        externalAthleteId: reg.externalAthleteId ?? null,
+        externalInstitutionId: reg.externalInstitutionId ?? null,
         externalAccreditationId: reg.externalAccreditationId ?? null,
         athlete: athleteInfo,
       };
@@ -916,9 +1107,375 @@ export class CompetitionPhaseReportService {
 
   private buildEmptyReport(event: EventSismasterDto) {
     return {
-      meta:   { generatedAt: new Date().toISOString(), version: '2.0', source: 'competition-system' },
-      event:  this.buildEventInfo(event),
+      meta: {
+        generatedAt: new Date().toISOString(),
+        version: '2.0',
+        source: 'competition-system',
+      },
+      event: this.buildEventInfo(event),
       sports: [],
+    };
+  }
+
+  private buildAthleticsPhase(
+    phase: Phase,
+    phaseRegs: PhaseRegistration[],
+    regMap: Record<number, any>,
+    sections: AthleticsSection[],
+    entriesBySectionId: Record<number, AthleticsSectionEntry[]>,
+    resultsByPrId: Record<number, AthleticsResult[]>,
+  ) {
+    const base = {
+      phaseId: phase.phaseId,
+      phaseName: phase.name ?? null,
+      phaseType: phase.type ?? null,
+      displayOrder: phase.displayOrder ?? null,
+      isAtletismo: true,
+    };
+
+    switch (phase.type as AthleticsPhaseType) {
+      case 'combined_pista':
+        return {
+          ...base,
+          athleticsType: 'pista',
+          ...this._buildTrackPhase(
+            phaseRegs,
+            regMap,
+            sections,
+            entriesBySectionId,
+          ),
+        };
+      case 'combined_distancia':
+        return {
+          ...base,
+          athleticsType: 'distancia',
+          ...this._buildDistancePhase(phaseRegs, regMap, resultsByPrId),
+        };
+      case 'combined_altura':
+        return {
+          ...base,
+          athleticsType: 'altura',
+          ...this._buildHeightPhase(phaseRegs, regMap, resultsByPrId),
+        };
+    }
+  }
+
+  // ── Pista: secciones con carriles y tiempos ───────────────────────────────
+
+  private _buildTrackPhase(
+    phaseRegs: PhaseRegistration[],
+    regMap: Record<number, any>,
+    sections: AthleticsSection[],
+    entriesBySectionId: Record<number, AthleticsSectionEntry[]>,
+  ) {
+    const prMap = new Map(phaseRegs.map((pr) => [pr.phaseRegistrationId, pr]));
+
+    const sectionData = sections.map((section) => {
+      const entries = entriesBySectionId[section.athleticsSectionId] ?? [];
+
+      // Ordenar: tiempos válidos ascendente → status → sin resultado
+      const sorted = [...entries].sort((a, b) => {
+        const stA = this._isRaceStatus(a.notes);
+        const stB = this._isRaceStatus(b.notes);
+        const tA = this._parseTimeMs(a.time);
+        const tB = this._parseTimeMs(b.time);
+        if (!stA && tA !== null && !stB && tB !== null) return tA - tB;
+        if (!stA && tA !== null) return -1;
+        if (!stB && tB !== null) return 1;
+        return 0;
+      });
+
+      let posCounter = 0;
+      const athletes = sorted.map((entry) => {
+        const pr = prMap.get(entry.phaseRegistrationId);
+        const regId = pr?.registrationId ?? null;
+        const status = this._isRaceStatus(entry.notes) ? entry.notes : null;
+        const hasTime = !status && !!entry.time;
+        if (hasTime) posCounter++;
+
+        return {
+          pos: hasTime ? posCounter : null,
+          lane: entry.lane ?? null,
+          registrationId: regId,
+          athlete:
+            regId != null ? (regMap[regId] ?? { registrationId: regId }) : null,
+          time: entry.time ?? null,
+          wind: entry.wind != null ? Number(entry.wind) : null,
+          status, // "DNF" | "DNS" | "DQ" | null
+        };
+      });
+
+      return {
+        sectionId: section.athleticsSectionId,
+        sectionName: section.name,
+        sortOrder: section.sortOrder,
+        wind: section.wind != null ? Number(section.wind) : null,
+        totalAthletes: athletes.length,
+        athletes,
+      };
+    });
+
+    // Atletas sin sección asignada
+    const assignedPrIds = new Set(
+      sections.flatMap((s) =>
+        (entriesBySectionId[s.athleticsSectionId] ?? []).map(
+          (e) => e.phaseRegistrationId,
+        ),
+      ),
+    );
+    const unassigned = phaseRegs
+      .filter((pr) => !assignedPrIds.has(pr.phaseRegistrationId))
+      .map((pr) => ({
+        pos: null,
+        lane: null,
+        registrationId: pr.registrationId,
+        athlete: regMap[pr.registrationId] ?? {
+          registrationId: pr.registrationId,
+        },
+        time: null,
+        wind: null,
+        status: null,
+      }));
+
+    return {
+      totalParticipants: phaseRegs.length,
+      sections: sectionData,
+      unassigned,
+    };
+  }
+
+  // ── Distancia: saltos y lanzamientos ─────────────────────────────────────
+
+  private _buildDistancePhase(
+    phaseRegs: PhaseRegistration[],
+    regMap: Record<number, any>,
+    resultsByPrId: Record<number, AthleticsResult[]>,
+  ) {
+    const rows = phaseRegs.map((pr) => {
+      const attempts = resultsByPrId[pr.phaseRegistrationId] ?? [];
+
+      // Status global del atleta (todos los intentos con el mismo status)
+      const globalStatus = this._resolveAthleteStatus(attempts);
+
+      // Mejor intento válido
+      const validAttempts = attempts.filter(
+        (a) =>
+          a.isValid && a.distanceValue != null && !this._isRaceStatus(a.notes),
+      );
+      const bestDistance =
+        validAttempts.length > 0
+          ? Math.max(...validAttempts.map((a) => Number(a.distanceValue)))
+          : null;
+
+      return {
+        registrationId: pr.registrationId,
+        athlete: regMap[pr.registrationId] ?? {
+          registrationId: pr.registrationId,
+        },
+        bestDistance,
+        status: globalStatus,
+        attempts: attempts.map((a) => ({
+          attemptNumber: a.attemptNumber,
+          distance: a.distanceValue != null ? Number(a.distanceValue) : null,
+          isValid: a.isValid,
+          wind: a.wind != null ? Number(a.wind) : null,
+          notes: a.notes ?? null, // "DNF" | "DNS" | "DQ" | "FOUL"(isValid=false) | null
+        })),
+      };
+    });
+
+    // Ordenar: mejor distancia desc → sin marca → con status
+    const sorted = [...rows].sort((a, b) => {
+      if (a.bestDistance !== null && b.bestDistance !== null)
+        return b.bestDistance - a.bestDistance;
+      if (a.bestDistance !== null) return -1;
+      if (b.bestDistance !== null) return 1;
+      return 0;
+    });
+
+    let posCounter = 0;
+    const athletes = sorted.map((row) => {
+      if (row.bestDistance !== null) posCounter++;
+      return {
+        pos: row.bestDistance !== null ? posCounter : null,
+        ...row,
+      };
+    });
+
+    return {
+      totalParticipants: phaseRegs.length,
+      athletes,
+    };
+  }
+
+  // ── Altura: salto alto y garrocha ─────────────────────────────────────────
+
+  private _buildHeightPhase(
+    phaseRegs: PhaseRegistration[],
+    regMap: Record<number, any>,
+    resultsByPrId: Record<number, AthleticsResult[]>,
+  ) {
+    // Todas las alturas únicas del evento, ordenadas ascendente
+    const allHeightsSet = new Set<number>();
+    for (const pr of phaseRegs) {
+      const attempts = resultsByPrId[pr.phaseRegistrationId] ?? [];
+      attempts.forEach((a) => {
+        if (a.height != null) allHeightsSet.add(Number(a.height));
+      });
+    }
+    const allHeights = Array.from(allHeightsSet).sort((a, b) => a - b);
+
+    const rows = phaseRegs.map((pr) => {
+      const attempts = resultsByPrId[pr.phaseRegistrationId] ?? [];
+      const globalStatus = this._resolveAthleteStatus(attempts);
+
+      // Mejor altura superada
+      const passedHeights = attempts
+        .filter((a) => a.heightResult === 'O' && a.height != null)
+        .map((a) => Number(a.height));
+      const bestHeight =
+        passedHeights.length > 0 ? Math.max(...passedHeights) : null;
+
+      // Resultados por altura: { height → secuencia "XXO" }
+      const heightMap: Record<number, string> = {};
+      for (const h of allHeights) {
+        const seq = attempts
+          .filter((a) => Number(a.height) === h)
+          .sort((a, b) => (a.attemptNumber ?? 0) - (b.attemptNumber ?? 0))
+          .map((a) => a.heightResult ?? '?')
+          .join('');
+        if (seq) heightMap[h] = seq;
+      }
+
+      return {
+        registrationId: pr.registrationId,
+        athlete: regMap[pr.registrationId] ?? {
+          registrationId: pr.registrationId,
+        },
+        bestHeight,
+        status: globalStatus,
+        // Lista de alturas con su secuencia (solo las intentadas por este atleta)
+        heights: allHeights
+          .filter((h) => heightMap[h])
+          .map((h) => ({
+            height: h,
+            sequence: heightMap[h], // "O" | "XO" | "XXO" | "-" | etc.
+            cleared: (heightMap[h] ?? '').includes('O'),
+          })),
+      };
+    });
+
+    // Ordenar: mejor altura desc → sin marca → con status
+    const sorted = [...rows].sort((a, b) => {
+      if (a.bestHeight !== null && b.bestHeight !== null)
+        return b.bestHeight - a.bestHeight;
+      if (a.bestHeight !== null) return -1;
+      if (b.bestHeight !== null) return 1;
+      return 0;
+    });
+
+    let posCounter = 0;
+    const athletes = sorted.map((row) => {
+      if (row.bestHeight !== null) posCounter++;
+      return {
+        pos: row.bestHeight !== null ? posCounter : null,
+        ...row,
+      };
+    });
+
+    return {
+      totalParticipants: phaseRegs.length,
+      allHeights, // útil para el consumidor al construir columnas
+      athletes,
+    };
+  }
+
+  // ── Helpers privados de atletismo ─────────────────────────────────────────
+
+  /** Devuelve true si el string es un status especial de carrera */
+  private _isRaceStatus(notes: string | null | undefined): boolean {
+    return notes === 'DNF' || notes === 'DNS' || notes === 'DQ';
+  }
+
+  /**
+   * Si TODOS los intentos tienen el mismo status (DNF/DNS/DQ), lo devuelve.
+   * Si alguno tiene marca válida o no hay intentos, devuelve null.
+   */
+  private _resolveAthleteStatus(attempts: AthleticsResult[]): string | null {
+    if (attempts.length === 0) return null;
+    const statuses = attempts.map((a) =>
+      this._isRaceStatus(a.notes) ? a.notes : null,
+    );
+    const first = statuses[0];
+    if (!first) return null;
+    return statuses.every((s) => s === first) ? first : null;
+  }
+
+  /**
+   * Convierte string de tiempo ("10.45", "1:23.45", "1:23:45.00") a ms
+   * para poder ordenar carreras correctamente.
+   */
+  private _parseTimeMs(time: string | null): number | null {
+    if (!time) return null;
+    const parts = time.split(':').reverse();
+    let ms = 0;
+    const [secStr, minStr, hrStr] = parts;
+    if (secStr) {
+      const [sec, cs] = secStr.split('.');
+      ms += parseInt(sec ?? '0') * 1000;
+      ms += parseInt(((cs ?? '0') + '0').slice(0, 2)) * 10;
+    }
+    if (minStr) ms += parseInt(minStr) * 60_000;
+    if (hrStr) ms += parseInt(hrStr) * 3_600_000;
+    return ms;
+  }
+
+  private buildClimbingPhase(
+    phase: Phase,
+    phaseMatches: Match[],
+    regMap: Record<number, any>,
+    individualScoresByParticipationId: Record<number, IndividualScore[]>,
+  ) {
+    const rows: any[] = [];
+
+    for (const match of phaseMatches) {
+      for (const participation of match.participations ?? []) {
+        const scores =
+          individualScoresByParticipationId[participation.participationId] ??
+          [];
+        const score = scores[0] ?? null;
+
+        rows.push({
+          participationId: participation.participationId,
+          registrationId: participation.registrationId ?? null,
+          athlete:
+            participation.registrationId != null
+              ? (regMap[participation.registrationId] ?? {
+                  registrationId: participation.registrationId,
+                })
+              : null,
+          total: score?.total != null ? Number(score.total) : null,
+          rank: score?.rank ?? null,
+        });
+      }
+    }
+
+    // Ordenar: rank ascendente, nulls al final
+    const sorted = [...rows].sort((a, b) => {
+      if (a.rank == null && b.rank == null) return 0;
+      if (a.rank == null) return 1;
+      if (b.rank == null) return -1;
+      return a.rank - b.rank;
+    });
+
+    return {
+      phaseId: phase.phaseId,
+      phaseName: phase.name ?? null,
+      phaseType: phase.type ?? null,
+      displayOrder: phase.displayOrder ?? null,
+      isClimbing: true,
+      totalParticipants: sorted.length,
+      athletes: sorted,
     };
   }
 }

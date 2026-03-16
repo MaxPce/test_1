@@ -26,23 +26,59 @@ import { PhaseManualRank } from '../competitions/entities/phase-manual-rank.enti
 import { MatchGame } from '../competitions/entities/match-game.entity';
 
 import { CompetitionPhaseReportService } from './competition-phase-report.service';
-import { IndividualScore, PhaseRegistration, ShootingScore } from 'src/competitions/entities';
+import {
+  AthleticsResult,
+  IndividualScore,
+  PhaseRegistration,
+  ShootingScore,
+} from 'src/competitions/entities';
+import { AthleticsSection } from 'src/competitions/entities/athletics-section.entity';
+import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-section-entry.entity';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature(
-      [ SismasterEvent, SismasterPerson, SismasterInstitution,
-        SismasterSport, SismasterAccreditation, SismasterEventSport, SismasterSportParam ],
+      [
+        SismasterEvent,
+        SismasterPerson,
+        SismasterInstitution,
+        SismasterSport,
+        SismasterAccreditation,
+        SismasterEventSport,
+        SismasterSportParam,
+      ],
       'sismaster',
     ),
     TypeOrmModule.forFeature([
-      EventCategory, Registration,
-      Phase, Match, Participation, Standing, PhaseManualRank,PhaseRegistration,MatchGame, ShootingScore,IndividualScore
+      EventCategory,
+      Registration,
+      Phase,
+      Match,
+      Participation,
+      Standing,
+      PhaseManualRank,
+      PhaseRegistration,
+      MatchGame,
+      ShootingScore,
+      IndividualScore,
+      AthleticsSection,
+      AthleticsSectionEntry,
+      AthleticsResult,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
   controllers: [SismasterController],
-  providers: [SismasterService, SismasterCacheService,CompetitionSnapshotService,CompetitionPhaseReportService,],
-  exports: [SismasterService, SismasterCacheService,CompetitionSnapshotService,CompetitionPhaseReportService,],
+  providers: [
+    SismasterService,
+    SismasterCacheService,
+    CompetitionSnapshotService,
+    CompetitionPhaseReportService,
+  ],
+  exports: [
+    SismasterService,
+    SismasterCacheService,
+    CompetitionSnapshotService,
+    CompetitionPhaseReportService,
+  ],
 })
 export class SismasterModule {}

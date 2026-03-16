@@ -15,6 +15,7 @@ export class UpsertSectionEntryDto {
   phaseRegistrationId: number;
 
   @ValidateIf((o) => o.lane !== undefined && o.lane !== null)
+  @Transform(({ value }) => (value != null ? Number(value) : null))
   @IsInt()
   lane?: number | null;
 
@@ -23,6 +24,7 @@ export class UpsertSectionEntryDto {
   time?: string | null;
 
   @ValidateIf((o) => o.wind !== undefined && o.wind !== null)
+  @Transform(({ value }) => (value != null ? Number(value) : null))
   @IsNumber()
   wind?: number | null;
 

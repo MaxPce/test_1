@@ -1,7 +1,9 @@
 import {
   Controller,
   Get,
+  Post,
   Patch,
+  Delete,
   Param,
   Body,
   ParseIntPipe,
@@ -34,5 +36,25 @@ export class ClimbingController {
     @Body() dto: UpdateClimbingScoreDto,
   ) {
     return this.climbingService.updateScore(participationId, dto);
+  }
+
+  // POST /competitions/phases/:phaseId/climbing-assign
+  @Post('phases/:phaseId/climbing-assign')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  assignParticipant(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body('registrationId') registrationId: number,
+  ) {
+    return this.climbingService.assignParticipant(phaseId, registrationId);
+  }
+
+  // DELETE /competitions/phases/:phaseId/climbing-assign/:registrationId
+  @Delete('phases/:phaseId/climbing-assign/:registrationId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  removeParticipant(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Param('registrationId', ParseIntPipe) registrationId: number,
+  ) {
+    return this.climbingService.removeParticipant(phaseId, registrationId);
   }
 }
