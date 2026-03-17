@@ -17,6 +17,8 @@ import { AthleticsResult } from '../competitions/entities/athletics-result.entit
 import { SismasterService } from './sismaster.service';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { MatchStatus } from '../common/enums';
+import { Result }        from '../results/entities/result.entity';
+import { Participation } from '../competitions/entities/participation.entity';
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -71,6 +73,12 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(AthleticsResult)
     private readonly athleticsResultRepo: Repository<AthleticsResult>,
+
+    @InjectRepository(Result)
+    private readonly resultRepo: Repository<Result>,
+
+    @InjectRepository(Participation)
+    private readonly participationRepo: Repository<Participation>,
 
     private readonly sismasterService: SismasterService,
   ) {}
@@ -311,6 +319,62 @@ export class CompetitionPhaseReportService {
       'phaseRegistrationId',
     );
 
+    const timedSportEcIds = new Set(
+     filteredCategories
+       .filter((ec) => {
+         const sn = (ec.category as any)?.sport?.name?.toLowerCase() ?? '';
+         return (
+           sn.includes('natación') ||
+           sn.includes('natacion') ||
+           sn.includes('ciclismo')
+         );
+       })
+       .map((ec) => ec.eventCategoryId),
+   );
+
+   const swimmingPhaseIds = phases
+     .filter((p) => timedSportEcIds.has(p.eventCategoryId))
+     .map((p) => p.phaseId);
+
+   const swimmingResults = swimmingPhaseIds.length
+    ? await this.resultRepo
+        .createQueryBuilder('r')
+        .where('r.phase_id IN (:...ids)', { ids: swimmingPhaseIds })
+        .andWhere(
+          '(r.time_value IS NOT NULL OR r.notes LIKE :dns)',
+          { dns: '%DNS%' },
+        )
+        .orderBy(
+          'CASE WHEN r.rank_position IS NULL THEN 1 ELSE 0 END',
+          'ASC',
+        )
+        .addOrderBy('r.rank_position', 'ASC')
+        .addOrderBy('r.time_value', 'ASC')
+        .getMany()
+    : [];
+
+   // Cargar participaciones para obtener registrationId
+   const swimmingParticipationIds = [
+     ...new Set(
+       swimmingResults.map((r) => r.participationId).filter(Boolean),
+     ),
+   ];
+
+   const swimmingParticipations = swimmingParticipationIds.length
+     ? await this.participationRepo.find({
+         where: swimmingParticipationIds.map((id) => ({ participationId: id })),
+       })
+     : [];
+
+   const swimmingParticipationToRegId = new Map<number, number>(
+    swimmingParticipations
+      .filter((p) => p.registrationId != null)
+      .map((p) => [p.participationId, p.registrationId as number]),
+  );
+
+
+   const swimmingResultsByPhaseId = this.groupBy(swimmingResults, 'phaseId');
+
     return {
       meta: {
         generatedAt: new Date().toISOString(),
@@ -335,6 +399,8 @@ export class CompetitionPhaseReportService {
         athleticsSectionsByPhaseId,
         athleticsEntriesBySectionId,
         athleticsResultsByPrId,
+        swimmingResultsByPhaseId,          
+        swimmingParticipationToRegId,
       ),
     };
   }
@@ -374,6 +440,8 @@ export class CompetitionPhaseReportService {
     athleticsSectionsByPhaseId: Record<number, AthleticsSection[]>,
     athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
+    swimmingResultsByPhaseId:       Record<number, Result[]>,        
+    swimmingParticipationToRegId:   Map<number, number>,
   ) {
     const sportMap: Record<string, any> = {};
 
@@ -436,6 +504,17 @@ export class CompetitionPhaseReportService {
         sportName.includes('tiro deportivo') ||
         sportName.includes('tiro al blanco') ||
         sportName.includes('shooting');
+
+      const isTimedSport =
+        sportName.includes('natación') ||
+        sportName.includes('natacion') ||
+        sportName.includes('ciclismo');
+
+
+      const isWrestling =
+        sportName.includes('lucha olímpica') ||
+        sportName.includes('lucha olimpica') ||
+        sportName.includes('wrestling');
       // ─────────────────────────────────────────────────────────────────────
 
       sportMap[sportKey].categories.push({
@@ -466,6 +545,10 @@ export class CompetitionPhaseReportService {
             isPoomsae,
             isShooting,
             isClimbing,
+            isTimedSport,
+            isWrestling,
+            swimmingResultsByPhaseId[phase.phaseId] ?? [], 
+            swimmingParticipationToRegId,
             athleticsSectionsByPhaseId[phase.phaseId] ?? [],
             athleticsEntriesBySectionId,
             athleticsResultsByPrId,
@@ -493,6 +576,10 @@ export class CompetitionPhaseReportService {
     isPoomsae: boolean,
     isShooting: boolean,
     isClimbing: boolean,
+    isTimedSport: boolean,                         
+    isWrestling: boolean,  
+    swimmingResultsForPhase: Result[],               
+    swimmingParticipationToRegId: Map<number, number>,
     athleticsSectionsForPhase: AthleticsSection[],
     athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
@@ -522,6 +609,20 @@ export class CompetitionPhaseReportService {
         individualScoresByParticipationId,
       );
     }
+
+    if (isWrestling && phase.type === 'grupo') {
+      return this.buildWrestlingPhase(phase, phaseMatches, regMap);
+    }
+
+    if (isTimedSport) {
+      return this.buildSwimmingPhase(
+        phase,
+        swimmingResultsForPhase,
+        swimmingParticipationToRegId,
+        regMap,
+      );
+    }
+
 
     // ── Participantes de la fase ──────────────────────────────────────────
     let participantIds: number[];
@@ -1478,4 +1579,171 @@ export class CompetitionPhaseReportService {
       athletes: sorted,
     };
   }
+
+  private buildSwimmingPhase(
+    phase: Phase,
+    results: Result[],
+    participationToRegId: Map<number, number>,
+    regMap: Record<number, any>,
+  ) {
+    const isDQ = (r: Result) =>
+      !!(r.notes && r.notes.toUpperCase().includes('DQ'));
+ 
+    const athletes = results.map((r, idx) => {
+      const registrationId =
+        r.participationId != null
+          ? (participationToRegId.get(r.participationId) ?? null)
+          : null;
+
+    const isDNS = !!(r.notes && r.notes.toUpperCase().includes('DNS'));
+ 
+      return {
+        pos:            (isDQ(r) || isDNS) ? null : (r.rankPosition ?? idx + 1),
+        registrationId,
+        athlete:
+          registrationId != null
+            ? (regMap[registrationId] ?? { registrationId })
+            : null,
+        time:           r.timeValue   ?? null,
+        rankPosition:   r.rankPosition ?? null,
+        isDQ:           isDQ(r),
+        isDNS,
+        notes:          r.notes        ?? null,
+      };
+    });
+ 
+    return {
+      phaseId:           phase.phaseId,
+      phaseName:         phase.name         ?? null,
+      phaseType:         phase.type         ?? null,
+      displayOrder:      phase.displayOrder ?? null,
+      isSwimming:        true,
+      totalParticipants: athletes.length,
+      athletes,
+    };
+  }
+
+  private buildWrestlingPhase(
+    phase: Phase,
+    phaseMatches: Match[],
+    regMap: Record<number, any>,
+  ) {
+    // ── Helpers CP por tipo de victoria ──────────────────────────────────
+    const winnerCP = (vt: string | null): number => {
+      switch (vt) {
+        case 'VFA': case 'VCA': return 5;
+        case 'VSU': case 'VSU1': return 4;
+        case 'VPO1': case 'VPO': return 3;
+        default: return 3;
+      }
+    };
+    const loserCP = (vt: string | null): number => {
+      switch (vt) {
+        case 'VFA': case 'VCA': case 'VSU': return 0;
+        case 'VSU1': case 'VPO1': case 'VPO': return 1;
+        default: return 0;
+      }
+    };
+
+    // ── Acumular estadísticas por atleta ──────────────────────────────────
+    interface WrestlerRow {
+      registrationId: number;
+      athlete: any;
+      W: number;
+      CP: number;
+      VT: number;
+      ST: number;
+      TP: number;
+      TPGvn: number;
+    }
+
+    const rowMap = new Map<number, WrestlerRow>();
+
+    const ensureRow = (regId: number): WrestlerRow => {
+      if (!rowMap.has(regId)) {
+        rowMap.set(regId, {
+          registrationId: regId,
+          athlete: regMap[regId] ?? { registrationId: regId },
+          W: 0, CP: 0, VT: 0, ST: 0, TP: 0, TPGvn: 0,
+        });
+      }
+      return rowMap.get(regId)!;
+    };
+
+    const brackets: any[] = [];
+
+    for (const match of phaseMatches) {
+      const parts = match.participations ?? [];
+      const reg0 = parts[0]?.registrationId ?? null;
+      const reg1 = parts[1]?.registrationId ?? null;
+
+      const tp0 = match.participant1Score != null ? Math.floor(Number(match.participant1Score)) : 0;
+      const tp1 = match.participant2Score != null ? Math.floor(Number(match.participant2Score)) : 0;
+      const vt  = match.victoryType ?? null;
+
+      if (reg0) {
+        const r = ensureRow(reg0);
+        r.TP    += tp0;
+        r.TPGvn += tp1;
+      }
+      if (reg1) {
+        const r = ensureRow(reg1);
+        r.TP    += tp1;
+        r.TPGvn += tp0;
+      }
+
+      if (match.winnerRegistrationId && reg0 && reg1) {
+        const isW0 = match.winnerRegistrationId === reg0;
+        const winner = isW0 ? ensureRow(reg0) : ensureRow(reg1);
+        const loser  = isW0 ? ensureRow(reg1) : ensureRow(reg0);
+
+        winner.W++;
+        winner.CP += winnerCP(vt);
+        loser.CP  += loserCP(vt);
+
+        if (vt === 'VFA' || vt === 'VCA') winner.VT++;
+        if (vt === 'VSU' || vt === 'VSU1') winner.ST++;
+      }
+
+      // Bracket individual para el consumidor
+      brackets.push({
+        matchId:     match.matchId,
+        matchNumber: match.matchNumber ?? null,
+        round:       match.round ?? null,
+        status:      match.status,
+        victoryType: vt,
+        participants: parts.map((p: any) => ({
+          registrationId: p.registrationId ?? null,
+          athlete: p.registrationId != null
+            ? (regMap[p.registrationId] ?? { registrationId: p.registrationId })
+            : null,
+          score: p.registrationId === reg0 ? tp0 : tp1,
+          isWinner: p.registrationId === match.winnerRegistrationId,
+        })),
+      });
+    }
+
+    // ── Ordenar ranking: CP desc → W desc → TP desc → TPGvn asc ──────────
+    const ranking = Array.from(rowMap.values())
+      .sort((a, b) =>
+        b.CP !== a.CP ? b.CP - a.CP :
+        b.W  !== a.W  ? b.W  - a.W  :
+        b.TP !== a.TP ? b.TP - a.TP :
+        a.TPGvn - b.TPGvn,
+      )
+      .map((row, i) => ({ rank: i + 1, ...row }));
+
+    return {
+      phaseId:           phase.phaseId,
+      phaseName:         phase.name         ?? null,
+      phaseType:         phase.type         ?? null,
+      displayOrder:      phase.displayOrder ?? null,
+      isWrestling:       true,
+      totalParticipants: ranking.length,
+      ranking,
+      brackets: brackets.sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0)),
+    };
+  }
+  
 }
+

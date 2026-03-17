@@ -181,4 +181,14 @@ export class ResultsController {
       eventCategoryId,
     );
   }
+
+  @Post('dns')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async createDNSResult(
+    @Body('registrationId', ParseIntPipe) registrationId: number,
+    @Body('phaseId', ParseIntPipe) phaseId: number,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return await this.resultsService.createDNSResult(registrationId, phaseId, user.userId);
+  }
 }

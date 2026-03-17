@@ -538,7 +538,7 @@ export class ResultsService {
       })
       .andWhere('result.timeValue IS NOT NULL')
       .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
-      .orderBy('result.timeValue', 'ASC')
+      .orderBy('TIME_TO_SEC(result.time_value)', 'ASC')
       .getMany();
 
     // Asignar posiciones
@@ -667,7 +667,7 @@ export class ResultsService {
       .where('result.phaseId = :phaseId', { phaseId })
       .andWhere('result.timeValue IS NOT NULL')
       .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
-      .orderBy('result.timeValue', 'ASC')
+      .orderBy('TIME_TO_SEC(result.time_value)', 'ASC')
       .getMany();
 
     for (let i = 0; i < results.length; i++) {
@@ -710,7 +710,10 @@ export class ResultsService {
       .leftJoinAndSelect('team.members', 'members')
       .leftJoinAndSelect('members.athlete', 'memberAthlete')
       .where('result.phaseId = :phaseId', { phaseId })
-      .andWhere('result.timeValue IS NOT NULL')
+      .andWhere(
+        '(result.timeValue IS NOT NULL OR result.notes LIKE :dns)',
+        { dns: '%DNS%' },
+      )
       .orderBy(
         'CASE WHEN result.rankPosition IS NULL THEN 1 ELSE 0 END',
         'ASC',
@@ -803,5 +806,58 @@ export class ResultsService {
 
     await this.resultRepository.remove(result);
     return { message: 'Resultado eliminado correctamente' };
+  }
+
+  async createDNSResult(registrationId: number, phaseId: number, userId: number) {
+    // Buscar o crear participation
+    let participation = await this.participationRepository.findOne({
+      where: { registrationId },
+      relations: ['registration'],
+    });
+
+    if (!participation) {
+      const saved = await this.participationRepository.save(
+        this.participationRepository.create({
+          registrationId,
+          matchId: null,
+          corner: null,
+        }),
+      );
+      participation = await this.participationRepository.findOne({
+        where: { participationId: saved.participationId },
+        relations: ['registration'],
+      });
+    }
+
+    if (!participation) {
+      throw new NotFoundException(
+        `No se pudo crear la participación para registration ${registrationId}`,
+      );
+    }
+
+    // Buscar resultado existente para esta fase
+    let result = await this.resultRepository.findOne({
+      where: { participationId: participation.participationId, phaseId },
+    });
+
+    if (result) {
+      result.timeValue = null;
+      result.notes = 'DNS';
+      result.rankPosition = null;
+      result.isWinner = false;
+      result.recordedBy = userId;
+    } else {
+      result = this.resultRepository.create({
+        participationId: participation.participationId,
+        phaseId,
+        timeValue: null,
+        notes: 'DNS',
+        rankPosition: null,
+        isWinner: false,
+        recordedBy: userId,
+      });
+    }
+
+    return this.resultRepository.save(result);
   }
 }

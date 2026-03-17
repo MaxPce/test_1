@@ -18,12 +18,12 @@ export class ClimbingService {
     private readonly participationRepository: Repository<Participation>,
     @InjectRepository(Phase)
     private readonly phaseRepository: Repository<Phase>,
-    // ▼▼▼ NUEVOS REPOSITORIOS ▼▼▼
+    
     @InjectRepository(Match)
     private readonly matchRepository: Repository<Match>,
     @InjectRepository(PhaseRegistration)
     private readonly phaseRegistrationRepository: Repository<PhaseRegistration>,
-    // ▲▲▲ FIN NUEVOS REPOSITORIOS ▲▲▲
+    
   ) {}
 
   async getPhaseScores(phaseId: number) {
@@ -98,18 +98,67 @@ export class ClimbingService {
     });
 
     if (!score) {
-      score = this.individualScoreRepository.create({
-        participationId: participationId,
-      });
+      score = this.individualScoreRepository.create({ participationId });
     }
 
     if (dto.total !== undefined) (score as any).total = dto.total;
-    if (dto.rank !== undefined) (score as any).rank = dto.rank;
+    if (dto.rank  !== undefined) (score as any).rank  = dto.rank;
 
-    return this.individualScoreRepository.save(score);
+    await this.individualScoreRepository.save(score);
+
+    if (participation.matchId !== null) {
+      await this.recalculateRanks(participation.matchId);
+    }
+
+    return this.individualScoreRepository.findOne({ where: { participationId } });
   }
 
-  // ▼▼▼ MÉTODOS NUEVOS ▼▼▼
+
+  // ─────────────────────────────────────────────────────────
+  // Recalcula ranks cuando todos tienen total
+  // ─────────────────────────────────────────────────────────
+  private async recalculateRanks(matchId: number) {
+    // 1. Todas las participations del match
+    const participations = await this.participationRepository.find({
+      where: { matchId },
+    });
+
+    if (participations.length === 0) return;
+
+    // 2. Scores actuales
+    const scores = await this.individualScoreRepository.find({
+      where: participations.map((p) => ({ participationId: p.participationId })),
+    });
+
+    // 3. Solo rankear si TODOS tienen total (ninguno null/undefined)
+    const allHaveScore = participations.every((p) => {
+      const score = scores.find((s) => s.participationId === p.participationId);
+      return score?.total !== null && score?.total !== undefined;
+    });
+
+    if (!allHaveScore) return;
+
+    // 4. Ordenar por total DESC (mayor puntaje = mejor posición)
+    const sorted = [...scores].sort((a, b) => (b.total ?? 0) - (a.total ?? 0));
+
+    // 5. Asignar rank — manejar empates (mismo total = mismo rank)
+    let currentRank = 1;
+    for (let i = 0; i < sorted.length; i++) {
+      if (i > 0 && sorted[i].total === sorted[i - 1].total) {
+        // Empate: mismo rank que el anterior
+        (sorted[i] as any).rank = (sorted[i - 1] as any).rank;
+      } else {
+        (sorted[i] as any).rank = currentRank;
+      }
+      currentRank++;
+    }
+
+    // 6. Guardar todos los ranks actualizados
+    await this.individualScoreRepository.save(sorted);
+  }
+
+
+
 
   /**
    * Asigna un atleta a la fase de escalada.

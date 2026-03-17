@@ -24,6 +24,7 @@ import { Participation } from '../competitions/entities/participation.entity';
 import { Standing } from '../competitions/entities/standing.entity';
 import { PhaseManualRank } from '../competitions/entities/phase-manual-rank.entity';
 import { MatchGame } from '../competitions/entities/match-game.entity';
+import { Result } from '../results/entities/result.entity';
 
 import { CompetitionPhaseReportService } from './competition-phase-report.service';
 import {
@@ -64,6 +65,7 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
       AthleticsSection,
       AthleticsSectionEntry,
       AthleticsResult,
+      Result,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
