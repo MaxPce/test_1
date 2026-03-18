@@ -463,11 +463,28 @@ export class SismasterService {
   }
 
   // ─── Todas las categorías de un deporte 
+  // async getAllSportParams(idsport: number) {
+  //   return this.sportParamRepo.find({
+  //     where: { idsport },
+  //     order: { name: 'ASC' },
+  //   });
+  // }
+
   async getAllSportParams(idsport: number) {
-    return this.sportParamRepo.find({
-      where: { idsport },
-      order: { name: 'ASC' },
-    });
+    return this.sportParamRepo
+      .createQueryBuilder('sp')
+      .select([
+        'sp.idparam',
+        'sp.name',
+        'sp.abrev',
+        'sp.idsport',
+        'sp.idfather',
+        'sp.code',
+        'sp.isleaf',
+      ])
+      .where('sp.idsport = :idsport', { idsport })
+      .orderBy('sp.name', 'ASC')
+      .getMany();
   }
 
   async getAthletesByCategory(

@@ -12,6 +12,10 @@ import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
 import { Category } from '../sports/entities/category.entity';
 import { Sport } from '../sports/entities/sport.entity';
+import { FeaturedAthlete } from './entities/featured-athlete.entity';
+import { CreateFeaturedAthleteDto } from './dto/create-featured-athlete.dto';
+import { UpdateFeaturedAthleteDto } from './dto/update-featured-athlete.dto';
+import { UpsertFeaturedAthleteByPhaseDto } from './dto/upsert-featured-athlete-by-phase.dto';
 
 import { Gender } from '../common/enums';
 import {
@@ -42,11 +46,14 @@ export class EventsService {
     private athleteRepository: Repository<Athlete>,
     @InjectRepository(Institution)
     private institutionRepository: Repository<Institution>,
-
     @InjectRepository(Category)
     private categoryRepository: Repository<Category>,
     @InjectRepository(Sport)
     private sportRepository: Repository<Sport>,
+    @InjectRepository(FeaturedAthlete)
+    private featuredAthleteRepository: Repository<FeaturedAthlete>,
+
+
     private dataSource: DataSource,
     private sismasterService: SismasterService,
   ) {}
@@ -798,12 +805,12 @@ export class EventsService {
         );
       }
 
-      // 2. ✅ Obtener TODOS los atletas acreditados UNA SOLA VEZ
+      // 2. Obtener TODOS los atletas acreditados UNA SOLA VEZ
       const allAccreditedAthletes = await this.sismasterService.getAccreditedAthletes({
         idevent: eventCategory.externalEventId,
       });
 
-      // 3. ✅ Crear un Map para búsqueda rápida por ID
+      // 3. Crear un Map para búsqueda rápida por ID
       const athletesMap = new Map(
         allAccreditedAthletes.map((athlete) => [athlete.idperson, athlete])
       );
@@ -814,7 +821,7 @@ export class EventsService {
       // 4. Procesar cada atleta
       for (const externalAthleteId of bulkDto.external_athlete_ids) {
         try {
-          // 4.1. ✅ Buscar en el Map (sin llamadas extra)
+          // 4.1. Buscar en el Map (sin llamadas extra)
           const sismasterAthlete = athletesMap.get(externalAthleteId);
 
           if (!sismasterAthlete) {
@@ -836,17 +843,17 @@ export class EventsService {
             localInstitution = await queryRunner.manager.save(localInstitution);
           }
 
-          // 4.3. ✅ Buscar o crear atleta con NOMBRE COMPLETO
+          // 4.3. Buscar o crear atleta con NOMBRE COMPLETO
           let localAthlete = await this.athleteRepository.findOne({
             where: { docNumber: sismasterAthlete.docnumber },
           });
 
           if (!localAthlete) {
-            // ✅ CRÍTICO: Concatenar firstname + lastname + surname
+            // Concatenar firstname + lastname + surname
             const fullName = `${sismasterAthlete.firstname} ${sismasterAthlete.lastname} ${sismasterAthlete.surname || ''}`.trim();
             
             localAthlete = this.athleteRepository.create({
-              name: fullName, // ✅ Nombre completo
+              name: fullName, // Nombre completo
               dateBirth: sismasterAthlete.birthday,
               gender: sismasterAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO,
               nationality: sismasterAthlete.country || 'PER',
@@ -1014,10 +1021,12 @@ export class EventsService {
           }),
         );
 
-        this.logger.log(`✅ ${localCategory.name} (categoryId=${localCategory.categoryId})`);
+        this.logger.log(`${localCategory.name} (categoryId=${localCategory.categoryId})`);
         created++;
       }
     }
+
+    
 
     this.logger.log(
       `registerEventCategories → sisEvent=${sismasterEventId} | created=${created} skipped=${skipped} alreadyExists=${alreadyExists}`,
@@ -1032,6 +1041,83 @@ export class EventsService {
       alreadyExists,
     };
   }
+
+  // ==================== FEATURED ATHLETES ====================
+
+  async getFeaturedAthletesByCategory(eventCategoryId: number): Promise<FeaturedAthlete[]> {
+    return this.featuredAthleteRepository.find({
+      where: { eventCategoryId },
+      relations: [
+        'registration',
+        'registration.athlete',
+        'registration.athlete.institution',
+        'registration.team',
+        'registration.team.institution',
+      ],
+    });
+  }
+
+  async getFeaturedAthletesByPhase(phaseId: number): Promise<FeaturedAthlete[]> {
+    return this.featuredAthleteRepository.find({
+      where: { phaseId },
+      relations: [
+        'registration',
+        'registration.athlete',
+        'registration.athlete.institution',
+        'registration.team',
+        'registration.team.institution',
+      ],
+    });
+  }
+
+  async createFeaturedAthlete(dto: CreateFeaturedAthleteDto): Promise<FeaturedAthlete> {
+    const existing = await this.featuredAthleteRepository.findOne({
+      where: {
+        eventCategoryId: dto.eventCategoryId,
+        registrationId: dto.registrationId,
+      },
+    });
+    if (existing) {
+      throw new BadRequestException('Este atleta ya está destacado en esta categoría');
+    }
+    const entity = this.featuredAthleteRepository.create(dto);
+    return this.featuredAthleteRepository.save(entity);
+  }
+
+  async updateFeaturedAthlete(id: number, dto: UpdateFeaturedAthleteDto): Promise<FeaturedAthlete> {
+    const entity = await this.featuredAthleteRepository.findOneBy({ featuredAthleteId: id });
+    if (!entity) throw new NotFoundException(`FeaturedAthlete #${id} no encontrado`);
+    Object.assign(entity, dto);
+    return this.featuredAthleteRepository.save(entity);
+  }
+
+  async removeFeaturedAthlete(id: number): Promise<void> {
+    const entity = await this.featuredAthleteRepository.findOneBy({ featuredAthleteId: id });
+    if (!entity) throw new NotFoundException(`FeaturedAthlete #${id} no encontrado`);
+    await this.featuredAthleteRepository.remove(entity);
+  }
+
+  async upsertFeaturedAthleteByPhase(dto: UpsertFeaturedAthleteByPhaseDto): Promise<FeaturedAthlete> {
+    let entity = await this.featuredAthleteRepository.findOne({
+      where: {
+        phaseId: dto.phaseId,
+        registrationId: dto.registrationId, 
+      },
+    });
+    if (entity) {
+      if (dto.reason !== undefined) entity.reason = dto.reason ?? null;
+    } else {
+      entity = this.featuredAthleteRepository.create({
+        phaseId:         dto.phaseId,
+        eventCategoryId: dto.eventCategoryId,
+        registrationId:  dto.registrationId,
+        reason:          dto.reason ?? null,
+      });
+    }
+    return this.featuredAthleteRepository.save(entity);
+  }
+
+
 
 
 }

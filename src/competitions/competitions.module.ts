@@ -28,6 +28,10 @@ import { ClimbingService } from './climbing.service';
 import { AthleticsController } from './athletics.controller';
 import { AthleticsService } from './athletics.service';
 import { AthleticsResult } from './entities/athletics-result.entity';
+import { ChessController } from './chess.controller';
+import { ChessService } from './chess.service';
+import { ChessRound } from './entities/chess-round.entity';
+import { ChessMatch } from './entities/chess-match.entity';
 
 import {
   Match,
@@ -39,6 +43,7 @@ import {
   IndividualScore,
   PhaseManualRank,
   PhaseRegistration,
+  
 } from './entities';
 import { AthleticsSection } from './entities/athletics-section.entity';
 import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity';
@@ -61,6 +66,8 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
       AthleticsResult,
       AthleticsSection,
       AthleticsSectionEntry,
+      ChessRound,
+      ChessMatch,
     ]),
   ],
   controllers: [
@@ -75,6 +82,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
     WeightliftingController,
     ClimbingController,
     AthleticsController,
+    ChessController,
   ],
   providers: [
     CompetitionsService,
@@ -90,6 +98,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
     WeightliftingService,
     ClimbingService,
     AthleticsService,
+    ChessService,
   ],
   exports: [
     CompetitionsService,
@@ -100,6 +109,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
     WeightliftingService,
     ClimbingService,
     AthleticsService,
+    ChessService,
   ],
 })
 export class CompetitionsModule {}

@@ -22,6 +22,7 @@ export class ClimbingService {
     @InjectRepository(Match)
     private readonly matchRepository: Repository<Match>,
     @InjectRepository(PhaseRegistration)
+    
     private readonly phaseRegistrationRepository: Repository<PhaseRegistration>,
     
   ) {}

@@ -6,3 +6,6 @@ export * from './create-registration.dto';
 export * from './bulk-register.dto';
 export * from './bulk-register-sismaster.dto';
 export * from './register-event-categories.dto';
+export * from './create-featured-athlete.dto';
+export * from './update-featured-athlete.dto';
+export * from './upsert-featured-athlete-by-phase.dto';

@@ -22,6 +22,9 @@ import {
   CreateRegistrationDto,
   BulkRegisterDto,
   RegisterEventCategoriesDto,
+  CreateFeaturedAthleteDto,
+  UpdateFeaturedAthleteDto,
+  UpsertFeaturedAthleteByPhaseDto,
 } from './dto';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -311,5 +314,48 @@ export class EventsController {
   }
 
   //ss
+
+  // ==================== FEATURED ATHLETES ====================
+
+  @Get('featured-athletes/event-category/:id')
+  @Public()
+  getFeaturedAthletesByCategory(@Param('id', ParseIntPipe) id: number) {
+    return this.eventsService.getFeaturedAthletesByCategory(id);
+  }
+
+  @Get('featured-athletes/phase/:phaseId')
+  @Public()
+  getFeaturedAthletesByPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.eventsService.getFeaturedAthletesByPhase(phaseId);
+  }
+
+  @Post('featured-athletes')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  createFeaturedAthlete(@Body() dto: CreateFeaturedAthleteDto) {
+    return this.eventsService.createFeaturedAthlete(dto);
+  }
+
+  @Post('featured-athletes/phase')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  upsertFeaturedAthleteByPhase(@Body() dto: UpsertFeaturedAthleteByPhaseDto) {
+    return this.eventsService.upsertFeaturedAthleteByPhase(dto);
+  }
+
+  @Patch('featured-athletes/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  updateFeaturedAthlete(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateFeaturedAthleteDto,
+  ) {
+    return this.eventsService.updateFeaturedAthlete(id, dto);
+  }
+
+  @Delete('featured-athletes/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async removeFeaturedAthlete(@Param('id', ParseIntPipe) id: number) {
+    await this.eventsService.removeFeaturedAthlete(id);
+    return { message: 'Atleta destacado eliminado correctamente' };
+  }
+
 
 }

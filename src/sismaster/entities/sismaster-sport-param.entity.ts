@@ -23,6 +23,9 @@ export class SismasterSportParam {
   @Column({ default: 0 })
   isleaf: number;
 
-  @Column({ type: 'datetime' })
-  createdat: Date;
+  // @Column({ type: 'datetime' })
+  // createdat: Date;
+
+  @Column({ name: 'created_at', type: 'datetime' })
+  createdAt: Date;
 }
