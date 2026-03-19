@@ -31,7 +31,7 @@ export class ShootingScore {
     name: 'total',
     type: 'decimal',
     precision: 6,
-    scale: 1,
+    scale: 2,
     nullable: true,
     comment: 'Suma total de todas las series',
   })

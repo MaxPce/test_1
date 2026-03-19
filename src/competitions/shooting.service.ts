@@ -34,7 +34,7 @@ export class ShootingService {
     }
 
     const total = parseFloat(
-      updateDto.series.reduce((sum, s) => sum + s, 0).toFixed(1),
+      updateDto.series.reduce((sum, s) => sum + s, 0).toFixed(2),
     );
 
     let score = await this.shootingScoreRepository.findOne({
