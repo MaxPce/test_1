@@ -128,13 +128,21 @@ export class AuthService {
 
     const { password, ...result } = user;
     return result;
+    // Nota: los permisos del operator se obtienen por separado
+    // en GET /operator-permissions/my-permissions
   }
 
-  async findAllUsers(): Promise<User[]> {
-    return this.usersRepository.find({
-      where: { deletedAt: IsNull() },
+  async findAllUsers(role?: UserRole): Promise<Omit<User, 'password'>[]> {
+    const where: any = { deletedAt: IsNull() };
+    if (role) where.role = role;
+
+    const users = await this.usersRepository.find({
+      where,
       order: { fullName: 'ASC' },
     });
+
+    // Nunca devolver el password
+    return users.map(({ password, ...rest }) => rest as Omit<User, 'password'>);
   }
 
   async findOneUser(userId: number): Promise<User> {

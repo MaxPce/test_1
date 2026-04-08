@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Body,
+  Query,
   HttpCode,
   HttpStatus,
   Get,
@@ -46,8 +47,8 @@ export class AuthController {
 
   @Get('users')
   @Roles(UserRole.ADMIN)
-  async findAll() {
-    return this.authService.findAllUsers();
+  async findAll(@Query('role') role?: UserRole) {
+    return this.authService.findAllUsers(role);
   }
 
   @Get('users/deleted')

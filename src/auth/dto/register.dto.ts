@@ -25,7 +25,7 @@ export class RegisterDto {
   @IsEmail({}, { message: 'Email inválido' })
   email: string;
 
-  @IsOptional()
+  @IsOptional() 
   @IsEnum(UserRole)
   role?: UserRole;
 }
