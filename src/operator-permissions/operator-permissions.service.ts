@@ -61,17 +61,28 @@ export class OperatorPermissionsService {
 
   async canAccessEvent(userId: number, eventId: number): Promise<boolean> {
     const perms = await this.repo.find({ where: { userId } });
-    return perms.some(
-      (p) =>
-        p.eventId === eventId ||
-        (p.sportId !== null && p.eventId === null),
-    );
+    return perms.some((p) => p.eventId === eventId); 
   }
+
 
   async canAccessSport(userId: number, sportId: number): Promise<boolean> {
     const perms = await this.repo.find({ where: { userId } });
     return perms.some((p) => p.sportId === sportId && p.eventId === null);
   }
+
+  async canAccessSportInEvent(
+    userId: number,
+    eventId: number,
+    sportId: number,
+  ): Promise<boolean> {
+    const perms = await this.repo.find({ where: { userId } });
+    return perms.some(
+      (p) =>
+        p.eventId === eventId ||                              
+        (p.sportId === sportId && p.eventId === null),        
+    );
+  }
+
 
   async getSummaryByUser(userId: number) {
     const perms = await this.repo.find({ where: { userId } });
@@ -85,4 +96,26 @@ export class OperatorPermissionsService {
       permissions: perms,
     };
   }
+
+  async canAccess(
+    userId: number,
+    eventId: number | null,
+    sportId: number | null,
+  ): Promise<boolean> {
+    // Ambos presentes → validar la relación sport dentro del evento
+    if (eventId !== null && sportId !== null) {
+      return this.canAccessSportInEvent(userId, eventId, sportId);
+    }
+    // Solo eventId
+    if (eventId !== null) {
+      return this.canAccessEvent(userId, eventId);
+    }
+    // Solo sportId
+    if (sportId !== null) {
+      return this.canAccessSport(userId, sportId);
+    }
+    // Sin ningún recurso específico → denegar por defecto
+    return false;
+  }
+
 }

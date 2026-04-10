@@ -271,8 +271,9 @@ export class EventsController {
    * Obtener registrations con datos enriquecidos de sismaster en tiempo real
    */
   @Get(':eventId/registrations/enriched')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getEnrichedRegistrations(
-    @Param('eventId') eventId: number,
+    @Param('eventId', ParseIntPipe) eventId: number,
   ): Promise<RegistrationWithSismasterDto[]> {
     // 1. Obtener registrations básicos de la DB local
     const registrations =
@@ -288,7 +289,7 @@ export class EventsController {
    * Obtener categorías de un evento de Sismaster
    */
   @Get('sismaster/:externalEventId/categories')
-  @Public()
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   findEventCategoriesByExternalEvent(
     @Param('externalEventId', ParseIntPipe) externalEventId: number,
   ) {
@@ -297,6 +298,7 @@ export class EventsController {
     );
   }
   @Post('registrations/bulk-sismaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async bulkRegisterFromSismaster(@Body() bulkDto: BulkRegisterSismasterDto) {
     return this.eventsService.bulkRegisterFromSismaster(bulkDto);
   }

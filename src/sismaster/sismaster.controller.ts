@@ -14,9 +14,15 @@ import { SismasterService } from './sismaster.service';
 import { BadRequestException } from '@nestjs/common';
 import { CompetitionSnapshotService } from './competition-snapshot.service';
 import { CompetitionPhaseReportService } from './competition-phase-report.service';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
 
 
 @Controller('sismaster')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class SismasterController {
   
   logger: any;
@@ -46,6 +52,7 @@ export class SismasterController {
     GET /sismaster/competition-report/200?eventCategoryId=155&phaseId=212
    */
   @Get('competition-report/:eventId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getPhaseReport(
     @Param('eventId', ParseIntPipe) eventId: number,
     @Query('sportId') sportId?: string,
@@ -69,6 +76,7 @@ export class SismasterController {
    * Ejemplo: GET /sismaster/competition-snapshot/1
    */
   @Get('competition-snapshot/:eventId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getCompetitionSnapshot(
     @Param('eventId', ParseIntPipe) eventId: number,
     @Query('sportId') sportId?: string,
@@ -88,6 +96,7 @@ export class SismasterController {
    * Listar todos los eventos de Sismaster
    */
   @Get('events')
+  @Public() 
   async getAllEvents() {
     return await this.sismasterService.getAllEvents();
   }
@@ -97,6 +106,7 @@ export class SismasterController {
    * Obtener un evento específico
    */
   @Get('events/:id')
+  @Public()
   async getEventById(@Param('id', ParseIntPipe) id: number) {
     return await this.sismasterService.getEventById(id);
   }
@@ -106,6 +116,7 @@ export class SismasterController {
    * Listar todos los deportes
    */
   @Get('sports')
+  @Public() 
   async getAllSports() {
     return await this.sismasterService.getAllSports();
   }
@@ -115,6 +126,7 @@ export class SismasterController {
    * Obtener un deporte específico
    */
   @Get('sports/:id')
+  @Public()
   async getSportById(@Param('id', ParseIntPipe) id: number) {
     return await this.sismasterService.getSportById(id);
   }
@@ -123,6 +135,7 @@ export class SismasterController {
    * GET /sismaster/athletes/accredited
    */
   @Get('athletes/accredited')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAccreditedAthletes(
     @Query('idevent', ParseIntPipe) idevent: number,
     @Query('gender') gender?: 'M' | 'F',
@@ -143,6 +156,7 @@ export class SismasterController {
    * Ejemplo: /sismaster/athletes/search?q=Juan
    */
   @Get('athletes/search')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async searchAthletes(
     @Query('q') searchTerm: string,
     @Query('limit') limit?: number,
@@ -158,12 +172,14 @@ export class SismasterController {
    * Obtener el total de atletas registrados
    */
   @Get('athletes/count')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthletesCount() {
     const count = await this.sismasterService.getAthletesCount();
     return { count };
   }
 
   @Get('athletes/by-category-name')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthletesByCategoryName(
     
     @Query('sismasterEventId') sismasterEventIdRaw: string,
@@ -187,6 +203,7 @@ export class SismasterController {
    * Ejemplo: /sismaster/athletes/by-category-local?sismasterEventId=200&localSportId=3&idparam=262
    */
   @Get('athletes/by-category-local')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthletesByCategoryLocal(
     @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterEventId: number,
     @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 })) localSportId: number,
@@ -204,6 +221,7 @@ export class SismasterController {
    * Opciones de idniv e idcat disponibles para un evento+deporte
    */
   @Get('athletes/niv-cat-options')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getNivCatOptions(
     @Query('sismasterEventId', ParseIntPipe) sismasterEventId: number,
     @Query('sismasterSportId', ParseIntPipe) sismasterSportId: number,
@@ -222,6 +240,7 @@ export class SismasterController {
    * Ej: ?sismasterEventId=101&localSportId=3&idniv=NV&idcat=M
    */
   @Get('athletes/by-niv-cat')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthletesByNivAndCat(
     @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
     sismasterEventId: number,
@@ -249,6 +268,7 @@ export class SismasterController {
    *   eventCategoryId   : number   (opcional)   para filtrar por categoría local
    */
   @Get('athletes/registrations-by-niv-cat')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getRegistrationIdsByNivCat(
     @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 }))
     sismasterEventId: number,
@@ -274,6 +294,7 @@ export class SismasterController {
    * Obtener un atleta por ID
    */
   @Get('athletes/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthleteById(@Param('id', ParseIntPipe) id: number) {
     return await this.sismasterService.getAthleteById(id);
   }
@@ -283,6 +304,7 @@ export class SismasterController {
    * Obtener un atleta por documento
    */
   @Get('athletes/document/:docnumber')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthleteByDocument(@Param('docnumber') docnumber: string) {
     return await this.sismasterService.getAthleteByDocument(docnumber);
   }
@@ -292,6 +314,7 @@ export class SismasterController {
    * Obtener una institución por ID
    */
   @Get('institutions/:id')
+  @Public()
   async getInstitutionById(@Param('id', ParseIntPipe) id: number) {
     return await this.sismasterService.getInstitutionById(id);
   }
@@ -301,6 +324,7 @@ export class SismasterController {
    * Listar todas las instituciones
    */
   @Get('institutions')
+  @Public()
   async getAllInstitutions() {
     return await this.sismasterService.getAllInstitutions();
   }
@@ -310,6 +334,7 @@ export class SismasterController {
    * Deportes configurados para un evento 
    */
   @Get('events/:idevent/sports')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getSportsByEvent(@Param('idevent', ParseIntPipe) idevent: number) {
     return this.sismasterService.getSportsByEvent(idevent);
   }
@@ -319,6 +344,7 @@ export class SismasterController {
    * TODAS las categorías de un deporte 
    */
   @Get('sports/:id/params')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAllSportParams(@Param('id', ParseIntPipe) idsport: number) {
     return this.sismasterService.getAllSportParams(idsport);
   }
@@ -332,7 +358,7 @@ export class SismasterController {
    * Categorías con atletas inscritos. Recibe localSportId y sismasterEventId.
    */
   @Get('sports/local/:localSportId/params/by-event/:sismasterEventId')
-  
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getSportParamsByLocalSport(
     @Param('localSportId', ParseIntPipe) localSportId: number,
     @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
