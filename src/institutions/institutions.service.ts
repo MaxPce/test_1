@@ -279,13 +279,19 @@ export class InstitutionsService {
         );
 
         if (sismasterInstitution) {
-          institution = this.institutionRepository.create({
-            institutionId: sismasterInstitution.idinstitution,
-            name: sismasterInstitution.businessName || sismasterInstitution.business,
-            abrev: sismasterInstitution.abrev,
-            logoUrl: sismasterInstitution.avatar,
+          institution = await this.institutionRepository.findOne({
+            where: { institutionId: sismasterInstitution.idinstitution },
+            withDeleted: true,  // por si acaso está soft-deleted
           });
-          institution = await this.institutionRepository.save(institution);
+          if (!institution) {
+            institution = this.institutionRepository.create({
+              institutionId: sismasterInstitution.idinstitution,
+              name: sismasterInstitution.businessName || sismasterInstitution.business,
+              abrev: sismasterInstitution.abrev,
+              logoUrl: sismasterInstitution.avatar,
+            });
+            institution = await this.institutionRepository.save(institution);
+          }
           
           
         } else {

@@ -212,6 +212,8 @@ export class AthleticsService {
         'registration.athlete.institution',
         'registration.team',
         'registration.team.institution',
+        'registration.team.members',            
+        'registration.team.members.athlete',    
       ],
     });
 
@@ -241,6 +243,7 @@ export class AthleticsService {
       const athlete = reg?.athlete;
       const team = reg?.team;
       const institution = athlete?.institution ?? team?.institution;
+      const members = team?.members ?? [];
       const result = resultMap.get(pr.phaseRegistrationId);
       const athleteEntries = entriesMap.get(pr.phaseRegistrationId) ?? [];
 
@@ -262,6 +265,14 @@ export class AthleticsService {
           wind: e.wind,
           notes: e.notes,
         })),
+        teamMembers: team
+          ? members.map((m) => ({
+              athleteId: m.athleteId,
+              name: m.athlete?.name ?? `Atleta ${m.athleteId}`,
+              rol: m.rol ?? 'titular',
+            }))
+          : [],
+
       };
     });
   }
@@ -370,6 +381,8 @@ export class AthleticsService {
         'registration.athlete.institution',
         'registration.team',
         'registration.team.institution',
+        'registration.team.members',            
+        'registration.team.members.athlete',    
       ],
     });
 

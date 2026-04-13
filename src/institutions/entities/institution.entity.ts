@@ -1,8 +1,9 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany, DeleteDateColumn, Unique } from 'typeorm';
 import { Athlete } from './athlete.entity';
 import { Team } from './team.entity';
 
 @Entity('institutions')
+@Unique(['name'])
 export class Institution {
   @PrimaryGeneratedColumn({ name: 'institution_id' })
   institutionId: number;
