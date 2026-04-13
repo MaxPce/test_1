@@ -32,8 +32,6 @@ import {
 export class AthleticsController {
   constructor(private readonly athleticsService: AthleticsService) {}
 
-  // ==================== ATHLETICS RESULTS ====================
-
   // POST /competitions/athletics
   // ==================== ATHLETICS RESULTS ====================
 
@@ -81,7 +79,7 @@ export class AthleticsController {
   }
 
   @Delete('athletics/sections/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   deleteSection(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.deleteSection(id);
   }
@@ -104,7 +102,7 @@ export class AthleticsController {
   }
 
   @Delete('athletics/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   remove(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.remove(id);
   }
@@ -155,7 +153,7 @@ export class AthleticsController {
   }
 
   @Delete('phase-registrations/:id/athletics/reset')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   reset(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.resetPhaseRegistration(id);
   }

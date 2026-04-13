@@ -21,6 +21,7 @@ import type { AuthUser } from '../common/interfaces/auth-user.interface';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { ChangePasswordDto } from './dto/change-password.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -77,6 +78,22 @@ export class AuthController {
   @Roles(UserRole.ADMIN)
   async restore(@Param('id', ParseIntPipe) id: number) {
     return this.authService.restoreUser(id);
+  }
+
+  @Post('admins')
+  @Roles(UserRole.ADMIN)
+  async createAdmin(@Body() registerDto: RegisterDto) {
+    return this.authService.createAdmin(registerDto);
+  }
+
+  @Patch('users/:id/password')
+  @Roles(UserRole.ADMIN)
+  async changePassword(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() changePasswordDto: ChangePasswordDto,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.authService.changePassword(id, changePasswordDto.newPassword, user.userId);
   }
 
   @Delete('users/:id/hard')

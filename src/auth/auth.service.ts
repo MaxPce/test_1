@@ -158,8 +158,41 @@ export class AuthService {
     return user;
   }
 
+  async createAdmin(registerDto: RegisterDto) {
+    return this.register({ ...registerDto, role: UserRole.ADMIN });
+  }
+
+  async changePassword(
+    targetUserId: number,
+    newPassword: string,
+    requestingUserId: number,
+  ): Promise<{ message: string }> {
+    // Solo admin puede cambiar contraseñas de otros; 
+    // cualquiera puede cambiar la suya propia (si deseas permitirlo)
+    const user = await this.usersRepository.findOne({
+      where: { userId: targetUserId, deletedAt: IsNull() },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`Usuario con ID ${targetUserId} no encontrado`);
+    }
+
+    if (newPassword.length < 6) {
+      throw new BadRequestException('La contraseña debe tener al menos 6 caracteres');
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await this.usersRepository.update(targetUserId, { password: hashedPassword });
+
+    return { message: 'Contraseña actualizada correctamente' };
+  }
+
+
   async removeUser(userId: number, deletedByUserId?: number): Promise<void> {
     const user = await this.findOneUser(userId);
+
+    
+    await this.usersRepository.update(userId, { isActive: false });
 
     await this.usersRepository.softRemove(user);
 
@@ -189,6 +222,8 @@ export class AuthService {
       .set({ deletedBy: null } as any)
       .where('userId = :userId', { userId })
       .execute();
+
+    await this.usersRepository.update(userId, { isActive: true });
 
     return this.findOneUser(userId);
   }
