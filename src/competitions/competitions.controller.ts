@@ -117,7 +117,7 @@ export class CompetitionsController {
   // ==================== MATCHES ====================
 
   @Post('matches')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   createMatch(@Body() createDto: CreateMatchDto) {
     return this.competitionsService.createMatch(createDto);
   }
@@ -145,7 +145,7 @@ export class CompetitionsController {
   }
 
   @Patch('matches/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateMatch(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateMatchDto,
@@ -252,7 +252,7 @@ export class CompetitionsController {
   }
 
   @Patch('matches/:matchId/best-of-3-result')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updateBestOf3Result(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body('winnerRegistrationId', ParseIntPipe) winnerRegistrationId: number,
@@ -266,7 +266,7 @@ export class CompetitionsController {
   // ==================== TENIS DE MESA - LINEUPS ====================
 
   @Post('participations/:id/lineup')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async setLineup(
     @Param('id', ParseIntPipe) participationId: number,
     @Body() dto: SetMatchLineupDto,
@@ -283,7 +283,7 @@ export class CompetitionsController {
   // ==================== TENIS DE MESA - GAMES ====================
 
   @Post('matches/:id/generate-games')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async generateGames(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.generateGames(matchId);
   }
@@ -320,13 +320,13 @@ export class CompetitionsController {
   // ==================== TENIS DE MESA - FINALIZE MATCH ====================
 
   @Patch('matches/:id/finalize')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async finalizeMatch(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.finalizeMatch(matchId);
   }
 
   @Patch('matches/:id/reopen')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async reopenMatch(@Param('id', ParseIntPipe) matchId: number) {
     return this.tableTennisService.reopenMatch(matchId);
   }
@@ -334,7 +334,7 @@ export class CompetitionsController {
   // ==================== POOMSAE ENDPOINTS ====================
 
   @Patch('participations/:participationId/poomsae-score')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updatePoomsaeScore(
     @Param('participationId', ParseIntPipe) participationId: number,
     @Body() updateDto: UpdatePoomsaeScoreDto,
@@ -362,17 +362,19 @@ export class CompetitionsController {
   // ==================== ENDPOINTS DE BRACKET ====================
 
   @Post('brackets/generate-complete')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async generateCompleteBracket(@Body() dto: GenerateBracketDto) {
     return this.bracketService.generateCompleteBracket(dto);
   }
 
   @Post('matches/advance-winner')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async advanceWinner(@Body() dto: AdvanceWinnerDto) {
     return this.bracketService.advanceWinner(dto);
   }
 
   @Patch('matches/:matchId/walkover')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async setMatchWalkover(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() dto: SetWalkoverDto,
@@ -386,27 +388,32 @@ export class CompetitionsController {
 
 
   @Get('brackets/:phaseId/structure')
+  @Public()
   async getBracketStructure(@Param('phaseId') phaseId: string) {
     return this.bracketService.getBracketStructure(+phaseId);
   }
 
   @Get('brackets/:phaseId/is-complete')
+  @Public()
   async isBracketComplete(@Param('phaseId') phaseId: string) {
     const isComplete = await this.bracketService.isBracketComplete(+phaseId);
     return { phaseId: +phaseId, isComplete };
   }
 
   @Get('brackets/:phaseId/champion')
+  @Public()
   async getChampion(@Param('phaseId') phaseId: string) {
     return this.bracketService.getChampion(+phaseId);
   }
 
   @Get('brackets/:phaseId/third-place')
+  @Public()
   async getThirdPlace(@Param('phaseId') phaseId: string) {
     return this.bracketService.getThirdPlace(+phaseId);
   }
 
   @Patch('registrations/:id/seed')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateRegistrationSeed(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: { seedNumber: number | null },
@@ -415,12 +422,13 @@ export class CompetitionsController {
   }
 
   @Post('phases/:id/process-byes')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
     return this.competitionsService.processPhaseByesAutomatically(phaseId);
   }
 
   @Post('table-tennis/matches/:matchId/walkover')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async setTableTennisWalkover(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() dto: { winnerRegistrationId: number; reason?: string },
@@ -458,7 +466,7 @@ export class CompetitionsController {
   }
 
   @Post('phases/:phaseId/registrations')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   assignPhaseRegistration(
     @Param('phaseId', ParseIntPipe) phaseId: number,
     @Body('registrationId') registrationId: number,
@@ -467,7 +475,7 @@ export class CompetitionsController {
   }
 
   @Delete('phases/:phaseId/registrations/:registrationId')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   removePhaseRegistration(
     @Param('phaseId', ParseIntPipe) phaseId: number,
     @Param('registrationId', ParseIntPipe) registrationId: number,

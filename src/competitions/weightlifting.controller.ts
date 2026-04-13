@@ -44,7 +44,7 @@ export class WeightliftingController {
 
   // PUT /competitions/weightlifting/participations/:participationId/attempt
   @Put('participations/:participationId/attempt')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async upsertAttempt(
     @Param('participationId', ParseIntPipe) participationId: number,
     @Body() dto: UpsertWeightliftingAttemptDto,

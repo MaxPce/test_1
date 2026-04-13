@@ -38,7 +38,7 @@ export class AthleticsController {
   // ==================== ATHLETICS RESULTS ====================
 
   @Post('athletics')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   create(@Body() dto: CreateAthleticsResultDto) {
     return this.athleticsService.create(dto);
   }
@@ -52,19 +52,19 @@ export class AthleticsController {
   }
 
   @Post('athletics/sections')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   createSection(@Body() dto: CreateAthleticsSectionDto) {
     return this.athleticsService.createSection(dto);
   }
 
   @Post('athletics/sections/assign')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   assignSectionEntries(@Body() dto: AssignSectionEntriesDto) {
     return this.athleticsService.assignSectionEntries(dto);
   }
 
   @Patch('athletics/sections/entry')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   upsertSectionEntry(@Body() dto: UpsertSectionEntryDto) {
     return this.athleticsService.upsertSectionEntry(dto);
   }
@@ -72,7 +72,7 @@ export class AthleticsController {
   // ── Secciones — dinámicas DESPUÉS ────────────────────────────────────────────
 
   @Patch('athletics/sections/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateSection(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAthleticsSectionDto,
@@ -95,7 +95,7 @@ export class AthleticsController {
   }
 
   @Patch('athletics/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   update(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateAthleticsResultDto,

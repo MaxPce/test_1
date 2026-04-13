@@ -1,41 +1,34 @@
-import {
-  Controller,
-  Get,
-  Patch,
-  Param,
-  Body,
-  ParseIntPipe,
-} from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { JudoService } from './judo.service';
 import { UpdateJudoScoreDto } from './dto/update-judo-score.dto';
+import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
+import { RolesGuard } from '../common/guards/roles.guard';
+import { Roles } from '../common/decorators/roles.decorator';
+import { Public } from '../common/decorators/public.decorator';
+import { UserRole } from '../common/enums/user-role.enum';
 
 @Controller('competitions/judo')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class JudoController {
   constructor(private readonly judoService: JudoService) {}
 
-  // PATCH /competitions/judo/matches/:matchId/score
   @Patch('matches/:matchId/score')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updateMatchScore(
     @Param('matchId', ParseIntPipe) matchId: number,
     @Body() updateDto: UpdateJudoScoreDto,
   ) {
-    console.log('🥋 Actualizando score de Judo:', {
-      matchId,
-      participant1Score: updateDto.participant1Score,
-      participant2Score: updateDto.participant2Score,
-    });
-
     return await this.judoService.updateMatchScore(matchId, updateDto);
   }
 
-  // GET /competitions/judo/phases/:phaseId/bracket
   @Get('phases/:phaseId/bracket')
+  @Public()
   async getBracketWithScores(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return await this.judoService.getBracketWithScores(phaseId);
   }
 
-  // GET /competitions/judo/matches/:matchId
   @Get('matches/:matchId')
+  @Public()
   async getMatchDetails(@Param('matchId', ParseIntPipe) matchId: number) {
     return await this.judoService.getMatchDetails(matchId);
   }

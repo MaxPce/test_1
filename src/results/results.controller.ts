@@ -37,7 +37,7 @@ export class ResultsController {
   // ==================== RESULTS ====================
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   createResult(
     @Body() createDto: CreateResultDto,
     @CurrentUser() user: AuthUser,
@@ -61,7 +61,7 @@ export class ResultsController {
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateResult(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateResultDto,
@@ -71,7 +71,7 @@ export class ResultsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   removeResult(@Param('id', ParseIntPipe) id: number) {
     return this.resultsService.removeResult(id);
   }
@@ -79,7 +79,7 @@ export class ResultsController {
   // ==================== ATTEMPTS ====================
 
   @Post('attempts')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   createAttempt(@Body() createDto: CreateAttemptDto) {
     return this.resultsService.createAttempt(createDto);
   }
@@ -93,7 +93,7 @@ export class ResultsController {
   }
 
   @Patch('attempts/:id/validity')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateAttemptValidity(
     @Param('id', ParseIntPipe) id: number,
     @Body('isValid') isValid: boolean,
@@ -102,7 +102,7 @@ export class ResultsController {
   }
 
   @Delete('attempts/:id')
-  @Roles(UserRole.ADMIN)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   removeAttempt(@Param('id', ParseIntPipe) id: number) {
     return this.resultsService.removeAttempt(id);
   }
@@ -110,7 +110,7 @@ export class ResultsController {
   // ==================== PUBLISH RESULTS ====================
 
   @Post('publish')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   publishMatchResult(
     @Body() dto: PublishMatchResultDto,
     @CurrentUser() user: AuthUser,
@@ -146,7 +146,7 @@ export class ResultsController {
   }
 
   @Patch(':id')  
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updateTimeResult(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: Partial<CreateTimeResultDto>,
@@ -156,7 +156,7 @@ export class ResultsController {
   }
 
   @Post('time')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async createTimeResult(
     @Body() dto: CreateTimeResultDto,
     @CurrentUser() user: AuthUser,
@@ -173,7 +173,7 @@ export class ResultsController {
   }
 
   @Post('swimming/:eventCategoryId/recalculate')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async recalculatePositions(
     @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
   ) {
@@ -183,7 +183,7 @@ export class ResultsController {
   }
 
   @Post('dns')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async createDNSResult(
     @Body('registrationId', ParseIntPipe) registrationId: number,
     @Body('phaseId', ParseIntPipe) phaseId: number,

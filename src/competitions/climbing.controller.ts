@@ -30,7 +30,7 @@ export class ClimbingController {
   }
 
   @Patch('participations/:participationId/climbing-score')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateClimbingScore(
     @Param('participationId', ParseIntPipe) participationId: number,
     @Body() dto: UpdateClimbingScoreDto,
@@ -40,7 +40,7 @@ export class ClimbingController {
 
   // POST /competitions/phases/:phaseId/climbing-assign
   @Post('phases/:phaseId/climbing-assign')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   assignParticipant(
     @Param('phaseId', ParseIntPipe) phaseId: number,
     @Body('registrationId') registrationId: number,
@@ -50,7 +50,7 @@ export class ClimbingController {
 
   // DELETE /competitions/phases/:phaseId/climbing-assign/:registrationId
   @Delete('phases/:phaseId/climbing-assign/:registrationId')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   removeParticipant(
     @Param('phaseId', ParseIntPipe) phaseId: number,
     @Param('registrationId', ParseIntPipe) registrationId: number,

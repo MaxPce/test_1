@@ -68,14 +68,14 @@ export class ChessController {
 
   // POST /competitions/chess/matches
   @Post('chess/matches')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   createMatch(@Body() dto: CreateChessMatchDto) {
     return this.chessService.createMatch(dto);
   }
 
   // PATCH /competitions/chess/matches/:id
   @Patch('chess/matches/:id')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   updateMatch(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateChessMatchDto,
