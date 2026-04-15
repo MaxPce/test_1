@@ -18,6 +18,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { GenerateAthleticsSeriesDto } from './dto/generate-athletics-series.dto';
 import {
   CreateAthleticsSectionDto,
   UpdateAthleticsSectionDto,
@@ -65,6 +66,15 @@ export class AthleticsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   upsertSectionEntry(@Body() dto: UpsertSectionEntryDto) {
     return this.athleticsService.upsertSectionEntry(dto);
+  }
+
+  @Post('phases/:eventCategoryId/generate-series')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async generateSeries(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() dto: GenerateAthleticsSeriesDto,                          // ← NUEVO
+  ) {
+    return this.athleticsService.generateAthleticsPhasesBySeries(eventCategoryId, dto);
   }
 
   // ── Secciones — dinámicas DESPUÉS ────────────────────────────────────────────

@@ -48,11 +48,11 @@ export class SismasterController {
     # Solo una categoría específica
     GET /sismaster/competition-report/200?eventCategoryId=155
 
-    # Solo la fase de una categoría&
+    # Solo la fase de una categoría
     GET /sismaster/competition-report/200?eventCategoryId=155&phaseId=212
    */
   @Get('competition-report/:eventId')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  @Public()
   async getPhaseReport(
     @Param('eventId', ParseIntPipe) eventId: number,
     @Query('sportId') sportId?: string,

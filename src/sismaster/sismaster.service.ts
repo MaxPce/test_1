@@ -496,60 +496,75 @@ export class SismasterService {
       `getAthletesByCategory → idevent=${idevent}, idsport=${idsport}, idparam=${idparam}`,
     );
 
-    const results = await this.accreditationRepo
-      .createQueryBuilder('a')
-      .innerJoin('person',      'p', 'a.idperson      = p.idperson')
-      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
-      .innerJoin(
-        'accreditation_test',
-        'atest',
-        'atest.idacreditation = a.idacreditation AND atest.mstatus = 1',
-      )
-      .innerJoin(
-        'sport_params',
-        'sp',
-        'sp.code = atest.idtest AND sp.idsport = :idsport AND sp.idparam = :idparam',
-        { idsport, idparam },
-      )
-      .select([
-        'a.idacreditation          AS idacreditation',
-        'a.idevent                 AS idevent',
-        'a.idsport                 AS idsport',
-        'a.idinstitution           AS idinstitution',
-        'a.idperson                AS idperson',
-        'a.photo                   AS photo',
-        'p.docnumber               AS docnumber',
-        'p.firstname               AS firstname',
-        'p.lastname                AS lastname',
-        'p.surname                 AS surname',
-        'p.birthday                AS birthday',
-        'p.gender                  AS gender',
-        `CASE
+    const results = await this.accreditationRepo.query(`
+      SELECT
+        a.idacreditation,
+        a.idevent,
+        a.idsport,
+        a.idinstitution,
+        a.idperson,
+        a.photo,
+        p.docnumber,
+        p.firstname,
+        p.lastname,
+        p.surname,
+        p.birthday,
+        p.gender,
+        CASE
           WHEN p.gender = 'M' THEN 'Masculino'
           WHEN p.gender = 'F' THEN 'Femenino'
           ELSE 'No especificado'
-        END                       AS gender_text`,
-        'i.business_name           AS institutionName',
-        'i.abrev                   AS institutionAbrev',
-        'i.avatar                  AS institutionLogo',
-        'sp.name                   AS division_inscrita',
-        'sp.idparam                AS idparam',
-      ])
-      .where('a.idsport   = :idsport',   { idsport })
-      .andWhere('a.idevent   = :idevent',   { idevent })
-      .andWhere('a.tregister = :tregister', { tregister: 'D' })
-      .andWhere('a.mstatus   = 1')
-      .andWhere('p.mstatus   = 1')
-      .orderBy('p.lastname',  'ASC')
-      .addOrderBy('p.firstname', 'ASC')
-      .getRawMany();
+        END              AS gender_text,
+        i.business_name  AS institutionName,
+        i.abrev          AS institutionAbrev,
+        i.avatar         AS institutionLogo,
+        sp.name          AS division_inscrita,
+        sp.idparam       AS idparam
+      FROM accreditation a
 
-    return results.map((row) => ({
+      -- Subquery: por cada persona tomar solo la acreditación más reciente
+      INNER JOIN (
+        SELECT idperson, MAX(idacreditation) AS idacreditation
+        FROM accreditation
+        WHERE idsport   = ?
+          AND idevent   = ?
+          AND tregister = 'D'
+          AND mstatus   = 1
+        GROUP BY idperson
+      ) latest
+        ON  latest.idperson       = a.idperson
+        AND latest.idacreditation = a.idacreditation
+
+      INNER JOIN person p
+        ON  p.idperson = a.idperson
+        AND p.mstatus  = 1
+
+      INNER JOIN institution i
+        ON  i.idinstitution = a.idinstitution
+
+      INNER JOIN accreditation_test atest
+        ON  atest.idacreditation = a.idacreditation
+        AND atest.mstatus        = 1
+
+      INNER JOIN sport_params sp
+        ON  sp.code    = atest.idtest
+        AND sp.idsport = ?
+        AND sp.idparam = ?
+
+      WHERE a.idsport   = ?
+        AND a.idevent   = ?
+        AND a.tregister = 'D'
+        AND a.mstatus   = 1
+
+      ORDER BY p.lastname ASC, p.firstname ASC
+    `, [idsport, idevent, idsport, idparam, idsport, idevent]);
+
+    return results.map((row: any) => ({
       ...row,
       photo:           toSismasterUrl(row.photo),
       institutionLogo: toSismasterUrl(row.institutionLogo),
       fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
-      age: this.calculateAge(row.birthday),
+      age:             this.calculateAge(row.birthday),
     }));
   }
 
@@ -671,7 +686,7 @@ export class SismasterService {
 
 
   /**
-   * Atletas por categoría usando local sport ID (wrapper de getAthletesByCategory)
+   * Atletas por categoría 
    */
   async getAthletesByCategoryLocal(
     sismasterEventId: number,

@@ -20,6 +20,9 @@ import {
   AssignSectionEntriesDto,
   UpsertSectionEntryDto,
 } from './dto/athletics-section-entry.dto';
+import { Phase } from './entities/phase.entity';
+import { PhaseType } from '../common/enums';
+import { GenerateAthleticsSeriesDto } from './dto/generate-athletics-series.dto';
 
 @Injectable()
 export class AthleticsService {
@@ -35,6 +38,9 @@ export class AthleticsService {
 
     @InjectRepository(PhaseRegistration)
     private readonly phaseRegistrationRepo: Repository<PhaseRegistration>,
+
+    @InjectRepository(Phase)
+    private readonly phaseRepo: Repository<Phase>,
   ) {}
 
   // ── Crear resultado / intento ─────────────────────────────────────
@@ -253,6 +259,7 @@ export class AthleticsService {
         athleteName:
           athlete?.name ?? team?.name ?? `Registro ${pr.registrationId}`,
         institutionName: institution?.name ?? '',
+        institutionLogo: institution?.logoUrl ?? null,
         isTeam: !athlete && !!team,
         athleticsResultId: result?.athleticsResultId ?? null,
         time: result?.time ?? null,
@@ -433,6 +440,7 @@ export class AthleticsService {
         athleteName:
           athlete?.name ?? team?.name ?? `Registro ${pr.registrationId}`,
         institutionName: institution?.name ?? '',
+        institutionLogo: institution?.logoUrl ?? null,
         isTeam: !athlete && !!team,
         attempts: athleteAttempts.map((a) => ({
           athleticsResultId: a.athleticsResultId,
@@ -449,4 +457,41 @@ export class AthleticsService {
       };
     });
   }
+
+  async generateAthleticsPhasesBySeries(
+    eventCategoryId: number,
+    dto: GenerateAthleticsSeriesDto,
+  ): Promise<{ created: number; phaseIds: number[] }> {
+    if (!dto.groups?.length) {
+      throw new BadRequestException('Debe enviar al menos un grupo de series');
+    }
+
+    const phaseIds: number[] = [];
+
+    for (const group of dto.groups) {
+      if (!group.registrationIds?.length) continue;
+
+      // Crear la fase
+      const phase = this.phaseRepo.create({
+        eventCategoryId,
+        name: group.name,
+        type: PhaseType.GRUPO,
+      });
+      const savedPhase = await this.phaseRepo.save(phase);
+
+      // Asignar los inscritos a la fase (PhaseRegistrations)
+      const phaseRegs = group.registrationIds.map((registrationId) =>
+        this.phaseRegistrationRepo.create({
+          phaseId: savedPhase.phaseId,
+          registrationId,
+        }),
+      );
+      await this.phaseRegistrationRepo.save(phaseRegs);
+
+      phaseIds.push(savedPhase.phaseId);
+    }
+
+    return { created: phaseIds.length, phaseIds };
+  }
+
 }

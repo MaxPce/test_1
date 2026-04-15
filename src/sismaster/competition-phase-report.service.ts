@@ -122,6 +122,11 @@ export class CompetitionPhaseReportService {
       return this.buildEmptyReport(sismasterEvent);
     }
 
+    const detailLevel: 'sport' | 'category' | 'phase' =
+      filters.phaseId         ? 'phase'    :
+      filters.eventCategoryId ? 'category' :
+      'sport';
+
     // 3. Registraciones
     const registrations = await this.registrationRepo
       .createQueryBuilder('r')
@@ -399,8 +404,9 @@ export class CompetitionPhaseReportService {
         athleticsSectionsByPhaseId,
         athleticsEntriesBySectionId,
         athleticsResultsByPrId,
-        swimmingResultsByPhaseId,          
+        swimmingResultsByPhaseId,
         swimmingParticipationToRegId,
+        detailLevel,             
       ),
     };
   }
@@ -442,6 +448,7 @@ export class CompetitionPhaseReportService {
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
     swimmingResultsByPhaseId:       Record<number, Result[]>,        
     swimmingParticipationToRegId:   Map<number, number>,
+    detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const sportMap: Record<string, any> = {};
 
@@ -526,35 +533,43 @@ export class CompetitionPhaseReportService {
         resultType,
         status: ec.status,
         totalParticipants: regsForCategory.length,
-        participants: regsForCategory
-          .map((r) => regMap[r.registrationId])
-          .filter(Boolean),
-        phases: phasesForCategory.map((phase) =>
-          this.buildPhase(
-            phase,
-            matchesByPhaseId,
-            gamesByMatchId,
-            standingsByPhaseId,
-            manualRanksByPhaseId,
-            phaseRegsByPhaseId,
-            regMap,
-            athleteIdToRegId,
-            teamMemberMap,
-            individualScoresByParticipationId,
-            shootingScoresByParticipationId,
-            isPoomsae,
-            isShooting,
-            isClimbing,
-            isTimedSport,
-            isWrestling,
-            swimmingResultsByPhaseId[phase.phaseId] ?? [], 
-            swimmingParticipationToRegId,
-            athleticsSectionsByPhaseId[phase.phaseId] ?? [],
-            athleticsEntriesBySectionId,
-            athleticsResultsByPrId,
-            phaseRegsByPhaseId[phase.phaseId] ?? [],
+
+        // Con sportId solo → no incluir participants ni phases
+        ...(detailLevel !== 'sport' && {
+          participants: regsForCategory
+            .map((r) => regMap[r.registrationId])
+            .filter(Boolean),
+        }),
+
+        ...(detailLevel !== 'sport' && {
+          phases: phasesForCategory.map((phase) =>
+            this.buildPhase(
+              phase,
+              matchesByPhaseId,
+              gamesByMatchId,
+              standingsByPhaseId,
+              manualRanksByPhaseId,
+              phaseRegsByPhaseId,
+              regMap,
+              athleteIdToRegId,
+              teamMemberMap,
+              individualScoresByParticipationId,
+              shootingScoresByParticipationId,
+              isPoomsae,
+              isShooting,
+              isClimbing,
+              isTimedSport,
+              isWrestling,
+              swimmingResultsByPhaseId[phase.phaseId] ?? [],
+              swimmingParticipationToRegId,
+              athleticsSectionsByPhaseId[phase.phaseId] ?? [],
+              athleticsEntriesBySectionId,
+              athleticsResultsByPrId,
+              phaseRegsByPhaseId[phase.phaseId] ?? [],
+              detailLevel,              
+            ),
           ),
-        ),
+        }),
       });
     }
 
@@ -584,11 +599,23 @@ export class CompetitionPhaseReportService {
     athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
     phaseRegsForAthletics: PhaseRegistration[],
+    detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const phaseMatches = matchesByPhaseId[phase.phaseId] ?? [];
     const phaseStandings = standingsByPhaseId[phase.phaseId] ?? [];
     const phaseManualRanks = manualRanksByPhaseId[phase.phaseId] ?? [];
     const phaseRegs = phaseRegsByPhaseId[phase.phaseId] ?? [];
+
+
+    if (detailLevel === 'category') {
+      return {
+        phaseId: phase.phaseId,
+        phaseName: phase.name ?? null,
+        phaseType: phase.type ?? null,
+        displayOrder: phase.displayOrder ?? null,
+        totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
+      };
+    }
 
     if (ATHLETICS_PHASE_TYPES.includes(phase.type as AthleticsPhaseType)) {
       return this.buildAthleticsPhase(
