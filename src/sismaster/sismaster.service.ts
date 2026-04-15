@@ -725,6 +725,28 @@ export class SismasterService {
     sismasterSportId: number,
     eventCategoryId?: number,
   ) {
+    
+    let personIdFilter: number[] | null = null;
+
+    if (eventCategoryId) {
+      const localRows = await this.localDataSource.query<
+        { external_athlete_id: number }[]
+      >(
+        `SELECT external_athlete_id
+        FROM registrations
+        WHERE event_category_id = ?
+          AND deleted_at IS NULL
+          AND external_athlete_id IS NOT NULL`,
+        [eventCategoryId],
+      );
+
+      if (localRows.length === 0) {
+        return { niv: [], cat: [], combos: [] };
+      }
+
+      personIdFilter = localRows.map((r) => Number(r.external_athlete_id));
+    }
+
     let sql = `
       SELECT DISTINCT atest.idniv, atest.idcat,
             COUNT(DISTINCT a.idperson) AS total
@@ -740,14 +762,10 @@ export class SismasterService {
 
     const params: any[] = [sismasterSportId, sismasterEventId];
 
-    if (eventCategoryId) {
-      sql += `
-      INNER JOIN formatos_db.registrations r
-        ON r.external_athlete_id = p.idperson
-      AND r.event_category_id   = ?
-      AND r.deleted_at IS NULL
-      `;
-      params.push(eventCategoryId);
+    if (personIdFilter) {
+      const placeholders = personIdFilter.map(() => '?').join(',');
+      sql += ` AND a.idperson IN (${placeholders}) `;
+      params.push(...personIdFilter);
     }
 
     sql += `
@@ -759,13 +777,14 @@ export class SismasterService {
     `;
 
     const rows = await this.accreditationRepo.query(sql, params);
+
     return {
       niv:    [...new Set<string>(rows.map((r: any) => r.idniv))],
       cat:    [...new Set<string>(rows.map((r: any) => r.idcat))],
       combos: rows.map((r: any) => ({
         idniv: r.idniv,
-        idcat: r.idcat,
-        total: Number(r.total),
+        idcat:  r.idcat,
+        total:  Number(r.total),
       })),
     };
   }

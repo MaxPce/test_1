@@ -167,4 +167,9 @@ export class AthleticsController {
   reset(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.resetPhaseRegistration(id);
   }
+  @Delete('phase-registrations/:id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  removePhaseRegistration(@Param('id', ParseIntPipe) id: number) {
+    return this.athleticsService.removePhaseRegistration(id);
+  }
 }

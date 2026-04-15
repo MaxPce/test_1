@@ -209,6 +209,32 @@ export class AthleticsService {
     return { deleted: results.length };
   }
 
+  // ── Quitar atleta de la fase (elimina el PhaseRegistration y sus resultados) ──
+  async removePhaseRegistration(
+    phaseRegistrationId: number,
+  ): Promise<{ deleted: boolean }> {
+    const reg = await this.phaseRegistrationRepo.findOne({
+      where: { phaseRegistrationId },
+    });
+    if (!reg) {
+      throw new NotFoundException(
+        `PhaseRegistration #${phaseRegistrationId} no encontrado`,
+      );
+    }
+
+    // Primero borrar todos los intentos asociados
+    const attempts = await this.athleticsResultRepo.find({
+      where: { phaseRegistrationId },
+    });
+    if (attempts.length > 0) {
+      await this.athleticsResultRepo.remove(attempts);
+    }
+
+    // Luego borrar la inscripción de fase
+    await this.phaseRegistrationRepo.remove(reg);
+    return { deleted: true };
+  }
+
   async findFullTrackTable(phaseId: number): Promise<any[]> {
     const phaseRegs = await this.phaseRegistrationRepo.find({
       where: { phaseId },
