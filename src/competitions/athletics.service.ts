@@ -475,7 +475,7 @@ export class AthleticsService {
       const phase = this.phaseRepo.create({
         eventCategoryId,
         name: group.name,
-        type: PhaseType.GRUPO,
+        type: dto.phaseType ?? PhaseType.GRUPO,
       });
       const savedPhase = await this.phaseRepo.save(phase);
 
