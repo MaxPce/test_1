@@ -27,6 +27,7 @@ import {
   AssignSectionEntriesDto,
   UpsertSectionEntryDto,
 } from './dto/athletics-section-entry.dto';
+import { MoveEntrySectionDto } from './dto/move-entry-section.dto';
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -66,6 +67,15 @@ export class AthleticsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   upsertSectionEntry(@Body() dto: UpsertSectionEntryDto) {
     return this.athleticsService.upsertSectionEntry(dto);
+  }
+
+  @Patch('athletics/section-entries/:entryId/move')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR) 
+  moveEntryToSection(
+    @Param('entryId', ParseIntPipe) entryId: number,
+    @Body() dto: MoveEntrySectionDto,
+  ) {
+    return this.athleticsService.moveEntryToSection(entryId, dto);
   }
 
   @Post('phases/:eventCategoryId/generate-series')
@@ -172,4 +182,6 @@ export class AthleticsController {
   removePhaseRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.removePhaseRegistration(id);
   }
+
+ 
 }

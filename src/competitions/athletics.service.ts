@@ -23,6 +23,7 @@ import {
 import { Phase } from './entities/phase.entity';
 import { PhaseType } from '../common/enums';
 import { GenerateAthleticsSeriesDto } from './dto/generate-athletics-series.dto';
+import { MoveEntrySectionDto } from './dto/move-entry-section.dto';
 
 @Injectable()
 export class AthleticsService {
@@ -518,6 +519,40 @@ export class AthleticsService {
     }
 
     return { created: phaseIds.length, phaseIds };
+  }
+
+  async moveEntryToSection(
+    entryId: number,
+    dto: MoveEntrySectionDto,
+  ): Promise<{ entryId: number; athleticsSectionId: number }> {
+    // 1. Verificar que existe
+    const entry = await this.sectionEntryRepo.findOne({
+      where: { entryId },
+      relations: ['athleticsSection'],
+    });
+    if (!entry) {
+      throw new NotFoundException(`Entry #${entryId} no encontrada`);
+    }
+
+    // 2. Verificar sección destino
+    const targetSection = await this.athleticsSectionRepo.findOne({
+      where: { athleticsSectionId: dto.athleticsSectionId },
+    });
+    if (!targetSection) {
+      throw new NotFoundException(`Sección #${dto.athleticsSectionId} no encontrada`);
+    }
+
+    // 3. Verificar misma fase
+    if (entry.athleticsSection.phaseId !== targetSection.phaseId) {
+      throw new BadRequestException('No se puede mover un atleta a una sección de otra fase');
+    }
+
+    await this.sectionEntryRepo.update(
+      { entryId },
+      { athleticsSectionId: dto.athleticsSectionId },
+    );
+
+    return { entryId, athleticsSectionId: dto.athleticsSectionId };
   }
 
 }
