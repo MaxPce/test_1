@@ -3,31 +3,28 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   Column,
-  ManyToOne,
-  JoinColumn,
   Index,
   Unique,
   UpdateDateColumn,
 } from 'typeorm';
-import { Event } from '../../events/entities/event.entity';
 import { PhaseGender, PhaseLevel } from '../../common/enums';
 
 @Entity('score_table')
-@Index(['eventId'])
-@Index(['eventId', 'institutionId'])
-@Unique('uq_score_per_category', ['eventId', 'institutionId', 'gender', 'level'])
+@Index(['externalEventId'])
+@Index(['externalEventId', 'institutionId'])
+@Unique('unique_score_per_event_institution', ['externalEventId', 'institutionId', 'gender', 'level'])
 export class ScoreTable {
   @PrimaryGeneratedColumn({ name: 'score_table_id' })
   scoreTableId: number;
 
-  @Column({ name: 'event_id' })
-  eventId: number;
+  @Column({ name: 'external_event_id', type: 'int' })
+  externalEventId: number;
 
-  @Column({ name: 'institution_id' })
+  @Column({ name: 'institution_id', type: 'int' })
   institutionId: number;
 
   @Column({ name: 'external_institution_id', type: 'int', nullable: true })
-    externalInstitutionId: number | null;
+  externalInstitutionId: number | null;
 
   @Column({ name: 'institution_name', length: 255 })
   institutionName: string;
@@ -52,8 +49,4 @@ export class ScoreTable {
 
   @UpdateDateColumn({ name: 'updated_at' })
   updatedAt: Date;
-
-  @ManyToOne(() => Event, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'event_id' })
-  event: Event;
 }

@@ -29,6 +29,7 @@ import {
 } from './dto/athletics-section-entry.dto';
 import { MoveEntrySectionDto } from './dto/move-entry-section.dto';
 import { AthleticsClassificationService } from './athletics-classification.service';
+import { UpdatePhaseSettingsDto } from './dto/update-phase-settings.dto';
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -214,6 +215,15 @@ export class AthleticsController {
     @Body('rankPosition', ParseIntPipe) rankPosition: number,
   ) {
     return this.classificationService.overrideRank(id, rankPosition);
+  }
+
+  @Patch('phases/:phaseId/settings')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  updatePhaseSettings(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() dto: UpdatePhaseSettingsDto,
+  ) {
+    return this.athleticsService.updatePhaseSettings(phaseId, dto);
   }
 
  

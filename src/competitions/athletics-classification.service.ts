@@ -1,5 +1,5 @@
 // src/competitions/athletics-classification.service.ts
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AthleticsPhaseClassification } from './entities/athletics-phase-classification.entity';
@@ -9,13 +9,12 @@ import { AthleticsSection } from './entities/athletics-section.entity';
 import { PhaseRegistration } from './entities/phase-registration.entity';
 import { Phase } from './entities/phase.entity';
 import { ScoreTablesService } from '../score-tables/score-tables.service';
-import { PhaseType, PhaseGender } from '../common/enums';
+import { PhaseType } from '../common/enums';
 
 const POINTS_BY_RANK: Record<number, number> = {
   1: 10, 2: 8, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1,
 };
 
-// Tipos de fase que implican doble puntaje (regla 3.5.3)
 const COMBINED_PHASE_TYPES: PhaseType[] = [
   PhaseType.COMBINED_PISTA,
   PhaseType.COMBINED_DISTANCIA,
@@ -48,14 +47,23 @@ export class AthleticsClassificationService {
 
   // ─────────────────────────────────────────────────────────────
   // PUNTO DE ENTRADA PRINCIPAL
-  // Llama esto cuando el operador "cierra" una fase
   // ─────────────────────────────────────────────────────────────
   async classifyPhase(phaseId: number): Promise<AthleticsPhaseClassification[]> {
     const phase = await this.phaseRepo.findOne({
       where: { phaseId },
-      relations: ['eventCategory', 'eventCategory.event'],
+      relations: ['eventCategory'],
     });
     if (!phase) throw new NotFoundException(`Phase #${phaseId} no encontrada`);
+
+    // ── Obtener externalEventId desde event_categories ──────────
+    // event_id local siempre es NULL porque trabajamos con sismaster,
+    // usamos external_event_id como identificador del campeonato.
+    const externalEventId: number | null = await this.phaseRepo.manager
+      .query(
+        'SELECT external_event_id FROM event_categories WHERE event_category_id = ?',
+        [phase.eventCategoryId],
+      )
+      .then((rows: any[]) => rows[0]?.external_event_id ?? null);
 
     const phaseRegs = await this.phaseRegRepo.find({
       where: { phaseId },
@@ -71,13 +79,13 @@ export class AthleticsClassificationService {
 
     const prIds = phaseRegs.map((pr) => pr.phaseRegistrationId);
 
-    // 1. Obtener la marca final de cada atleta según el tipo de fase
+    // 1. Marca final de cada atleta según tipo de fase
     const marks = await this.resolveMarks(phase, prIds);
 
     // 2. Ordenar y asignar rank_position
     const ranked = this.rankMarks(marks, phase.type);
 
-    // 3. Determinar si la prueba puntúa (regla 3.5.7: mínimo 2 universidades)
+    // 3. Regla 3.5.7: mínimo 2 universidades para puntuar
     const institutionIds = new Set<number>();
     for (const pr of phaseRegs) {
       const reg = (pr as any).registration;
@@ -88,16 +96,15 @@ export class AthleticsClassificationService {
 
     // 4. Calcular puntos y guardar clasificaciones
     const isCombinedOrRelay = COMBINED_PHASE_TYPES.includes(phase.type) || phase.isRelay;
-
     const saved: AthleticsPhaseClassification[] = [];
 
     for (const row of ranked) {
       const basePoints = POINTS_BY_RANK[row.rankPosition] ?? 0;
-      const pointsAwarded = isCombinedOrRelay && isScoringEligible
-        ? basePoints * 2
-        : isScoringEligible ? basePoints : 0;
+      const pointsAwarded =
+        isCombinedOrRelay && isScoringEligible ? basePoints * 2
+        : isScoringEligible ? basePoints
+        : 0;
 
-      // Upsert en athletics_phase_classification
       const existing = await this.classificationRepo.findOne({
         where: { phaseRegistrationId: row.phaseRegistrationId },
       });
@@ -107,33 +114,31 @@ export class AthleticsClassificationService {
         phaseRegistrationId: row.phaseRegistrationId,
       });
 
-      entity.rankPosition       = row.rankPosition <= 8 ? row.rankPosition : null;
-      entity.pointsAwarded      = pointsAwarded;
-      entity.isScoringEligible  = isScoringEligible;
-      entity.exclusionReason    = isScoringEligible
+      entity.rankPosition      = row.rankPosition <= 8 ? row.rankPosition : null;
+      entity.pointsAwarded     = pointsAwarded;
+      entity.isScoringEligible = isScoringEligible;
+      entity.exclusionReason   = isScoringEligible
         ? null
         : 'Solo una universidad participante (regla 3.5.7)';
-      entity.finalTime          = row.finalTime ?? null;
-      entity.finalDistance      = row.finalDistance ?? null;
-      entity.finalHeight        = row.finalHeight ?? null;
-      entity.finalIaafPoints    = row.finalIaafPoints ?? null;
-      entity.resultSource       = row.resultSource;
+      entity.finalTime         = row.finalTime ?? null;
+      entity.finalDistance     = row.finalDistance ?? null;
+      entity.finalHeight       = row.finalHeight ?? null;
+      entity.finalIaafPoints   = row.finalIaafPoints ?? null;
+      entity.resultSource      = row.resultSource;
 
       saved.push(await this.classificationRepo.save(entity));
     }
 
-    // 5. Actualizar score_table: primero limpiar los aportes anteriores de esta fase
-    //    y luego re-acumular desde las clasificaciones guardadas
-    const eventId = phase.eventCategory?.eventId;
-    if (eventId) {
-      await this.syncScoreTable(phaseId, phase, phaseRegs, saved, eventId);
+    // 5. Sincronizar score_table solo si tenemos externalEventId
+    if (externalEventId) {
+      await this.syncScoreTable(phaseId, phase, phaseRegs, saved, externalEventId);
     }
 
     return saved;
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Obtener la marca final según el tipo de fase
+  // Resolver marca final según tipo de fase
   // ─────────────────────────────────────────────────────────────
   private async resolveMarks(
     phase: Phase,
@@ -147,34 +152,25 @@ export class AthleticsClassificationService {
     resultSource: AthleticsPhaseClassification['resultSource'];
   }>> {
     switch (phase.type) {
-      case PhaseType.GRUPO:
-      case PhaseType.ELIMINACION:
-        // Carreras: buscar en sección llamada "Finales" primero, sino mejor_serie
-        return this.resolveTrackMarks(phase.phaseId, prIds);
-
       case PhaseType.COMBINED_DISTANCIA:
-        // Saltos y lanzamientos: mejor intento válido de distance_value
         return this.resolveDistanceMarks(prIds);
 
       case PhaseType.COMBINED_ALTURA:
-        // Salto alto / garrocha: mejor altura superada
         return this.resolveHeightMarks(prIds);
 
+      case PhaseType.GRUPO:
+      case PhaseType.ELIMINACION:
       case PhaseType.COMBINED_PISTA:
-        // Heptatlón / Decatlón: suma de iaaf_points por combinedEvent
-        return this.resolveCombinedEventMarks(prIds);
-
       default:
+        // Carreras, postas, vallas, marcha → tiempos en sección entries
         return this.resolveTrackMarks(phase.phaseId, prIds);
     }
   }
 
-  // Carreras: prioriza sección "finales" (case-insensitive), fallback a mejor tiempo de cualquier sección
-  private async resolveTrackMarks(
-    phaseId: number,
-    prIds: number[],
-  ) {
+  // Carreras: prioriza sección "Finales", fallback a mejor serie
+  private async resolveTrackMarks(phaseId: number, prIds: number[]) {
     const sections = await this.athleticsSectionRepo.find({ where: { phaseId } });
+
     const finalSection = sections.find(
       (s) => s.name.toLowerCase().includes('final'),
     );
@@ -185,7 +181,6 @@ export class AthleticsClassificationService {
       .andWhere('se.time IS NOT NULL')
       .getMany();
 
-    // Separar entries de "Finales" vs el resto
     const finalsEntries = finalSection
       ? allEntries.filter((e) => e.athleticsSectionId === finalSection.athleticsSectionId)
       : [];
@@ -195,28 +190,17 @@ export class AthleticsClassificationService {
       resultSource: AthleticsPhaseClassification['resultSource'];
     }>();
 
-    // Primero asignar de Finales
     for (const e of finalsEntries) {
       if (e.time) {
-        result.set(e.phaseRegistrationId, {
-          finalTime: e.time,
-          resultSource: 'finales',
-        });
+        result.set(e.phaseRegistrationId, { finalTime: e.time, resultSource: 'finales' });
       }
     }
 
-    // Para los que no tienen Finales, buscar mejor tiempo en series
     for (const e of allEntries) {
       if (!result.has(e.phaseRegistrationId) && e.time) {
         const current = result.get(e.phaseRegistrationId);
-        if (
-          !current ||
-          this.compareTime(e.time, current.finalTime) < 0
-        ) {
-          result.set(e.phaseRegistrationId, {
-            finalTime: e.time,
-            resultSource: 'mejor_serie',
-          });
+        if (!current || this.compareTime(e.time, current.finalTime) < 0) {
+          result.set(e.phaseRegistrationId, { finalTime: e.time, resultSource: 'mejor_serie' });
         }
       }
     }
@@ -230,7 +214,7 @@ export class AthleticsClassificationService {
       }));
   }
 
-  // Saltos/lanzamientos: mejor intento válido (distance_value)
+  // Saltos/lanzamientos: mejor intento válido
   private async resolveDistanceMarks(prIds: number[]) {
     const attempts = await this.athleticsResultRepo
       .createQueryBuilder('ar')
@@ -254,7 +238,7 @@ export class AthleticsClassificationService {
     }));
   }
 
-  // Salto alto/garrocha: mejor altura con resultado 'O'
+  // Salto alto/garrocha: mejor altura superada ('O')
   private async resolveHeightMarks(prIds: number[]) {
     const attempts = await this.athleticsResultRepo
       .createQueryBuilder('ar')
@@ -278,7 +262,7 @@ export class AthleticsClassificationService {
     }));
   }
 
-  // Heptatlón/Decatlón: suma total de iaaf_points
+  // Heptatlón/Decatlón: suma de iaaf_points (reservado para futuro)
   private async resolveCombinedEventMarks(prIds: number[]) {
     const rows: Array<{ phaseRegistrationId: number; total: string }> =
       await this.athleticsResultRepo
@@ -298,27 +282,15 @@ export class AthleticsClassificationService {
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Ordenar marcas y asignar rank_position
+  // Ordenar marcas y asignar rank_position con manejo de empates
   // ─────────────────────────────────────────────────────────────
   private rankMarks(
     marks: Array<any>,
     phaseType: PhaseType,
   ): Array<any & { rankPosition: number }> {
-    const isTrackOrCombined =
-      phaseType === PhaseType.COMBINED_PISTA ||
-      phaseType === PhaseType.GRUPO ||
-      phaseType === PhaseType.ELIMINACION;
-
     const sorted = [...marks].sort((a, b) => {
-      // Carreras: menor tiempo es mejor
-      if (a.finalTime && b.finalTime) {
-        return this.compareTime(a.finalTime, b.finalTime);
-      }
-      // Combinados por puntos IAAF: mayor es mejor
-      if (a.finalIaafPoints != null && b.finalIaafPoints != null) {
-        return b.finalIaafPoints - a.finalIaafPoints;
-      }
-      // Distancia/altura: mayor es mejor
+      if (a.finalTime && b.finalTime) return this.compareTime(a.finalTime, b.finalTime);
+      if (a.finalIaafPoints != null && b.finalIaafPoints != null) return b.finalIaafPoints - a.finalIaafPoints;
       const valA = a.finalDistance ?? a.finalHeight ?? 0;
       const valB = b.finalDistance ?? b.finalHeight ?? 0;
       return valB - valA;
@@ -328,82 +300,73 @@ export class AthleticsClassificationService {
     return sorted.map((row, i) => {
       if (i > 0) {
         const prev = sorted[i - 1];
-        const sameTime = row.finalTime && prev.finalTime && row.finalTime === prev.finalTime;
-        const sameDist =
-          row.finalDistance != null &&
-          prev.finalDistance != null &&
-          row.finalDistance === prev.finalDistance;
-        const sameHeight =
-          row.finalHeight != null &&
-          prev.finalHeight != null &&
-          row.finalHeight === prev.finalHeight;
-        const sameIaaf =
-          row.finalIaafPoints != null &&
-          prev.finalIaafPoints != null &&
-          row.finalIaafPoints === prev.finalIaafPoints;
-        if (!sameTime && !sameDist && !sameHeight && !sameIaaf) rank = i + 1;
+        const tied =
+          (row.finalTime && prev.finalTime && row.finalTime === prev.finalTime) ||
+          (row.finalDistance != null && prev.finalDistance != null && row.finalDistance === prev.finalDistance) ||
+          (row.finalHeight != null && prev.finalHeight != null && row.finalHeight === prev.finalHeight) ||
+          (row.finalIaafPoints != null && prev.finalIaafPoints != null && row.finalIaafPoints === prev.finalIaafPoints);
+        if (!tied) rank = i + 1;
       }
       return { ...row, rankPosition: rank };
     });
   }
 
   // ─────────────────────────────────────────────────────────────
-  // Sincronizar con score_table
+  // Sincronizar con score_table usando externalEventId
   // ─────────────────────────────────────────────────────────────
   private async syncScoreTable(
     phaseId: number,
     phase: Phase,
     phaseRegs: PhaseRegistration[],
     classifications: AthleticsPhaseClassification[],
-    eventId: number,
-  ): Promise<void> {
-    // Mapa de phaseRegistrationId → institución
+    externalEventId: number,
+    ): Promise<void> {
     const institutionByPrId = new Map<
-      number,
-      { institutionId: number; externalId: number | null; name: string }
+        number,
+        { institutionId: number; externalId: number | null; name: string }
     >();
 
     for (const pr of phaseRegs) {
-      const reg = (pr as any).registration;
-      const inst = reg?.athlete?.institution ?? reg?.team?.institution;
-      if (inst) {
+        const reg = (pr as any).registration;
+        const inst = reg?.athlete?.institution ?? reg?.team?.institution;
+        if (inst && reg.externalInstitutionId) {
         institutionByPrId.set(pr.phaseRegistrationId, {
-          institutionId: inst.institutionId,
-          externalId: reg.externalInstitutionId ?? null,
-          name: inst.name ?? 'N/A',
+            institutionId: reg.externalInstitutionId,  // ← ID de sismaster
+            externalId:    reg.externalInstitutionId,
+            name:          inst.name ?? 'N/A',
         });
-      }
+        }
     }
 
-    const isCombinedOrRelay =
-      COMBINED_PHASE_TYPES.includes(phase.type) || phase.isRelay;
+    const isCombinedOrRelay = COMBINED_PHASE_TYPES.includes(phase.type) || phase.isRelay;
 
     for (const cls of classifications) {
-      if (
+        if (
         !cls.isScoringEligible ||
         cls.rankPosition == null ||
         cls.rankPosition > 8 ||
         cls.pointsAwarded === 0
-      ) continue;
+        ) continue;
 
-      const inst = institutionByPrId.get(cls.phaseRegistrationId);
-      if (!inst) continue;
+        const inst = institutionByPrId.get(cls.phaseRegistrationId);
+        if (!inst) continue;
 
-      await this.scoreTablesService.accumulateScore({
-        eventId,
-        institutionId: inst.institutionId,
-        externalInstitutionId: inst.externalId ?? undefined, // ← null → undefined
-        institutionName: inst.name,
-        gender: phase.gender,
-        level: phase.level,
-        rankPosition: cls.rankPosition,
-        isRelayOrCombined: isCombinedOrRelay,
+        await this.scoreTablesService.accumulateScore({
+        externalEventId,
+        institutionId:         inst.institutionId,  // ← external_institution_id de sismaster
+        externalInstitutionId: inst.externalId,
+        institutionName:       inst.name,
+        gender:                phase.gender,
+        level:                 phase.level,
+        rankPosition:          cls.rankPosition,
+        isRelayOrCombined:     isCombinedOrRelay,
         });
     }
-  }
+    }
+
 
   // ─────────────────────────────────────────────────────────────
-  // Comparar tiempos en formato "m:ss.ms" o "ss.ms"
+  // Utilidades de tiempo
   // ─────────────────────────────────────────────────────────────
   private compareTime(a: string, b: string): number {
     return this.timeToMs(a) - this.timeToMs(b);
@@ -428,7 +391,7 @@ export class AthleticsClassificationService {
     });
   }
 
-  // Corrección manual de un rank_position (edge cases)
+  // Corrección manual de rank_position (edge cases)
   async overrideRank(
     phaseRegistrationId: number,
     rankPosition: number,

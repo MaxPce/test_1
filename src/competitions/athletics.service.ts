@@ -24,6 +24,7 @@ import { Phase } from './entities/phase.entity';
 import { PhaseType } from '../common/enums';
 import { GenerateAthleticsSeriesDto } from './dto/generate-athletics-series.dto';
 import { MoveEntrySectionDto } from './dto/move-entry-section.dto';
+import { UpdatePhaseSettingsDto } from './dto/update-phase-settings.dto';
 
 @Injectable()
 export class AthleticsService {
@@ -553,6 +554,20 @@ export class AthleticsService {
     );
 
     return { entryId, athleticsSectionId: dto.athleticsSectionId };
+  }
+
+  async updatePhaseSettings(
+    phaseId: number,
+    dto: UpdatePhaseSettingsDto,
+  ): Promise<Phase> {
+    const phase = await this.phaseRepo.findOne({ where: { phaseId } });
+    if (!phase) throw new NotFoundException(`Phase #${phaseId} no encontrada`);
+
+    if (dto.gender   !== undefined) phase.gender  = dto.gender;
+    if (dto.level    !== undefined) phase.level   = dto.level;
+    if (dto.isRelay  !== undefined) phase.isRelay = dto.isRelay;
+
+    return this.phaseRepo.save(phase);
   }
 
 }
