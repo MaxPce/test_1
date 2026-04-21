@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { SismasterModule } from '../src/sismaster/sismaster.module';
 import { CompaniesModule } from './companies/companies.module';
 import { OperatorPermissionsModule } from './operator-permissions/operator-permissions.module';
+import { ScoreTablesModule } from './score-tables/score-tables.module';
 
 @Module({
   imports: [
@@ -21,8 +22,8 @@ import { OperatorPermissionsModule } from './operator-permissions/operator-permi
     }),
     CacheModule.register({
       isGlobal: true,
-      ttl: 600000, // 10 minutos en milisegundos
-      max: 1000, // Máximo 1000 items
+      ttl: 600000, 
+      max: 1000, 
     }),
 
     TypeOrmModule.forRootAsync({
@@ -65,6 +66,7 @@ import { OperatorPermissionsModule } from './operator-permissions/operator-permi
     ResultsModule,
     CompaniesModule,
     OperatorPermissionsModule,
+    ScoreTablesModule,
   ],
   providers: [
     {

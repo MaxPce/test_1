@@ -32,6 +32,7 @@ import { ChessController } from './chess.controller';
 import { ChessService } from './chess.service';
 import { ChessRound } from './entities/chess-round.entity';
 import { ChessMatch } from './entities/chess-match.entity';
+import { ScoreTablesModule } from '../score-tables/score-tables.module';  
 
 import {
   Match,
@@ -47,6 +48,8 @@ import {
 } from './entities';
 import { AthleticsSection } from './entities/athletics-section.entity';
 import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity';
+import { AthleticsPhaseClassification } from './entities/athletics-phase-classification.entity';
+import { AthleticsClassificationService } from './athletics-classification.service';
 
 @Module({
   imports: [
@@ -66,9 +69,11 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
       AthleticsResult,
       AthleticsSection,
       AthleticsSectionEntry,
+      AthleticsPhaseClassification,
       ChessRound,
       ChessMatch,
     ]),
+    ScoreTablesModule,
   ],
   controllers: [
     CompetitionsController,
@@ -98,6 +103,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
     WeightliftingService,
     ClimbingService,
     AthleticsService,
+    AthleticsClassificationService,
     ChessService,
   ],
   exports: [
@@ -109,6 +115,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
     WeightliftingService,
     ClimbingService,
     AthleticsService,
+    AthleticsClassificationService,
     ChessService,
   ],
 })

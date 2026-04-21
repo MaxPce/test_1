@@ -11,7 +11,7 @@ import {
 import { EventCategory } from '../../events/entities/event-category.entity';
 import { Match } from './match.entity';
 import { Standing } from './standing.entity';
-import { PhaseType } from '../../common/enums';
+import { PhaseType, PhaseGender, PhaseLevel } from '../../common/enums';
 
 @Entity('phases')
 @Index(['eventCategoryId'])
@@ -34,6 +34,15 @@ export class Phase {
     enum: PhaseType,
   })
   type: PhaseType;
+
+  @Column({ type: 'enum', enum: PhaseGender, nullable: true })
+  gender: PhaseGender | null;
+
+  @Column({ type: 'enum', enum: PhaseLevel, nullable: true })
+  level: PhaseLevel | null;
+
+  @Column({ name: 'is_relay', type: 'boolean', default: false })
+  isRelay: boolean;
 
   @Column({ name: 'display_order', nullable: true })
   displayOrder: number;

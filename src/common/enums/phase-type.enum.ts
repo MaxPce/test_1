@@ -8,3 +8,14 @@ export enum PhaseType {
   COMBINED_DISTANCIA = 'combined_distancia',
   COMBINED_ALTURA = 'combined_altura',
 }
+
+export enum PhaseGender {
+  DAMAS = 'damas',
+  VARONES = 'varones',
+  MIXTO = 'mixto',
+}
+
+export enum PhaseLevel {
+  NOVELES = 'noveles',
+  AVANZADOS = 'avanzados',
+}

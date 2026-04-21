@@ -28,11 +28,15 @@ import {
   UpsertSectionEntryDto,
 } from './dto/athletics-section-entry.dto';
 import { MoveEntrySectionDto } from './dto/move-entry-section.dto';
+import { AthleticsClassificationService } from './athletics-classification.service';
 
 @Controller('competitions')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AthleticsController {
-  constructor(private readonly athleticsService: AthleticsService) {}
+  constructor(
+  private readonly athleticsService: AthleticsService,
+  private readonly classificationService: AthleticsClassificationService, 
+  ) {}
 
   // POST /competitions/athletics
   // ==================== ATHLETICS RESULTS ====================
@@ -164,6 +168,24 @@ export class AthleticsController {
     return this.athleticsService.getRankingField(phaseId);
   }
 
+  // POST /competitions/phases/:phaseId/classify
+  // Cierra la fase y genera el ranking + actualiza score_table
+  @Post('phases/:phaseId/classify')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  classifyPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.classificationService.classifyPhase(phaseId);
+  }
+
+  // GET /competitions/phases/:phaseId/classification
+  // Ver el ranking ya calculado
+  @Get('phases/:phaseId/classification')
+  @Public()
+  getClassification(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.classificationService.getClassification(phaseId);
+  }
+
+  
+
   // ==================== PHASE REGISTRATIONS ====================
 
   @Get('phase-registrations/:id/athletics')
@@ -181,6 +203,17 @@ export class AthleticsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   removePhaseRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.athleticsService.removePhaseRegistration(id);
+  }
+
+  // PATCH /competitions/phase-registrations/:id/rank-override
+  // Corrección manual de puesto (edge cases de empate técnico)
+  @Patch('phase-registrations/:id/rank-override')
+  @Roles(UserRole.ADMIN)
+  overrideRank(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('rankPosition', ParseIntPipe) rankPosition: number,
+  ) {
+    return this.classificationService.overrideRank(id, rankPosition);
   }
 
  
