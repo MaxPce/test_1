@@ -1,6 +1,17 @@
-import { Controller, Get, Patch, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
+// src/competitions/judo.controller.ts
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Param,
+  Body,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { JudoService } from './judo.service';
 import { UpdateJudoScoreDto } from './dto/update-judo-score.dto';
+import { GenerateKumitePhasesDto } from './dto/generate-kumite-phases.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -11,6 +22,14 @@ import { UserRole } from '../common/enums/user-role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class JudoController {
   constructor(private readonly judoService: JudoService) {}
+
+
+  @Post('generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generatePhases(@Body() dto: GenerateKumitePhasesDto) {
+    return await this.judoService.generatePhases(dto);
+  }
+
 
   @Patch('matches/:matchId/score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)

@@ -105,6 +105,7 @@ import { AthleticsClassificationService } from './athletics-classification.servi
     AthleticsService,
     AthleticsClassificationService,
     ChessService,
+    PhaseRegistration,
   ],
   exports: [
     CompetitionsService,
