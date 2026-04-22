@@ -58,12 +58,26 @@ export class AthleticsClassificationService {
     // ── Obtener externalEventId desde event_categories ──────────
     // event_id local siempre es NULL porque trabajamos con sismaster,
     // usamos external_event_id como identificador del campeonato.
-    const externalEventId: number | null = await this.phaseRepo.manager
+    const ecRow: {
+      external_event_id: number;
+      external_sport_id: number;
+      local_sport_id: number;
+    } | null = await this.phaseRepo.manager
       .query(
-        'SELECT external_event_id FROM event_categories WHERE event_category_id = ?',
+        `SELECT ec.external_event_id,
+                ec.external_sport_id,
+                s.sport_id AS local_sport_id
+        FROM event_categories ec
+        LEFT JOIN sports s ON s.sismaster_sport_id = ec.external_sport_id
+        WHERE ec.event_category_id = ?`,
         [phase.eventCategoryId],
       )
-      .then((rows: any[]) => rows[0]?.external_event_id ?? null);
+      .then((rows: any[]) => rows[0] ?? null);
+
+    const externalEventId = ecRow?.external_event_id ?? null;
+    const externalSportId = ecRow?.external_sport_id ?? null;
+    const localSportId    = ecRow?.local_sport_id    ?? 0;
+
 
     const phaseRegs = await this.phaseRegRepo.find({
       where: { phaseId },
@@ -130,8 +144,11 @@ export class AthleticsClassificationService {
     }
 
     // 5. Sincronizar score_table solo si tenemos externalEventId
-    if (externalEventId) {
-      await this.syncScoreTable(phaseId, phase, phaseRegs, saved, externalEventId);
+    if (externalEventId && externalSportId) {
+      await this.syncScoreTable(
+        phaseId, phase, phaseRegs, saved,
+        externalEventId, externalSportId, localSportId,
+      );
     }
 
     return saved;
@@ -320,7 +337,9 @@ export class AthleticsClassificationService {
     phaseRegs: PhaseRegistration[],
     classifications: AthleticsPhaseClassification[],
     externalEventId: number,
-    ): Promise<void> {
+    externalSportId: number,   
+    localSportId: number,        
+  ):  Promise<void> {
     const institutionByPrId = new Map<
         number,
         { institutionId: number; externalId: number | null; name: string }
@@ -353,7 +372,9 @@ export class AthleticsClassificationService {
 
         await this.scoreTablesService.accumulateScore({
         externalEventId,
-        institutionId:         inst.institutionId,  // ← external_institution_id de sismaster
+        externalSportId,
+        localSportId,
+        institutionId:         inst.institutionId,  
         externalInstitutionId: inst.externalId,
         institutionName:       inst.name,
         gender:                phase.gender,

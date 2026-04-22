@@ -12,13 +12,19 @@ import { PhaseGender, PhaseLevel } from '../../common/enums';
 @Entity('score_table')
 @Index(['externalEventId'])
 @Index(['externalEventId', 'institutionId'])
-@Unique('unique_score_per_event_institution', ['externalEventId', 'institutionId', 'gender', 'level'])
+@Unique('unique_score_per_event_institution',
+  ['externalEventId', 'externalSportId', 'institutionId', 'gender', 'level'])
 export class ScoreTable {
   @PrimaryGeneratedColumn({ name: 'score_table_id' })
   scoreTableId: number;
 
   @Column({ name: 'external_event_id', type: 'int' })
   externalEventId: number;
+
+  @Column({ name: 'external_sport_id', type: 'int', default: 0 })
+  externalSportId: number;
+  @Column({ name: 'local_sport_id', type: 'int', default: 0 })  
+  localSportId: number;
 
   @Column({ name: 'institution_id', type: 'int' })
   institutionId: number;

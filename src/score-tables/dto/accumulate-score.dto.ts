@@ -2,9 +2,11 @@
 import { PhaseGender, PhaseLevel } from '../../common/enums'; // ← AÑADIR
 
 export class AccumulateScoreDto {
-  externalEventId: number; 
+  externalEventId: number;
+  externalSportId: number;   
+  localSportId: number;
   institutionId: number;
-  externalInstitutionId?: number | null; 
+  externalInstitutionId?: number | null;
   institutionName: string;
   gender: PhaseGender | null;
   level: PhaseLevel | null;

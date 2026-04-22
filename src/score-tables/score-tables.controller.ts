@@ -6,15 +6,21 @@ import { ScoreTablesService } from './score-tables.service';
 export class ScoreTablesController {
   constructor(private readonly service: ScoreTablesService) {}
 
-  // GET /score-tables/:eventId/summary → las 5 tablas
-  @Get(':eventId/summary')
-  getSummary(@Param('eventId', ParseIntPipe) eventId: number) {
-    return this.service.getScoreSummary(eventId);
+  // GET /score-tables/external/223/sport/2/summary
+  @Get('external/:externalEventId/local-sport/:localSportId/summary')
+  getSummary(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.service.getScoreSummary(externalEventId, localSportId);
   }
 
-  // POST /score-tables/:eventId/recalculate → recalcula todo desde cero
-  @Post(':eventId/recalculate')
-  recalculate(@Param('eventId', ParseIntPipe) eventId: number) {
-    return this.service.recalculateEvent(eventId);
+  // POST /score-tables/external/223/sport/2/recalculate
+  @Post('external/:externalEventId/local-sport/:localSportId/recalculate')
+  recalculate(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.service.recalculateEvent(externalEventId, localSportId);
   }
 }
