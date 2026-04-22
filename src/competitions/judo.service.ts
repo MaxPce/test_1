@@ -90,14 +90,11 @@ export class JudoService {
       case 'single_elimination': {
         const n = registrationIds.length;
         const bracketSize = Math.pow(2, Math.ceil(Math.log2(Math.max(n, 2))));
-        // registrationIds: [] → BracketService genera matches vacíos
-        // bracketSize → determina cuántos matches/rondas crear según N inscritos
-        // El pool ya fue guardado en phase_registrations en el paso anterior
         await this.bracketService.generateCompleteBracket({
           phaseId,
           registrationIds: [],
           bracketSize,
-          includeThirdPlace: n >= 4,
+          includeThirdPlace: false,   
         });
         break;
       }
