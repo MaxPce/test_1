@@ -390,9 +390,7 @@ export class SismasterService {
    */
   async getInstitutionsByIds(ids: number[]): Promise<SismasterInstitution[]> {
     if (!ids || ids.length === 0) return [];
-
     const uniqueIds = [...new Set(ids)].filter((id) => id != null && id > 0);
-
     if (uniqueIds.length === 0) return [];
 
     try {
@@ -406,7 +404,7 @@ export class SismasterService {
           'business',
           'businessName',
           'abrev',
-          'avatar',
+          'avatar',   
           'country',
         ],
       });
@@ -414,7 +412,7 @@ export class SismasterService {
       this.logger.error('Error in batch loading institutions:', error);
       return [];
     }
-  }
+}
 
   /**
    * Listar todas las instituciones

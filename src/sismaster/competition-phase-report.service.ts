@@ -19,6 +19,7 @@ import { EventSismasterDto } from './dto/event-sismaster.dto';
 import { MatchStatus } from '../common/enums';
 import { Result }        from '../results/entities/result.entity';
 import { Participation } from '../competitions/entities/participation.entity';
+import { toSismasterUrl } from './constants/sismaster.constants';
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -1175,6 +1176,7 @@ export class CompetitionPhaseReportService {
           institution: {
             id: reg.externalInstitutionId ?? null,
             name: institution?.businessName ?? institution?.business ?? null,
+            logoUrl: institution?.avatar ? toSismasterUrl(institution.avatar) : null,
           },
         };
       } else if (reg.athlete) {
