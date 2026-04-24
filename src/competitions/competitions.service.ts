@@ -337,7 +337,21 @@ export class CompetitionsService {
   async updateMatch(id: number, updateDto: UpdateMatchDto): Promise<Match> {
     const match = await this.findOneMatch(id);
     Object.assign(match, updateDto);
-    return this.matchRepository.save(match);
+    const savedMatch = await this.matchRepository.save(match);
+
+    if (
+      updateDto.status === MatchStatus.FINALIZADO ||
+      updateDto.winnerRegistrationId
+    ) {
+      const phase = await this.phaseRepository.findOne({
+        where: { phaseId: savedMatch.phaseId },
+      });
+      if (phase && phase.type === PhaseType.GRUPO) {
+        await this.updateStandings(savedMatch.phaseId);
+      }
+    }
+
+    return this.findOneMatch(id);
   }
 
   async removeMatch(id: number, userId?: number): Promise<void> {
@@ -729,10 +743,10 @@ export class CompetitionsService {
         standing.wins = 0;
         standing.draws = 0;
         standing.losses = 0;
-        standing.points = 0;
-        standing.scoreFor = 0;
-        standing.scoreAgainst = 0;
-        standing.scoreDiff = 0;
+        standing.points = Number(standing.points);
+        standing.scoreFor = Number(standing.scoreFor);
+        standing.scoreAgainst = Number(standing.scoreAgainst);
+        standing.scoreDiff = Number(standing.scoreDiff);
       }
 
       for (const match of matches) {
@@ -755,13 +769,18 @@ export class CompetitionsService {
         if (match.winnerRegistrationId) {
           if (match.winnerRegistrationId === p1.registrationId) {
             s1.wins++;
-            s1.points += 3;
+            s1.points = Number(s1.points) + 3;
             s2.losses++;
           } else if (match.winnerRegistrationId === p2.registrationId) {
             s2.wins++;
-            s2.points += 3;
+            s2.points = Number(s2.points) + 3;
             s1.losses++;
           }
+        } else {
+          s1.draws++;
+          s1.points = Number(s1.points) + 1;
+          s2.draws++;
+          s2.points = Number(s2.points) + 1;
         }
 
         // ── FIX: acumular sets ganados/perdidos ──────────────────────
