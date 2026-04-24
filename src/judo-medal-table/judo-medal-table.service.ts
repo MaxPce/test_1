@@ -194,8 +194,8 @@ export class JudoMedalTableService {
 
         // ── Posiciones de colocación (5° y 7°) ──────────────────────────
         if (pos === 5 || pos === 7) {
-          // Regla 8.6: requiere ≥5 inscritos y al menos 1 combate ganado
-          if (count < 5 || wins < 1) continue;
+          // Regla 8.6: requiere ≥5 
+          if (count < 5) continue;
           if (pos === 5) inst.fifth   += 1;
           if (pos === 7) inst.seventh += 1;
         }
