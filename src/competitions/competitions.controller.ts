@@ -237,6 +237,12 @@ export class CompetitionsController {
     return this.competitionsService.getManualRanks(phaseId);
   }
 
+  @Get('phases/:phaseId/standings/with-manual-ranks')
+  @Public()
+  getStandingsWithManualRanks(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.getStandingsWithManualRanks(phaseId);
+  }
+
   // ==================== BEST OF 3 ====================
 
   @Post('phases/:phaseId/initialize-best-of-3')
@@ -261,6 +267,12 @@ export class CompetitionsController {
       matchId,
       winnerRegistrationId,
     );
+  }
+
+  @Get('phases/:phaseId/best-of-3/status')
+  @Public()
+  getBestOf3SeriesStatus(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.getBestOf3SeriesStatus(phaseId);
   }
 
   // ==================== TENIS DE MESA - LINEUPS ====================

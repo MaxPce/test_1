@@ -805,6 +805,116 @@ export class CompetitionsService {
     }
   }
 
+  async getStandingsWithManualRanks(phaseId: number): Promise<Standing[]> {
+    // Obtener standings calculados automáticamente
+    const standings = await this.getStandings(phaseId);
+
+    // Obtener manual ranks guardados en phase_manual_ranks
+    const manualRanks = await this.phaseManualRankRepository.find({
+      where: { phaseId },
+    });
+
+    if (manualRanks.length === 0) return standings;
+
+    // Mapear: registrationId → manualRankPosition
+    const manualMap = new Map<number, number | null>(
+      manualRanks.map((r) => [r.registrationId, r.manualRankPosition]),
+    );
+
+    // Aplicar manualRankPosition a cada standing
+    for (const standing of standings) {
+      if (manualMap.has(standing.registrationId)) {
+        standing.manualRankPosition = manualMap.get(standing.registrationId) ?? null;
+      }
+    }
+
+    // Re-ordenar: primero los que tienen manual rank (por su posición manual),
+    // luego los que no lo tienen (por ranking automático)
+    standings.sort((a, b) => {
+      const aHas = a.manualRankPosition !== null && a.manualRankPosition !== undefined;
+      const bHas = b.manualRankPosition !== null && b.manualRankPosition !== undefined;
+      if (aHas && bHas) return a.manualRankPosition! - b.manualRankPosition!;
+      if (aHas) return -1;
+      if (bHas) return 1;
+      return (a.rankPosition ?? 999) - (b.rankPosition ?? 999);
+    });
+
+    return standings;
+  }
+
+  // Método específico para best_of_3: calcula el "standing" de la serie
+  async getBestOf3SeriesStatus(phaseId: number) {
+    const phase = await this.phaseRepository.findOne({ where: { phaseId } });
+    if (!phase) throw new NotFoundException('Fase no encontrada');
+
+    const matches = await this.matchRepository.find({
+      where: { phaseId },
+      relations: [
+        'participations',
+        'participations.registration',
+        'participations.registration.athlete',
+        'participations.registration.athlete.institution',
+        'participations.registration.team',
+        'participations.registration.team.institution',
+      ],
+      order: { matchNumber: 'ASC' },
+    });
+
+    // ── Fix 1 y 2: filtrar participaciones con registrationId nulo ────────────
+    const regMap = new Map<number, any>();
+    for (const match of matches) {
+      for (const p of match.participations) {
+        if (p.registrationId == null) continue; // ← guard contra null
+        if (!regMap.has(p.registrationId)) {
+          regMap.set(p.registrationId, p.registration);
+        }
+      }
+    }
+
+    const victorias: Record<number, number> = {};
+    for (const match of matches) {
+      if (match.winnerRegistrationId) {
+        victorias[match.winnerRegistrationId] =
+          (victorias[match.winnerRegistrationId] || 0) + 1;
+      }
+    }
+
+    const manualRanks = await this.phaseManualRankRepository.find({ where: { phaseId } });
+    const manualMap = new Map(manualRanks.map((r) => [r.registrationId, r.manualRankPosition]));
+
+    const participants = Array.from(regMap.entries()).map(([regId, registration]) => ({
+      registrationId: regId,
+      registration,
+      wins: victorias[regId] ?? 0,
+      manualRankPosition: manualMap.get(regId) ?? null,
+    }));
+
+    participants.sort((a, b) => {
+      const aHas = a.manualRankPosition !== null;
+      const bHas = b.manualRankPosition !== null;
+      if (aHas && bHas) return a.manualRankPosition! - b.manualRankPosition!;
+      if (aHas) return -1;
+      if (bHas) return 1;
+      return b.wins - a.wins;
+    });
+
+    // ── Fix 3: usar el enum MatchStatus en vez del string literal ────────────
+    const totalPlayed = matches.filter((m) => m.status === MatchStatus.FINALIZADO).length;
+    const ganador = participants.find((p) => p.wins >= 2) ?? null;
+    const serieCompleta = ganador !== null;
+
+    return {
+      phaseId,
+      participants,
+      matches,
+      totalPlayed,
+      serieCompleta,
+      winner: ganador,
+      manualRanksApplied: manualRanks.length > 0,
+    };
+  }
+
+
   // ==================== BEST OF 3 ====================
 
   async initializeBestOf3Series(phaseId: number, registrationIds: number[]) {

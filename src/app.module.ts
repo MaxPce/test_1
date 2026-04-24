@@ -14,6 +14,7 @@ import { SismasterModule } from '../src/sismaster/sismaster.module';
 import { CompaniesModule } from './companies/companies.module';
 import { OperatorPermissionsModule } from './operator-permissions/operator-permissions.module';
 import { ScoreTablesModule } from './score-tables/score-tables.module';
+import { JudoMedalTableModule } from './judo-medal-table/judo-medal-table.module';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { ScoreTablesModule } from './score-tables/score-tables.module';
     CompaniesModule,
     OperatorPermissionsModule,
     ScoreTablesModule,
+    JudoMedalTableModule,
   ],
   providers: [
     {
