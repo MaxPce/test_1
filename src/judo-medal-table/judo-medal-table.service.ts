@@ -17,10 +17,10 @@ export class JudoMedalTableService {
     //
     // Reglas aplicadas:
     //   8.1 - 1 participante → solo participación, sin medalla
-    //   8.2 - 2 participantes → medalla si no walkover (is_walkover=0 al menos en 1 match)
-    //   8.3 - 3 participantes → medallas a pos 1, 2, 3
-    //   8.4 - ≥4 participantes → medallas a pos 1, 2 y DOS pos 3
-    //   8.5 - Para pos 1/2/3: debe haber ganado al menos 1 combate
+    //   8.2 - 2 participantes → medalla a 1° y 2° (no requiere victoria)
+    //   8.3 - 3 participantes → medallas a pos 1, 2, 3 (requiere ≥1 victoria)
+    //   8.4 - ≥4 participantes → medallas a pos 1, 2 y DOS pos 3 (requiere ≥1 victoria)
+    //   8.5 - Para pos 1/2/3 con ≥3 inscritos: debe haber ganado al menos 1 combate
     //   8.6 - Para pos 5/7: ≥5 inscritos y haber ganado al menos 1 combate
     // ─────────────────────────────────────────────────────────────────────
     const rows: Array<{
@@ -60,15 +60,14 @@ export class JudoMedalTableService {
         )                                                   AS participantCount,
         -- Cuántos combates ganó este registration en esta fase (reglas 8.5 y 8.6)
         (
-        SELECT COUNT(*)
-        FROM matches m
-        WHERE m.phase_id = pmr.phase_id
+          SELECT COUNT(*)
+          FROM matches m
+          WHERE m.phase_id = pmr.phase_id
             AND m.winner_registration_id = pmr.registration_id
             AND m.is_walkover = 0
             AND m.deleted_at IS NULL
-        )  AS winsCount
+        )                                                   AS winsCount
       FROM phase_manual_ranks pmr
-      -- Navegar hasta sport para filtrar por localSportId
       INNER JOIN phases ph
         ON ph.phase_id = pmr.phase_id
         AND ph.deleted_at IS NULL
@@ -81,7 +80,6 @@ export class JudoMedalTableService {
       INNER JOIN sports s
         ON s.sport_id = cat.sport_id
         AND s.sport_id = ?
-      -- Navegar hasta institución
       INNER JOIN registrations reg
         ON reg.registration_id = pmr.registration_id
         AND reg.deleted_at IS NULL
@@ -105,7 +103,15 @@ export class JudoMedalTableService {
     // ─────────────────────────────────────────────────────────────────────
     const accumulator = new Map<
       number,
-      { institutionId: number; institutionName: string; gold: number; silver: number; bronze: number; fifth: number; seventh: number }
+      {
+        institutionId: number;
+        institutionName: string;
+        gold: number;
+        silver: number;
+        bronze: number;
+        fifth: number;
+        seventh: number;
+      }
     >();
 
     const ensureInstitution = (id: number, name: string) => {
@@ -113,48 +119,92 @@ export class JudoMedalTableService {
         accumulator.set(id, {
           institutionId: id,
           institutionName: name,
-          gold: 0, silver: 0, bronze: 0, fifth: 0, seventh: 0,
+          gold: 0,
+          silver: 0,
+          bronze: 0,
+          fifth: 0,
+          seventh: 0,
         });
       }
       return accumulator.get(id)!;
     };
 
+    // ── Agrupar por fase para controlar terceros por categoría ──────────
+    const rowsByPhase = new Map<number, typeof rows>();
     for (const row of rows) {
-      const { institutionId, institutionName, position, participantCount, winsCount, phaseType } = row;
-      const count = Number(participantCount);
-      const wins  = Number(winsCount);
-      const pos   = Number(position);
-      const inst  = ensureInstitution(institutionId, institutionName);
+      if (!rowsByPhase.has(row.phaseId)) {
+        rowsByPhase.set(row.phaseId, []);
+      }
+      rowsByPhase.get(row.phaseId)!.push(row);
+    }
+
+    for (const phaseRows of rowsByPhase.values()) {
+      // Usamos el participantCount de la primera fila (es el mismo para toda la fase)
+      const count = Number(phaseRows[0]?.participantCount ?? 0);
 
       // ── Regla 8.1: 1 participante → solo participación, sin medalla ──
       if (count < 2) continue;
 
-      // ── Posiciones de medalla (1°, 2°, 3°) ───────────────────────────
-      if (pos === 1 || pos === 2 || pos === 3) {
-        // Regla 8.5: debe haber ganado al menos 1 combate
-        if (phaseType === 'eliminacion' && wins < 1) continue;
+      // Ordenar defensivamente por posición ascendente
+      phaseRows.sort((a, b) => Number(a.position) - Number(b.position));
 
-        // Regla 8.2: 2 participantes → 1° y 2° reciben medalla
-        // Regla 8.3: 3 participantes → 1°, 2° y 3° reciben medalla
-        // Regla 8.4: ≥4 participantes → 1°, 2° y DOS 3° reciben medalla
-        // → Todas cubiertas: si pos ≤ 3 y hay ≥2 inscritos y ganó ≥1 combate, computa
-        if (pos === 1) inst.gold   += 1;
-        if (pos === 2) inst.silver += 1;
-        if (pos === 3) inst.bronze += 1;
-      }
+      // Regla 8.4: con ≥4 inscritos se permiten DOS terceros; con 3 solo UNO
+      const allowedBronzes = count >= 4 ? 2 : 1;
+      let countedBronzes = 0;
 
-      // ── Posiciones de colocación (5° y 7°) ───────────────────────────
-      if (pos === 5 || pos === 7) {
-        // Regla 8.6: requiere ≥5 inscritos y al menos 1 combate ganado
-        if (count < 5 || wins < 1) continue;
-        if (pos === 5) inst.fifth   += 1;
-        if (pos === 7) inst.seventh += 1;
+      for (const row of phaseRows) {
+        const pos  = Number(row.position);
+        const wins = Number(row.winsCount);
+        const inst = ensureInstitution(row.institutionId, row.institutionName);
+
+        // ── Posiciones de medalla (1°, 2°, 3°) ─────────────────────────
+        if (pos === 1 || pos === 2 || pos === 3) {
+
+          // ── Regla 8.2: exactamente 2 participantes ───────────────────
+          // Ambas posiciones computan si pasaron pesaje.
+          // La base NO exige victoria en este caso específico.
+          if (count === 2) {
+            if (pos === 1) inst.gold   += 1;
+            if (pos === 2) inst.silver += 1;
+            continue;
+          }
+
+          // ── Reglas 8.3 / 8.4 / 8.5: 3 o más participantes ──────────
+          // Regla 8.5: debe haber ganado al menos 1 combate (aplica a
+          // CUALQUIER tipo de fase: eliminacion, round_robin, etc.)
+          if (wins < 1) continue;
+
+          if (pos === 1) {
+            inst.gold += 1;
+            continue;
+          }
+
+          if (pos === 2) {
+            inst.silver += 1;
+            continue;
+          }
+
+          if (pos === 3) {
+            // Regla 8.4: respetar el límite de terceros por fase
+            if (countedBronzes >= allowedBronzes) continue;
+            inst.bronze += 1;
+            countedBronzes++;
+          }
+        }
+
+        // ── Posiciones de colocación (5° y 7°) ──────────────────────────
+        if (pos === 5 || pos === 7) {
+          // Regla 8.6: requiere ≥5 inscritos y al menos 1 combate ganado
+          if (count < 5 || wins < 1) continue;
+          if (pos === 5) inst.fifth   += 1;
+          if (pos === 7) inst.seventh += 1;
+        }
       }
     }
 
     // ─────────────────────────────────────────────────────────────────────
-    // PASO 3: Ordenar por criterio de desempate (igual que la imagen):
-    //   1° Más oros → 2° Más platas → 3° Más bronces → 4° Más quintos
+    // PASO 3: Ordenar por criterio de desempate:
+    //   1° Más oros → 2° Más platas → 3° Más bronces → 4° Más quintos → 5° Más séptimos
     // Asignar rank con soporte de empates
     // ─────────────────────────────────────────────────────────────────────
     const sorted = [...accumulator.values()].sort((a, b) => {
