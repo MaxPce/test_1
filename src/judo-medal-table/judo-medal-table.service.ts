@@ -31,6 +31,7 @@ export class JudoMedalTableService {
       position: number;
       institutionId: number;
       institutionName: string;
+      institutionLogoUrl: string | null;
       participantCount: number;
       winsCount: number;
     }> = await this.dataSource.query(
@@ -43,6 +44,7 @@ export class JudoMedalTableService {
         pmr.manual_rank_position                            AS position,
         COALESCE(inst.institution_id, t_inst.institution_id, 0) AS institutionId,
         COALESCE(inst.name, t_inst.name, 'N/A')             AS institutionName,
+        COALESCE(inst.logo_url, t_inst.logo_url, NULL)       AS institutionLogoUrl,
         -- Conteo de inscritos en esta fase (reglas 8.1–8.4 y 8.6)
         GREATEST(
           (
@@ -106,6 +108,7 @@ export class JudoMedalTableService {
       {
         institutionId: number;
         institutionName: string;
+        institutionLogoUrl: string | null;
         gold: number;
         silver: number;
         bronze: number;
@@ -114,11 +117,12 @@ export class JudoMedalTableService {
       }
     >();
 
-    const ensureInstitution = (id: number, name: string) => {
+    const ensureInstitution = (id: number, name: string, logoUrl: string | null) => { 
       if (!accumulator.has(id)) {
         accumulator.set(id, {
           institutionId: id,
           institutionName: name,
+          institutionLogoUrl: logoUrl, 
           gold: 0,
           silver: 0,
           bronze: 0,
@@ -155,7 +159,7 @@ export class JudoMedalTableService {
       for (const row of phaseRows) {
         const pos  = Number(row.position);
         const wins = Number(row.winsCount);
-        const inst = ensureInstitution(row.institutionId, row.institutionName);
+        const inst = ensureInstitution(row.institutionId, row.institutionName, row.institutionLogoUrl);
 
         // ── Posiciones de medalla (1°, 2°, 3°) ─────────────────────────
         if (pos === 1 || pos === 2 || pos === 3) {
