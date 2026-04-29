@@ -15,6 +15,7 @@ import { CompaniesModule } from './companies/companies.module';
 import { OperatorPermissionsModule } from './operator-permissions/operator-permissions.module';
 import { ScoreTablesModule } from './score-tables/score-tables.module';
 import { JudoMedalTableModule } from './judo-medal-table/judo-medal-table.module';
+import { SwimmingMedalTableModule } from './swimming-medal-table/swimming-medal-table.module';
 
 @Module({
   imports: [
@@ -69,6 +70,7 @@ import { JudoMedalTableModule } from './judo-medal-table/judo-medal-table.module
     OperatorPermissionsModule,
     ScoreTablesModule,
     JudoMedalTableModule,
+    SwimmingMedalTableModule,
   ],
   providers: [
     {
