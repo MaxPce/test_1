@@ -537,7 +537,9 @@ export class ResultsService {
         eventCategoryId,
       })
       .andWhere('result.timeValue IS NOT NULL')
-      .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
+      .andWhere(
+        "(result.notes IS NULL OR (result.notes NOT LIKE '%DQ%' AND result.notes NOT LIKE '%DNF%' AND result.notes NOT LIKE '%DNS%'))",
+      )
       .orderBy('TIME_TO_SEC(result.time_value)', 'ASC')
       .getMany();
 
@@ -557,7 +559,9 @@ export class ResultsService {
         eventCategoryId,
       })
       .andWhere('result.timeValue IS NOT NULL')
-      .andWhere("result.notes LIKE '%DQ%'")
+      .andWhere(
+        "(result.notes LIKE '%DQ%' OR result.notes LIKE '%DNF%' OR result.notes LIKE '%DNS%')",
+      )
       .getMany();
 
     for (const result of disqualified) {
@@ -574,7 +578,7 @@ export class ResultsService {
   }
 
   async createTimeResult(dto: CreateTimeResultDto, userId: number) {
-    // 1. Buscar o crear la participation para esta registration
+    // 1. Buscar o crear participation (sin cambios)
     let participation = await this.participationRepository.findOne({
       where: { registrationId: dto.registrationId },
       relations: ['registration', 'registration.athlete', 'registration.team'],
@@ -587,12 +591,10 @@ export class ResultsService {
         corner: null,
       });
       const saved = await this.participationRepository.save(newParticipation);
-
       participation = await this.participationRepository.findOne({
         where: { participationId: saved.participationId },
         relations: ['registration', 'registration.athlete', 'registration.team'],
       });
-
       if (!participation) {
         throw new NotFoundException(
           `No se pudo crear la participación para registration ${dto.registrationId}`,
@@ -600,21 +602,29 @@ export class ResultsService {
       }
     }
 
-    // 2. Detectar si está descalificado
-    const isDQ = dto.timeValue.startsWith('x');
-    const cleanTime = isDQ ? dto.timeValue.substring(1) : dto.timeValue;
+    // 2. detectar estados especiales y DQ legacy (prefijo 'x')
+    const SPECIAL_STATUSES = ['DNS', 'DNF', 'DQ'];
+    const upperTime = dto.timeValue?.toUpperCase().trim();
+    const isSpecialStatus = SPECIAL_STATUSES.includes(upperTime);
+    const isDQ_legacy = !isSpecialStatus && dto.timeValue?.startsWith('x');
 
-    // 3. Buscar si ya existe resultado para esta participation EN ESTA FASE
-    //    (si viene phaseId, buscar por participation + phase;
-    //     si no viene, buscar solo por participation — compatibilidad hacia atrás)
+    const finalTimeValue = isSpecialStatus
+      ? null
+      : isDQ_legacy
+        ? dto.timeValue.substring(1)
+        : dto.timeValue;
+
+    const finalNotes = isSpecialStatus
+      ? upperTime                                        // 'DNS', 'DNF' o 'DQ'
+      : isDQ_legacy
+        ? `DQ - ${dto.notes || 'Descalificado'}`
+        : dto.notes || null;
+
+    // 3. Buscar resultado existente (sin cambios)
     let result: Result | null = null;
-
     if (dto.phaseId) {
       result = await this.resultRepository.findOne({
-        where: {
-          participationId: participation.participationId,
-          phaseId: dto.phaseId,
-        },
+        where: { participationId: participation.participationId, phaseId: dto.phaseId },
       });
     } else {
       result = await this.resultRepository.findOne({
@@ -622,35 +632,30 @@ export class ResultsService {
       });
     }
 
+    // 4. Upsert
     if (result) {
-      // Actualizar resultado existente
-      result.timeValue = cleanTime;
-      result.notes = isDQ
-        ? `DQ - ${dto.notes || 'Descalificado'}`
-        : dto.notes || null;
+      result.timeValue = finalTimeValue;
+      result.notes = finalNotes;
+      result.rankPosition = isSpecialStatus || isDQ_legacy ? null : result.rankPosition;
+      result.isWinner = isSpecialStatus || isDQ_legacy ? false : result.isWinner;
       result.recordedBy = userId;
-      if (dto.phaseId) result.phaseId = dto.phaseId; 
+      if (dto.phaseId) result.phaseId = dto.phaseId;
     } else {
-      // Crear nuevo resultado
       result = this.resultRepository.create({
         participationId: participation.participationId,
-        phaseId: dto.phaseId || null, 
-        timeValue: cleanTime,
-        notes: isDQ
-          ? `DQ - ${dto.notes || 'Descalificado'}`
-          : dto.notes || null,
-        recordedBy: userId,
+        phaseId: dto.phaseId || null,
+        timeValue: finalTimeValue,
+        notes: finalNotes,
         rankPosition: null,
         isWinner: false,
+        recordedBy: userId,
       });
     }
 
     const savedResult = await this.resultRepository.save(result);
 
-    // 4. Recalcular posiciones
+    // 5. Recalcular posiciones (sin cambios)
     const eventCategoryId = participation.registration.eventCategoryId;
-
-    // Si tiene phaseId, recalcular por fase; si no, recalcular por categoría entera
     if (dto.phaseId) {
       await this.recalculatePhaseTimePositions(dto.phaseId);
     } else {
@@ -666,7 +671,9 @@ export class ResultsService {
       .createQueryBuilder('result')
       .where('result.phaseId = :phaseId', { phaseId })
       .andWhere('result.timeValue IS NOT NULL')
-      .andWhere("(result.notes IS NULL OR result.notes NOT LIKE '%DQ%')")
+      .andWhere(
+        "(result.notes IS NULL OR (result.notes NOT LIKE '%DQ%' AND result.notes NOT LIKE '%DNF%' AND result.notes NOT LIKE '%DNS%'))",
+      )
       .orderBy('TIME_TO_SEC(result.time_value)', 'ASC')
       .getMany();
 
@@ -680,8 +687,9 @@ export class ResultsService {
     const disqualified = await this.resultRepository
       .createQueryBuilder('result')
       .where('result.phaseId = :phaseId', { phaseId })
-      .andWhere('result.timeValue IS NOT NULL')
-      .andWhere("result.notes LIKE '%DQ%'")
+      .andWhere(
+        "(result.notes LIKE '%DQ%' OR result.notes LIKE '%DNF%' OR result.notes LIKE '%DNS%')",
+      )
       .getMany();
 
     for (const r of disqualified) {
@@ -711,8 +719,8 @@ export class ResultsService {
       .leftJoinAndSelect('members.athlete', 'memberAthlete')
       .where('result.phaseId = :phaseId', { phaseId })
       .andWhere(
-        '(result.timeValue IS NOT NULL OR result.notes LIKE :dns)',
-        { dns: '%DNS%' },
+        '(result.timeValue IS NOT NULL OR result.notes LIKE :dns OR result.notes LIKE :dnf OR result.notes LIKE :dq)',
+        { dns: '%DNS%', dnf: '%DNF%', dq: '%DQ%' },
       )
       .orderBy(
         'CASE WHEN result.rankPosition IS NULL THEN 1 ELSE 0 END',

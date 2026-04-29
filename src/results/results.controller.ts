@@ -10,7 +10,6 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
-  Req,
 } from '@nestjs/common';
 import { ResultsService } from './results.service';
 import {
@@ -139,20 +138,8 @@ export class ResultsController {
 
   @Get('phase/:phaseId')
   @Public()
-  async getPhaseResults(
-    @Param('phaseId', ParseIntPipe) phaseId: number,
-  ) {
-    return await this.resultsService.getPhaseResults(phaseId);
-  }
-
-  @Patch(':id')  
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
-  async updateTimeResult(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() dto: Partial<CreateTimeResultDto>,
-    @CurrentUser() user: AuthUser,
-  ) {
-    return await this.resultsService.updateTimeResult(id, dto, user.userId);
+  async getPhaseResults(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.resultsService.getPhaseResults(phaseId);
   }
 
   @Post('time')
@@ -161,7 +148,17 @@ export class ResultsController {
     @Body() dto: CreateTimeResultDto,
     @CurrentUser() user: AuthUser,
   ) {
-    return await this.resultsService.createTimeResult(dto, user.userId);
+    return this.resultsService.createTimeResult(dto, user.userId);
+  }
+
+  @Patch('time/:id')  // ← CORREGIDO: ruta propia para no colisionar con @Patch(':id')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async updateTimeResult(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: Partial<CreateTimeResultDto>,
+    @CurrentUser() user: AuthUser,
+  ) {
+    return this.resultsService.updateTimeResult(id, dto, user.userId);
   }
 
   @Get('swimming/:eventCategoryId')
@@ -169,7 +166,7 @@ export class ResultsController {
   async getSwimmingResults(
     @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
   ) {
-    return await this.resultsService.getSwimmingResults(eventCategoryId);
+    return this.resultsService.getSwimmingResults(eventCategoryId);
   }
 
   @Post('swimming/:eventCategoryId/recalculate')
@@ -177,9 +174,7 @@ export class ResultsController {
   async recalculatePositions(
     @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
   ) {
-    return await this.resultsService.recalculateSwimmingPositions(
-      eventCategoryId,
-    );
+    return this.resultsService.recalculateSwimmingPositions(eventCategoryId);
   }
 
   @Post('dns')
@@ -189,6 +184,6 @@ export class ResultsController {
     @Body('phaseId', ParseIntPipe) phaseId: number,
     @CurrentUser() user: AuthUser,
   ) {
-    return await this.resultsService.createDNSResult(registrationId, phaseId, user.userId);
+    return this.resultsService.createDNSResult(registrationId, phaseId, user.userId);
   }
 }
