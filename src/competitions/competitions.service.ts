@@ -27,6 +27,7 @@ import {
 import { PhaseType, MatchStatus, Corner } from '../common/enums';
 import { BracketService } from './bracket.service';
 import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
+import { GenerateSwimmingSeriesDto } from './dto/generate-swimming-series.dto';
 
 @Injectable()
 export class CompetitionsService {
@@ -1262,6 +1263,55 @@ export class CompetitionsService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  // ==================== SWIMMING SERIES GENERATION ====================
+
+  async generateSwimmingSeries(
+    eventCategoryId: number,
+    dto: GenerateSwimmingSeriesDto,
+  ): Promise<{ created: number; phaseIds: number[] }> {
+    const phaseIds: number[] = [];
+
+    // Obtener el displayOrder máximo actual para no pisar fases existentes
+    const lastPhase = await this.phaseRepository.findOne({
+      where: { eventCategoryId },
+      order: { displayOrder: 'DESC' },
+      withDeleted: false,
+    });
+    let nextOrder = (lastPhase?.displayOrder ?? 0) + 1;
+
+    for (const group of dto.groups) {
+      if (group.registrationIds.length === 0) continue;
+
+      // 1. Crear la phase (tipo GRUPO = serie de natación)
+      const phase = this.phaseRepository.create({
+        eventCategoryId,
+        name: group.name,
+        type: PhaseType.GRUPO,
+        displayOrder: nextOrder++,
+      });
+      const savedPhase = await this.phaseRepository.save(phase);
+
+      // 2. Crear PhaseRegistration por cada nadador
+      for (const registrationId of group.registrationIds) {
+        const existing = await this.phaseRegistrationRepository.findOne({
+          where: { phaseId: savedPhase.phaseId, registrationId },
+        });
+        if (!existing) {
+          await this.phaseRegistrationRepository.save(
+            this.phaseRegistrationRepository.create({
+              phaseId: savedPhase.phaseId,
+              registrationId,
+            }),
+          );
+        }
+      }
+
+      phaseIds.push(savedPhase.phaseId);
+    }
+
+    return { created: phaseIds.length, phaseIds };
   }
 
   // ==================== POOMSAE / TAOLU (SCORE TABLE) ====================

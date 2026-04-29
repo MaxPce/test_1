@@ -15,3 +15,4 @@ export * from './update-shooting-score.dto';
 export * from './update-climbing-score.dto';
 export * from './create-athletics-result.dto';
 export * from './update-athletics-result.dto';
+export * from './generate-swimming-series.dto';

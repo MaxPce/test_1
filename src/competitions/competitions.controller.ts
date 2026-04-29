@@ -39,6 +39,7 @@ import { TaekwondoPoomsaeService } from './taekwondo-poomsae.service';
 import { UpdateKyoruguiScoreDto } from './dto/update-kyorugui-score.dto';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
+import { GenerateSwimmingSeriesDto } from './dto/generate-swimming-series.dto';
 
 
 
@@ -437,6 +438,16 @@ export class CompetitionsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   processPhaseByesAutomatically(@Param('id', ParseIntPipe) phaseId: number) {
     return this.competitionsService.processPhaseByesAutomatically(phaseId);
+  }
+
+  // Pega esto después del bloque @Post('phases/:id/process-byes')
+  @Post('phases/:eventCategoryId/generate-swimming-series')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generateSwimmingSeries(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() dto: GenerateSwimmingSeriesDto,
+  ) {
+    return this.competitionsService.generateSwimmingSeries(eventCategoryId, dto);
   }
 
   @Post('table-tennis/matches/:matchId/walkover')
