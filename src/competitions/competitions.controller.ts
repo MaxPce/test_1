@@ -10,7 +10,7 @@ import {
   ParseIntPipe,
   UseGuards,
 } from '@nestjs/common';
-import { CompetitionsService } from './competitions.service';
+import { CompetitionsService, WrestlingScoreboardRow } from './competitions.service';
 import { TableTennisService } from './table-tennis.service';
 import { BracketService } from './bracket.service';
 import {
@@ -504,6 +504,20 @@ export class CompetitionsController {
     @Param('registrationId', ParseIntPipe) registrationId: number,
   ) {
     return this.competitionsService.removePhaseRegistration(phaseId, registrationId);
+  }
+
+  // ── WRESTLING SCOREBOARD ─────────────────────────────────────────────────────
+
+  @Get('wrestling/scoreboard')
+  @Public()
+  async getWrestlingEventScoreboard(
+    @Query('externalEventId', ParseIntPipe) externalEventId: number,
+    @Query('localSportId', ParseIntPipe) localSportId: number,
+  ): Promise<WrestlingScoreboardRow[]> {
+    return this.competitionsService.getWrestlingEventScoreboard(
+      externalEventId,
+      localSportId,
+    );
   }
 
 

@@ -29,6 +29,18 @@ import { BracketService } from './bracket.service';
 import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
 import { GenerateSwimmingSeriesDto } from './dto/generate-swimming-series.dto';
 
+export interface WrestlingScoreboardRow {
+  rank: number;
+  institutionId: number;
+  institutionName: string;
+  institutionAbrev: string;
+  logoUrl: string | null;
+  gold: number;
+  silver: number;
+  bronze: number;
+  totalPoints: number;
+}
+
 @Injectable()
 export class CompetitionsService {
   constructor(
@@ -931,6 +943,154 @@ export class CompetitionsService {
       serieCompleta,
       winner: ganador,
       manualRanksApplied: manualRanks.length > 0,
+    };
+  }
+
+  // Agrega esto en competitions.service.ts, junto a los otros métodos públicos
+
+  async getWrestlingEventScoreboard(
+    externalEventId: number,
+    localSportId: number,
+  ): Promise<any> {
+    // 1. Categorías del evento + sport, con nombre de categoría
+    const eventCategories: any[] = await this.dataSource.query(
+      `SELECT ec.event_category_id AS eventCategoryId,
+              c.name AS categoryName
+      FROM event_categories ec
+      INNER JOIN categories c ON c.category_id = ec.category_id
+      WHERE ec.external_event_id = ?
+        AND c.sport_id = ?`,
+      [externalEventId, localSportId],
+    );
+
+    if (eventCategories.length === 0) return { columns: [], rows: [] };
+
+    const eventCategoryIds = eventCategories.map((ec) => ec.eventCategoryId);
+
+    // 2. Phases de eliminación para esas categorías
+    const phases: any[] = await this.dataSource.query(
+      `SELECT p.phase_id AS phaseId, p.event_category_id AS eventCategoryId
+      FROM phases p
+      WHERE p.event_category_id IN (${eventCategoryIds.map(() => '?').join(',')})
+        AND p.type = 'eliminacion'
+        AND p.deleted_at IS NULL`,
+      eventCategoryIds,
+    );
+
+    if (phases.length === 0) return { columns: [], rows: [] };
+
+    // Mapa phaseId → categoryName
+    const phaseToCategoryName = new Map<number, string>();
+    for (const p of phases) {
+      const ec = eventCategories.find((e) => e.eventCategoryId === p.eventCategoryId);
+      if (ec) phaseToCategoryName.set(p.phaseId, ec.categoryName);
+    }
+
+    const phaseIds = phases.map((p) => p.phaseId);
+
+    // 3. Manual ranks con institución
+    const manualRanks: any[] = await this.dataSource.query(
+      `SELECT
+        pmr.phase_id              AS phaseId,
+        pmr.registration_id       AS registrationId,
+        pmr.manual_rank_position  AS place,
+        COALESCE(ai.institution_id, ti.institution_id)   AS institutionId,
+        COALESCE(ai.name, ti.name)                        AS institutionName,
+        COALESCE(ai.abrev, ti.abrev)                      AS institutionAbrev,
+        COALESCE(ai.logo_url, ti.logo_url)                AS logoUrl
+      FROM phase_manual_ranks pmr
+      INNER JOIN registrations r  ON r.registration_id = pmr.registration_id
+      LEFT JOIN athletes a         ON a.athlete_id = r.athlete_id
+      LEFT JOIN institutions ai    ON ai.institution_id = a.institution_id
+      LEFT JOIN teams t            ON t.team_id = r.team_id
+      LEFT JOIN institutions ti    ON ti.institution_id = t.institution_id
+      WHERE pmr.phase_id IN (${phaseIds.map(() => '?').join(',')})
+        AND pmr.manual_rank_position IS NOT NULL`,
+      phaseIds,
+    );
+
+    // 4. Puntos UWW
+    const TEAM_POINTS: Record<number, number> = {
+      1: 25, 2: 20, 3: 15, 4: 15, 5: 10, 6: 10, 7: 8, 8: 2,
+    };
+
+    // 5. Columnas ordenadas (categorías que tienen al menos 1 resultado)
+    const categoryNamesWithData = new Set<string>();
+    for (const r of manualRanks) {
+      const catName = phaseToCategoryName.get(r.phaseId);
+      if (catName) categoryNamesWithData.add(catName);
+    }
+
+    // Ordenar columnas: intentar ordenar numéricamente por kg si el nombre lo permite
+    const columns = Array.from(categoryNamesWithData).sort((a, b) => {
+      const numA = parseFloat(a);
+      const numB = parseFloat(b);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
+
+    // 6. Acumular por institución
+    const institutionMap = new Map<number, {
+      institutionId: number;
+      institutionName: string;
+      institutionAbrev: string;
+      logoUrl: string | null;
+      gold: number;
+      silver: number;
+      bronze: number;
+      totalPoints: number;
+      byCategory: Record<string, number>; // categoryName → pts
+    }>();
+
+    for (const row of manualRanks) {
+      if (!row.institutionId) continue;
+      const catName = phaseToCategoryName.get(row.phaseId);
+      if (!catName) continue;
+      const pts = TEAM_POINTS[row.place] ?? 0;
+
+      if (!institutionMap.has(row.institutionId)) {
+        institutionMap.set(row.institutionId, {
+          institutionId: row.institutionId,
+          institutionName: row.institutionName ?? '-',
+          institutionAbrev: row.institutionAbrev ?? '-',
+          logoUrl: row.logoUrl ?? null,
+          gold: 0, silver: 0, bronze: 0,
+          totalPoints: 0,
+          byCategory: {},
+        });
+      }
+
+      const inst = institutionMap.get(row.institutionId)!;
+      inst.totalPoints += pts;
+      inst.byCategory[catName] = (inst.byCategory[catName] ?? 0) + pts;
+
+      if (row.place === 1) inst.gold++;
+      else if (row.place === 2) inst.silver++;
+      else if (row.place === 3 || row.place === 4) inst.bronze++;
+    }
+
+    // 7. Ordenar: totalPoints DESC → gold → silver → bronze
+    const sortedRows = Array.from(institutionMap.values()).sort((a, b) =>
+      b.totalPoints !== a.totalPoints ? b.totalPoints - a.totalPoints :
+      b.gold !== a.gold ? b.gold - a.gold :
+      b.silver !== a.silver ? b.silver - a.silver :
+      b.bronze - a.bronze,
+    );
+
+    return {
+      columns, // string[] — nombres de categorías ordenadas
+      rows: sortedRows.map((r, i) => ({
+        rank: i + 1,
+        institutionId: r.institutionId,
+        institutionName: r.institutionName,
+        institutionAbrev: r.institutionAbrev,
+        logoUrl: r.logoUrl,
+        gold: r.gold,
+        silver: r.silver,
+        bronze: r.bronze,
+        totalPoints: r.totalPoints,
+        byCategory: r.byCategory,
+      })),
     };
   }
 
