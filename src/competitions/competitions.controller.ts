@@ -40,7 +40,7 @@ import { UpdateKyoruguiScoreDto } from './dto/update-kyorugui-score.dto';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
 import { GenerateSwimmingSeriesDto } from './dto/generate-swimming-series.dto';
-
+import { GeneratePhasesDto } from './dto/generate-phases.dto';
 
 
 @Controller('competitions')
@@ -448,6 +448,24 @@ export class CompetitionsController {
     @Body() dto: GenerateSwimmingSeriesDto,
   ) {
     return this.competitionsService.generateSwimmingSeries(eventCategoryId, dto);
+  }
+
+  @Post('event-categories/:eventCategoryId/wrestling/generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generateWrestlingPhases(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() dto: GeneratePhasesDto,
+  ) {
+    return this.competitionsService.generateCompetitionPhases(eventCategoryId, dto);
+  }
+
+  @Post('event-categories/:eventCategoryId/wushu/generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generateWushuPhases(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() dto: GeneratePhasesDto,
+  ) {
+    return this.competitionsService.generateCompetitionPhases(eventCategoryId, dto);
   }
 
   @Post('table-tennis/matches/:matchId/walkover')

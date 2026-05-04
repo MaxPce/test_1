@@ -28,6 +28,7 @@ import { PhaseType, MatchStatus, Corner } from '../common/enums';
 import { BracketService } from './bracket.service';
 import { SetManualRanksDto } from './dto/set-manual-ranks.dto';
 import { GenerateSwimmingSeriesDto } from './dto/generate-swimming-series.dto';
+import { GeneratePhasesDto } from './dto/generate-phases.dto';
 
 export interface WrestlingScoreboardRow {
   rank: number;
@@ -1466,6 +1467,52 @@ export class CompetitionsService {
             }),
           );
         }
+      }
+
+      phaseIds.push(savedPhase.phaseId);
+    }
+
+    return { created: phaseIds.length, phaseIds };
+  }
+
+  // ==================== WRESTLING & WUSHU PHASES GENERATION ====================
+
+  async generateCompetitionPhases(
+    eventCategoryId: number,
+    dto: GeneratePhasesDto,
+  ): Promise<{ created: number; phaseIds: number[] }> {
+    const phaseIds: number[] = [];
+
+    const lastPhase = await this.phaseRepository.findOne({
+      where: { eventCategoryId },
+      order: { displayOrder: 'DESC' },
+      withDeleted: false,
+    });
+    let nextOrder = (lastPhase?.displayOrder ?? 0) + 1;
+
+    for (const group of dto.groups) {
+      if (group.registrationIds.length === 0) continue;
+
+      let phaseType: PhaseType;
+      if (group.format === 'round_robin') {
+        phaseType = PhaseType.GRUPO;
+      } else if (group.format === 'best_of_3') {
+        phaseType = PhaseType.MEJOR_DE_3;
+      } else {
+        phaseType = PhaseType.ELIMINACION;
+      }
+
+      const phase = this.phaseRepository.create({
+        eventCategoryId,
+        name: group.name,
+        type: phaseType,
+        displayOrder: nextOrder++,
+      });
+      const savedPhase = await this.phaseRepository.save(phase);
+
+      
+      for (const registrationId of group.registrationIds) {
+        await this.assignPhaseRegistration(savedPhase.phaseId, registrationId);
       }
 
       phaseIds.push(savedPhase.phaseId);
