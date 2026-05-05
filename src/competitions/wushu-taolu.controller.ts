@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  Post, 
   Patch,
   Param,
   Body,
@@ -21,6 +22,28 @@ export class WushuTaoluController {
   constructor(private readonly taoluService: WushuTaoluService) {}
 
   // ==================== ENDPOINTS MODO GRUPOS ====================
+
+  // POST /competitions/wushu/taolu/phases/:phaseId/initialize-group
+  @Post('phases/:phaseId/initialize-group')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async initializeGroupPhase(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() body: { registrationIds: number[] },
+  ) {
+    return await this.taoluService.initializeGroupPhase(phaseId, body.registrationIds);
+  }
+
+  // POST /competitions/wushu/taolu/generate-phases
+  @Post('generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async generateTaoluPhases(
+    @Body() body: {
+      eventCategoryId: number;
+      groups: { name: string; registrationIds: number[] }[];
+    },
+  ) {
+    return await this.taoluService.generateTaoluPhases(body);
+  }
 
   @Get('phases/:phaseId/scores')
   @Public()

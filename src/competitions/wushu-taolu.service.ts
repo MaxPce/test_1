@@ -10,7 +10,7 @@ import { Participation } from './entities/participation.entity';
 import { Phase } from './entities/phase.entity';
 import { Match } from './entities/match.entity';
 import { BracketService } from './bracket.service';
-import { MatchStatus } from '../common/enums';
+import { MatchStatus, PhaseType } from '../common/enums';
 import { UpdateTaoluScoreDto } from './dto/update-taolu-score.dto';
 
 @Injectable()
@@ -28,6 +28,8 @@ export class WushuTaoluService {
   ) {}
 
   // ==================== MODO GRUPOS (EXISTENTE) ====================
+
+  
 
   async updatePoomsaeScore(
     participationId: number,
@@ -73,6 +75,73 @@ export class WushuTaoluService {
 
     return score;
   }
+
+  async initializeGroupPhase(
+    phaseId: number,
+    registrationIds: number[],
+  ): Promise<{ matchId: number; participationsCreated: number }> {
+    const phase = await this.phaseRepository.findOne({ where: { phaseId } });
+
+    if (!phase) {
+      throw new NotFoundException(`Phase ${phaseId} no encontrada`);
+    }
+
+    // Limpiar matches/participaciones previas si existen
+    const existingMatches = await this.matchRepository.find({ where: { phaseId } });
+    for (const match of existingMatches) {
+      await this.participationRepository.delete({ matchId: match.matchId });
+    }
+    if (existingMatches.length > 0) {
+      await this.matchRepository.delete({ phaseId });
+    }
+
+    // Crear 1 match "contenedor" que agrupa todas las participaciones
+    const groupMatch: Match = this.matchRepository.create({
+      phaseId,
+      matchNumber: 1,
+      round: 'grupo',           // ← string, no number
+      status: MatchStatus.PROGRAMADO,
+    });
+    const savedMatch: Match = await this.matchRepository.save(groupMatch);
+
+    // Crear una participación por cada registrationId
+    for (let i = 0; i < registrationIds.length; i++) {
+      const participation: Participation = this.participationRepository.create({
+        matchId: savedMatch.matchId,
+        registrationId: registrationIds[i],
+        corner: null,           // ← Corner | null, no un número
+      });
+      await this.participationRepository.save(participation);
+    }
+
+    return {
+      matchId: savedMatch.matchId,
+      participationsCreated: registrationIds.length,
+    };
+  }
+
+  // ── NUEVO: Generar múltiples fases Taolu desde el modal ──────────────────────
+
+  async generateTaoluPhases(dto: {
+    eventCategoryId: number;
+    groups: { name: string; registrationIds: number[] }[];
+  }): Promise<{ phasesCreated: number }> {
+    for (const group of dto.groups) {
+      // 1. Crear la fase tipo grupo usando el enum correcto
+      const phase: Phase = this.phaseRepository.create({
+        eventCategoryId: dto.eventCategoryId,
+        name: group.name,
+        type: PhaseType.GRUPO,  // ← enum, no string literal
+      });
+      const savedPhase: Phase = await this.phaseRepository.save(phase);
+
+      // 2. Crear match contenedor + participaciones
+      await this.initializeGroupPhase(savedPhase.phaseId, group.registrationIds);
+    }
+
+    return { phasesCreated: dto.groups.length };
+  }
+
 
   // ==================== MODO BRACKET (NUEVO) ====================
 
