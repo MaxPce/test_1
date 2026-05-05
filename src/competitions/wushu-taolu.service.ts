@@ -12,6 +12,7 @@ import { Match } from './entities/match.entity';
 import { BracketService } from './bracket.service';
 import { MatchStatus, PhaseType } from '../common/enums';
 import { UpdateTaoluScoreDto } from './dto/update-taolu-score.dto';
+import { UpdateTaoluBracketScoreDto } from './dto/update-taolu-bracket-score.dto';
 
 @Injectable()
 export class WushuTaoluService {
@@ -55,18 +56,51 @@ export class WushuTaoluService {
       where: { participationId },
     });
 
-    const total = updateDto.accuracy + updateDto.presentation;
+    // ── Cálculo de promedios ──
+    const bValues = [updateDto.b1, updateDto.b2, updateDto.b3].filter(
+      (v): v is number => v !== null && v !== undefined,
+    );
+    const aValues = [updateDto.a1, updateDto.a2].filter(
+      (v): v is number => v !== null && v !== undefined,
+    );
+
+    const promB =
+      bValues.length > 0
+        ? bValues.reduce((sum, v) => sum + v, 0) / bValues.length
+        : 0;
+
+    const promA =
+      aValues.length > 0
+        ? aValues.reduce((sum, v) => sum + v, 0) / aValues.length
+        : 0;
+
+    const puntajeActual = promB + promA;
+
+    const minus = updateDto.juezPrincipalMinus ?? 0;
+    const plus  = updateDto.juezPrincipalPlus  ?? 0;
+    const total = parseFloat((puntajeActual - minus + plus).toFixed(2));
+
+    const fields = {
+      b1: updateDto.b1 ?? null,
+      b2: updateDto.b2 ?? null,
+      b3: updateDto.b3 ?? null,
+      a1: updateDto.a1 ?? null,
+      a2: updateDto.a2 ?? null,
+      juezPrincipalMinus: minus,
+      juezPrincipalPlus:  plus,
+      // accuracy reutiliza promB, presentation reutiliza promA
+      // para no romper compatibilidad con modo bracket existente
+      accuracy:     parseFloat(promB.toFixed(2)),
+      presentation: parseFloat(promA.toFixed(2)),
+      total,
+    };
 
     if (score) {
-      score.accuracy = updateDto.accuracy;
-      score.presentation = updateDto.presentation;
-      score.total = total;
+      Object.assign(score, fields);
     } else {
       score = this.individualScoreRepository.create({
         participationId,
-        accuracy: updateDto.accuracy,
-        presentation: updateDto.presentation,
-        total,
+        ...fields,
       });
     }
 
@@ -150,7 +184,7 @@ export class WushuTaoluService {
    */
   async updatePoomsaeBracketScore(
     participationId: number,
-    updateDto: UpdateTaoluScoreDto,
+    updateDto: UpdateTaoluBracketScoreDto,
   ): Promise<{
     score: IndividualScore;
     matchFinalized: boolean;
@@ -500,10 +534,18 @@ export class WushuTaoluService {
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
         gender: gender,
-        accuracy: score?.accuracy || null,
-        presentation: score?.presentation || null,
-        total: score?.total || null,
-        rank: score?.rank || null,
+        accuracy:     score?.accuracy     ?? null,
+        presentation: score?.presentation ?? null,
+        total:        score?.total        ?? null,
+        rank:         score?.rank         ?? null,
+        // ── campos Taolu jueces B/A ──
+        b1:                   score?.b1                   ?? null,
+        b2:                   score?.b2                   ?? null,
+        b3:                   score?.b3                   ?? null,
+        a1:                   score?.a1                   ?? null,
+        a2:                   score?.a2                   ?? null,
+        juezPrincipalMinus:   score?.juezPrincipalMinus   ?? null,
+        juezPrincipalPlus:    score?.juezPrincipalPlus    ?? null,
       };
     });
 

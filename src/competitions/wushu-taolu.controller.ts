@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { WushuTaoluService } from './wushu-taolu.service';
 import { UpdateTaoluScoreDto } from './dto/update-taolu-score.dto';
+import { UpdateTaoluBracketScoreDto } from './dto/update-taolu-bracket-score.dto'; // ← AÑADIDO
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -23,7 +24,6 @@ export class WushuTaoluController {
 
   // ==================== ENDPOINTS MODO GRUPOS ====================
 
-  // POST /competitions/wushu/taolu/phases/:phaseId/initialize-group
   @Post('phases/:phaseId/initialize-group')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async initializeGroupPhase(
@@ -33,7 +33,6 @@ export class WushuTaoluController {
     return await this.taoluService.initializeGroupPhase(phaseId, body.registrationIds);
   }
 
-  // POST /competitions/wushu/taolu/generate-phases
   @Post('generate-phases')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async generateTaoluPhases(
@@ -51,6 +50,7 @@ export class WushuTaoluController {
     return await this.taoluService.getPhaseScores(phaseId);
   }
 
+  // ← CORREGIDO: UpdateTaoluScoreDto (jueces B/A)
   @Patch('participations/:participationId/score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updateParticipationScore(
@@ -70,11 +70,12 @@ export class WushuTaoluController {
 
   // ==================== ENDPOINTS MODO BRACKET ====================
 
+  // ← CORREGIDO: UpdateTaoluBracketScoreDto (accuracy/presentation)
   @Patch('bracket/participations/:participationId/score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async updateBracketScore(
     @Param('participationId', ParseIntPipe) participationId: number,
-    @Body() updateDto: UpdateTaoluScoreDto,
+    @Body() updateDto: UpdateTaoluBracketScoreDto,
   ) {
     return await this.taoluService.updatePoomsaeBracketScore(participationId, updateDto);
   }
