@@ -347,8 +347,13 @@ export class CompetitionPhaseReportService {
         .createQueryBuilder('r')
         .where('r.phase_id IN (:...ids)', { ids: swimmingPhaseIds })
         .andWhere(
-          '(r.time_value IS NOT NULL OR r.notes LIKE :dns)',
-          { dns: '%DNS%' },
+          `(
+            r.time_value IS NOT NULL
+            OR r.notes LIKE :dns
+            OR r.notes LIKE :dnf
+            OR r.notes LIKE :dq
+          )`,
+          { dns: '%DNS%', dnf: '%DNF%', dq: '%DQ%' },
         )
         .orderBy(
           'CASE WHEN r.rank_position IS NULL THEN 1 ELSE 0 END',
@@ -493,15 +498,32 @@ export class CompetitionPhaseReportService {
       const categoryName = (ec.category as any)?.name?.toLowerCase() ?? '';
       const resultType = (ec.category as any)?.resultType ?? null;
 
+      const WUSHU_TAOLU_KEYWORDS = [
+        'changquan', 'chang quan',
+        'nan quan', 'nanquan',
+        'daoshu',
+        'jianshu', 'jiashu',
+        'nandao',
+        'qiangshu',
+        'gunshu',
+        'nangun',
+        'taijiquan', 'taijijian', 'tai qi', 'taiji',
+        'tradicional norte', 'tradicional sur',
+        'duilian',
+        'jiti',
+      ];
+
+      const isWushuTaolu =
+        sportName.includes('wushu') &&
+        WUSHU_TAOLU_KEYWORDS.some((kw) => categoryName.includes(kw));
+
       const isPoomsae =
-        // Taekwondo con resultType "score" → es Poomsae (no Kyorugui que es "combat")
         (sportName.includes('taekwondo') && resultType === 'score') ||
-        // Wushu Taolu también usa score table
-        (sportName.includes('wushu') && resultType === 'score') ||
-        // Fallback por nombre de categoría
+        isWushuTaolu ||
         categoryName.includes('poomsae') ||
         categoryName.includes('formas') ||
         categoryName.includes('forma');
+
 
       const isClimbing =
         sportName.includes('escalada') ||
@@ -692,15 +714,39 @@ export class CompetitionPhaseReportService {
                 participation.participationId
               ] ?? [];
             const score = scores[0] ?? null;
+
+            // Detectar si es Taolu (tiene datos de jueces individuales)
+            const hasTaoluData =
+              score != null &&
+              (score.b1 != null || score.b2 != null || score.a1 != null || score.a2 != null);
+
             rows.push({
               participationId: participation.participationId,
               registrationId: participation.registrationId ?? null,
               athlete,
-              accuracy: score?.accuracy != null ? Number(score.accuracy) : null,
-              presentation:
-                score?.presentation != null ? Number(score.presentation) : null,
-              total: score?.total != null ? Number(score.total) : null,
-              rank: score?.rank ?? null,
+              // Campos base (Poomsae y Taolu)
+              accuracy:     score?.accuracy     != null ? Number(score.accuracy)     : null,
+              presentation: score?.presentation != null ? Number(score.presentation) : null,
+              total:        score?.total        != null ? Number(score.total)        : null,
+              rank:         score?.rank         ?? null,
+              // Campos extendidos Taolu (null si es Poomsae puro)
+              ...(hasTaoluData && {
+                judgesB: {
+                  b1:   score.b1 != null ? Number(score.b1) : null,
+                  b2:   score.b2 != null ? Number(score.b2) : null,
+                  b3:   score.b3 != null ? Number(score.b3) : null,
+                  promB: score?.accuracy != null ? Number(score.accuracy) : null, // accuracy = PROM B
+                },
+                judgesA: {
+                  a1:   score.a1 != null ? Number(score.a1) : null,
+                  a2:   score.a2 != null ? Number(score.a2) : null,
+                  promA: score?.presentation != null ? Number(score.presentation) : null, // presentation = PROM A
+                },
+                juezPrincipal: {
+                  minus: score.juezPrincipalMinus != null ? Number(score.juezPrincipalMinus) : 0,
+                  plus:  score.juezPrincipalPlus  != null ? Number(score.juezPrincipalPlus)  : 0,
+                },
+              }),
             });
           }
 
