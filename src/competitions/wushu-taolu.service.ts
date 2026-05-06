@@ -120,37 +120,38 @@ export class WushuTaoluService {
       throw new NotFoundException(`Phase ${phaseId} no encontrada`);
     }
 
-    // Limpiar matches/participaciones previas si existen
-    const existingMatches = await this.matchRepository.find({ where: { phaseId } });
-    for (const match of existingMatches) {
-      await this.participationRepository.delete({ matchId: match.matchId });
-    }
-    if (existingMatches.length > 0) {
-      await this.matchRepository.delete({ phaseId });
+    // Buscar si ya existe un match contenedor para esta fase
+    let groupMatch = await this.matchRepository.findOne({ where: { phaseId } });
+
+    // Si no existe, crear uno nuevo
+    if (!groupMatch) {
+      groupMatch = this.matchRepository.create({
+        phaseId,
+        matchNumber: 1,
+        round: 'grupo',
+        status: MatchStatus.PROGRAMADO,
+      });
+      groupMatch = await this.matchRepository.save(groupMatch);
     }
 
-    // Crear 1 match "contenedor" que agrupa todas las participaciones
-    const groupMatch: Match = this.matchRepository.create({
-      phaseId,
-      matchNumber: 1,
-      round: 'grupo',           // ← string, no number
-      status: MatchStatus.PROGRAMADO,
+    const existing = await this.participationRepository.find({
+      where: { matchId: groupMatch.matchId },
     });
-    const savedMatch: Match = await this.matchRepository.save(groupMatch);
+    const existingIds = existing.map((p) => p.registrationId);
+    const newIds = registrationIds.filter((id) => !existingIds.includes(id));
 
-    // Crear una participación por cada registrationId
-    for (let i = 0; i < registrationIds.length; i++) {
-      const participation: Participation = this.participationRepository.create({
-        matchId: savedMatch.matchId,
-        registrationId: registrationIds[i],
-        corner: null,           // ← Corner | null, no un número
+    for (const registrationId of newIds) {
+      const participation = this.participationRepository.create({
+        matchId: groupMatch.matchId,
+        registrationId,
+        corner: null,
       });
       await this.participationRepository.save(participation);
     }
 
     return {
-      matchId: savedMatch.matchId,
-      participationsCreated: registrationIds.length,
+      matchId: groupMatch.matchId,
+      participationsCreated: newIds.length,
     };
   }
 
@@ -538,7 +539,7 @@ export class WushuTaoluService {
         presentation: score?.presentation ?? null,
         total:        score?.total        ?? null,
         rank:         score?.rank         ?? null,
-        // ── campos Taolu jueces B/A ──
+        // ── campos Taolu jueces B/A ──  
         b1:                   score?.b1                   ?? null,
         b2:                   score?.b2                   ?? null,
         b3:                   score?.b3                   ?? null,
@@ -600,5 +601,31 @@ export class WushuTaoluService {
         rank: i + 1,
       });
     }
+  }
+
+  async removeParticipantFromPhase(
+    phaseId: number,
+    registrationId: number,
+  ): Promise<void> {
+    // Encontrar el match contenedor de esta fase
+    const groupMatch = await this.matchRepository.findOne({ where: { phaseId } });
+
+    if (!groupMatch) {
+      throw new NotFoundException(`No hay match contenedor para la fase ${phaseId}`);
+    }
+
+    // Encontrar la participación específica
+    const participation = await this.participationRepository.findOne({
+      where: {
+        matchId: groupMatch.matchId,
+        registrationId,
+      },
+    });
+
+    if (!participation) {
+      throw new NotFoundException(`El participante no está asignado a esta fase`);
+    }
+
+    await this.participationRepository.delete(participation.participationId);
   }
 }

@@ -7,6 +7,7 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  Delete,
 } from '@nestjs/common';
 import { WushuTaoluService } from './wushu-taolu.service';
 import { UpdateTaoluScoreDto } from './dto/update-taolu-score.dto';
@@ -85,4 +86,14 @@ export class WushuTaoluController {
   async getBracketMatchScores(@Param('matchId', ParseIntPipe) matchId: number) {
     return await this.taoluService.getBracketMatchScores(matchId);
   }
+
+  @Delete('phases/:phaseId/participants/:registrationId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async removeParticipant(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Param('registrationId', ParseIntPipe) registrationId: number,
+  ) {
+    return await this.taoluService.removeParticipantFromPhase(phaseId, registrationId);
+  }
 }
+
