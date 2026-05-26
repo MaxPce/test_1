@@ -56,51 +56,14 @@ export class WushuTaoluService {
       where: { participationId },
     });
 
-    // ── Cálculo de promedios ──
-    const bValues = [updateDto.b1, updateDto.b2, updateDto.b3].filter(
-      (v): v is number => v !== null && v !== undefined,
-    );
-    const aValues = [updateDto.a1, updateDto.a2].filter(
-      (v): v is number => v !== null && v !== undefined,
-    );
-
-    const promB =
-      bValues.length > 0
-        ? bValues.reduce((sum, v) => sum + v, 0) / bValues.length
-        : 0;
-
-    const promA =
-      aValues.length > 0
-        ? aValues.reduce((sum, v) => sum + v, 0) / aValues.length
-        : 0;
-
-    const puntajeActual = promB + promA;
-
-    const minus = updateDto.juezPrincipalMinus ?? 0;
-    const plus  = updateDto.juezPrincipalPlus  ?? 0;
-    const total = parseFloat((puntajeActual - minus + plus).toFixed(2));
-
-    const fields = {
-      b1: updateDto.b1 ?? null,
-      b2: updateDto.b2 ?? null,
-      b3: updateDto.b3 ?? null,
-      a1: updateDto.a1 ?? null,
-      a2: updateDto.a2 ?? null,
-      juezPrincipalMinus: minus,
-      juezPrincipalPlus:  plus,
-      // accuracy reutiliza promB, presentation reutiliza promA
-      // para no romper compatibilidad con modo bracket existente
-      accuracy:     parseFloat(promB.toFixed(2)),
-      presentation: parseFloat(promA.toFixed(2)),
-      total,
-    };
+    const total = parseFloat(Number(updateDto.total).toFixed(3));
 
     if (score) {
-      Object.assign(score, fields);
+      score.total = total;
     } else {
       score = this.individualScoreRepository.create({
         participationId,
-        ...fields,
+        total,
       });
     }
 
@@ -535,18 +498,8 @@ export class WushuTaoluService {
         institution: institution?.name || 'Sin institución',
         institutionLogo: institution?.logoUrl || null,
         gender: gender,
-        accuracy:     score?.accuracy     ?? null,
-        presentation: score?.presentation ?? null,
-        total:        score?.total        ?? null,
-        rank:         score?.rank         ?? null,
-        // ── campos Taolu jueces B/A ──  
-        b1:                   score?.b1                   ?? null,
-        b2:                   score?.b2                   ?? null,
-        b3:                   score?.b3                   ?? null,
-        a1:                   score?.a1                   ?? null,
-        a2:                   score?.a2                   ?? null,
-        juezPrincipalMinus:   score?.juezPrincipalMinus   ?? null,
-        juezPrincipalPlus:    score?.juezPrincipalPlus    ?? null,
+        total: score?.total ?? null,
+        rank:  score?.rank  ?? null,
       };
     });
 
