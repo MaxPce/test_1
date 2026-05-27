@@ -25,6 +25,7 @@ import {
   UpdateMatchGameDto,
   AdvanceWinnerDto,
   SetWalkoverDto,
+  CreateGroupStageDto,
 } from './dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
@@ -423,6 +424,57 @@ export class CompetitionsController {
   @Public()
   async getThirdPlace(@Param('phaseId') phaseId: string) {
     return this.bracketService.getThirdPlace(+phaseId);
+  }
+
+    // ==================== GRUPO STAGE ====================
+
+  /**
+   * POST /competitions/phases/:phaseId/group-stage
+   * Crea grupos dentro de una fase de eliminación,
+   * genera partidos round-robin e inicializa standings.
+   * Body: { groups: [{ label: "A", participantIds: [1,2,3] }], qualifiersPerGroup: 2 }
+   */
+  @Post('phases/:phaseId/group-stage')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async createGroupStage(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() dto: CreateGroupStageDto,
+  ) {
+    dto.parentPhaseId = phaseId; 
+    return this.bracketService.createGroupStageForPhase(
+      dto.parentPhaseId,
+      dto.groups,
+      dto.qualifiersPerGroup,
+    );
+  }
+
+
+  /**
+   * POST /competitions/phases/:phaseId/close-groups
+   * Cierra todos los grupos, calcula rankings y devuelve
+   * los qualifiedIds listos para sembrar el bracket.
+   */
+  @Post('phases/:phaseId/close-groups')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async closeGroups(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.bracketService.closeGroupsAndGetQualifiers(phaseId);
+  }
+
+
+  /**
+   * GET /competitions/phases/:phaseId/group-standings
+   * Retorna la tabla de posiciones de todos los grupos
+   * de una fase de eliminación (para mostrar en el front).
+   */
+  @Get('phases/:phaseId/group-standings')
+  @Public()
+  async getGroupStandings(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    const subPhases = await this.bracketService['phaseRepository'].find({
+      where: { parentPhaseId: phaseId },
+      relations: ['groupStandings'],
+      order: { displayOrder: 'ASC' },
+    });
+    return subPhases;
   }
 
   @Patch('registrations/:id/seed')

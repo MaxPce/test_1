@@ -131,7 +131,19 @@ export class CompetitionsService {
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
-      .where('phase.deletedAt IS NULL');
+      .leftJoinAndSelect(
+        'phase.subPhases',
+        'subPhases',
+        'subPhases.deletedAt IS NULL',
+      )
+      .leftJoinAndSelect('subPhases.groupStandings', 'groupStandings')
+      .leftJoinAndSelect('groupStandings.registration', 'gsRegistration')
+      .leftJoinAndSelect('gsRegistration.athlete', 'gsAthlete')
+      .leftJoinAndSelect('gsAthlete.institution', 'gsInstitution')
+      .leftJoinAndSelect('gsRegistration.team', 'gsTeam')
+      .leftJoinAndSelect('gsTeam.institution', 'gsTeamInstitution')
+      .where('phase.deletedAt IS NULL')
+      .andWhere('phase.parentPhaseId IS NULL');
 
     if (eventCategoryId) {
       queryBuilder.andWhere('phase.eventCategoryId = :eventCategoryId', {
@@ -161,21 +173,47 @@ export class CompetitionsService {
       .leftJoinAndSelect('phase.standings', 'standings')
       .leftJoinAndSelect('standings.registration', 'standingRegistration')
       .leftJoinAndSelect('standingRegistration.athlete', 'standingAthlete')
-      .leftJoinAndSelect(
-        'standingAthlete.institution',
-        'standingAthleteInstitution',
-      )
+      .leftJoinAndSelect('standingAthlete.institution', 'standingAthleteInstitution')
       .leftJoinAndSelect('standingRegistration.team', 'standingTeam')
       .leftJoinAndSelect('standingTeam.institution', 'standingTeamInstitution')
+      .leftJoinAndSelect(
+        'phase.subPhases',
+        'subPhases',
+        'subPhases.deletedAt IS NULL',
+      )
+      .leftJoinAndSelect('subPhases.groupStandings', 'groupStandings')
+      .leftJoinAndSelect('groupStandings.registration', 'gsRegistration')
+      .leftJoinAndSelect('gsRegistration.athlete', 'gsAthlete')
+      .leftJoinAndSelect('gsAthlete.institution', 'gsInstitution')
+      .leftJoinAndSelect('gsRegistration.team', 'gsTeam')
+      .leftJoinAndSelect('gsTeam.institution', 'gsTeamInstitution')
       .where('phase.phaseId = :id', { id })
       .andWhere('phase.deletedAt IS NULL')
       .getOne();
 
-    if (!phase) {
-      throw new NotFoundException(`Fase con ID ${id} no encontrada`);
-    }
-
+    if (!phase) throw new NotFoundException(`Fase con ID ${id} no encontrada`);
     return phase;
+  }
+
+  /**
+   * Retorna las sub-fases (grupos) de una fase padre,
+   * incluyendo sus GroupStandings con datos del participante.
+   */
+  async findSubPhases(parentPhaseId: number) {
+    return this.phaseRepository
+      .createQueryBuilder('phase')
+      .leftJoinAndSelect('phase.groupStandings', 'gs')
+      .leftJoinAndSelect('gs.registration', 'registration')
+      .leftJoinAndSelect('registration.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'institution')
+      .leftJoinAndSelect('registration.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .where('phase.parentPhaseId = :parentPhaseId', { parentPhaseId })
+      .andWhere('phase.deletedAt IS NULL')
+      .orderBy('phase.displayOrder', 'ASC')
+      .addOrderBy('gs.points', 'DESC')
+      .addOrderBy('gs.pointDifference', 'DESC')
+      .getMany();
   }
 
   async updatePhase(id: number, updateDto: UpdatePhaseDto): Promise<Phase> {

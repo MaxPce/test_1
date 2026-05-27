@@ -12,4 +12,5 @@ export * from './shooting-score.entity';
 export * from './weightlifting-attempt.entity';
 export * from './climbing-score.entity';
 export * from './athletics-result.entity';
+export * from './group-standing.entity';
 

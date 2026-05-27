@@ -50,6 +50,7 @@ import { AthleticsSection } from './entities/athletics-section.entity';
 import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity';
 import { AthleticsPhaseClassification } from './entities/athletics-phase-classification.entity';
 import { AthleticsClassificationService } from './athletics-classification.service';
+import { GroupStanding } from './entities/group-standing.entity';
 
 @Module({
   imports: [
@@ -72,6 +73,7 @@ import { AthleticsClassificationService } from './athletics-classification.servi
       AthleticsPhaseClassification,
       ChessRound,
       ChessMatch,
+      GroupStanding,
     ]),
     ScoreTablesModule,
   ],

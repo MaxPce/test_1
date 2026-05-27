@@ -16,3 +16,4 @@ export * from './update-climbing-score.dto';
 export * from './create-athletics-result.dto';
 export * from './update-athletics-result.dto';
 export * from './generate-swimming-series.dto';
+export * from './create-group-stage.dto';

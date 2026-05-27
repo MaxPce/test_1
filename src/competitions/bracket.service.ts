@@ -5,9 +5,10 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Match, Participation, PhaseRegistration, PhaseManualRank } from './entities';
-import { GenerateBracketDto, AdvanceWinnerDto } from './dto';
-import { MatchStatus, Corner } from '../common/enums';
+import { Match, Participation, PhaseRegistration, PhaseManualRank, Phase } from './entities';
+import { GroupStanding } from './entities/group-standing.entity';
+import { GenerateBracketDto, AdvanceWinnerDto, GroupDefinitionDto } from './dto';
+import { MatchStatus, Corner, PhaseType } from '../common/enums';
 
 @Injectable()
 export class BracketService {
@@ -20,6 +21,10 @@ export class BracketService {
     private phaseRegistrationRepository: Repository<PhaseRegistration>,
     @InjectRepository(PhaseManualRank)              
     private phaseManualRankRepository: Repository<PhaseManualRank>,
+    @InjectRepository(Phase)
+    private phaseRepository: Repository<Phase>,
+    @InjectRepository(GroupStanding)
+    private groupStandingRepository: Repository<GroupStanding>,
     private dataSource: DataSource,
   ) {}
 
@@ -322,6 +327,12 @@ export class BracketService {
 
       await queryRunner.manager.save(match);
 
+      // Si el match es de grupo, recalcular standings del grupo
+      if (match.round === 'grupo') {
+        await this.recalculateGroupStandings(queryRunner, match.phaseId);
+      }
+
+
       // Obtener todos los matches de la fase para calcular conexiones
       const allMatches = await queryRunner.manager.find(Match, {
         where: { phaseId: match.phaseId },
@@ -576,6 +587,9 @@ export class BracketService {
     currentRound: string,
     allMatches: Match[],
   ): number | null {
+
+    // Los partidos de grupos no tienen siguiente match en el bracket
+    if (currentRound === 'grupo') return null;
     // Agrupar matches por ronda
     const matchesByRound = this.groupMatchesByRound(allMatches);
 
@@ -866,6 +880,233 @@ export class BracketService {
             manualRankPosition: rank,
           }),
         );
+      }
+    }
+  }
+
+// ==================== FASE DE GRUPOS (GROUP STAGE) ====================
+
+  /**
+   * Crea los grupos dentro de una fase de eliminación padre,
+   * inicializa GroupStandings y genera los partidos round-robin de cada grupo.
+   */
+  async createGroupStageForPhase(
+    parentPhaseId: number,
+    groups: GroupDefinitionDto[],
+    qualifiersPerGroup: number,
+  ): Promise<Phase[]> {
+    const createdGroups: Phase[] = [];
+
+    for (const [idx, group] of groups.entries()) {
+      const groupPhase = this.phaseRepository.create({
+        parentPhaseId,
+        type: PhaseType.GROUP_STAGE,
+        name: `Grupo ${group.label}`,
+        groupLabel: group.label,
+        qualifiersCount: qualifiersPerGroup,
+        displayOrder: idx + 1,
+      });
+      const saved = await this.phaseRepository.save(groupPhase);
+
+      // Inicializar GroupStanding con registrationIds
+      const standings = group.registrationIds.map((registrationId) =>
+        this.groupStandingRepository.create({
+          phaseId: saved.phaseId,
+          registrationId,                
+        }),
+      );
+      await this.groupStandingRepository.save(standings);
+
+      await this.generateRoundRobinMatches(saved.phaseId, group.registrationIds);
+
+      createdGroups.push(saved);
+    }
+
+    return createdGroups;
+  }
+
+  /**
+   * Cierra todos los grupos de una fase padre:
+   * calcula rankings, marca clasificados y retorna los IDs
+   * para sembrar el bracket de eliminación.
+   */
+  async closeGroupsAndGetQualifiers(parentPhaseId: number): Promise<{
+    qualifiedIds: number[];
+    groupResults: Array<{
+      groupLabel: string;
+      standings: GroupStanding[];
+      qualified: number[];
+    }>;
+  }> {
+    const subPhases = await this.phaseRepository.find({
+      where: { parentPhaseId },
+      order: { displayOrder: 'ASC' },
+    });
+
+    if (subPhases.length === 0) {
+      throw new BadRequestException(
+        `La fase ${parentPhaseId} no tiene sub-fases de grupos`,
+      );
+    }
+
+    // Verificar que no haya partidos pendientes en ningún grupo
+    for (const sub of subPhases) {
+      const pendingMatches = await this.matchRepository.count({
+        where: { phaseId: sub.phaseId, status: MatchStatus.PROGRAMADO },
+      });
+      if (pendingMatches > 0) {
+        throw new BadRequestException(
+          `El ${sub.name} tiene ${pendingMatches} partido(s) pendiente(s). Finaliza todos antes de cerrar los grupos.`,
+        );
+      }
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const groupResults: Array<{
+        groupLabel: string;
+        standings: GroupStanding[];
+        qualified: number[];
+      }> = [];
+      const allQualifiedIds: number[] = [];
+
+      for (const sub of subPhases) {
+        await this.recalculateGroupStandings(queryRunner, sub.phaseId);
+
+        const standings = await queryRunner.manager.find(GroupStanding, {
+          where: { phaseId: sub.phaseId },
+          order: {
+            points: 'DESC',
+            pointDifference: 'DESC',
+            pointsFor: 'DESC',
+          },
+        });
+
+        const qualifiersCount = sub.qualifiersCount ?? 2;
+
+        for (let i = 0; i < standings.length; i++) {
+          standings[i].finalRank = i + 1;
+          standings[i].qualified = i < qualifiersCount;
+        }
+        await queryRunner.manager.save(GroupStanding, standings);
+
+        const qualifiedFromGroup = standings
+          .filter((s) => s.qualified)
+          .map((s) => s.registrationId);
+
+        allQualifiedIds.push(...qualifiedFromGroup);
+
+        groupResults.push({
+          groupLabel: sub.groupLabel ?? sub.name,
+          standings,
+          qualified: qualifiedFromGroup,
+        });
+      }
+
+      await queryRunner.commitTransaction();
+      return { qualifiedIds: allQualifiedIds, groupResults };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  /**
+   * Recalcula los GroupStandings de un grupo desde los partidos finalizados.
+   * Llamado internamente por closeGroupsAndGetQualifiers.
+   */
+  private async recalculateGroupStandings(
+    queryRunner: any,
+    groupPhaseId: number,
+  ): Promise<void> {
+    const matches = await queryRunner.manager.find(Match, {
+      where: { phaseId: groupPhaseId, status: MatchStatus.FINALIZADO },
+      relations: ['participations'],
+    });
+
+    const standings = await queryRunner.manager.find(GroupStanding, {
+      where: { phaseId: groupPhaseId },
+    });
+
+    // Resetear stats antes de recalcular
+    for (const s of standings) {
+      s.played = 0; s.won = 0; s.drawn = 0; s.lost = 0;
+      s.pointsFor = 0; s.pointsAgainst = 0; s.pointDifference = 0; s.points = 0;
+    }
+
+    const standingMap = new Map<number, GroupStanding>(
+      standings.map((s) => [s.registrationId, s]),
+    );
+
+
+    for (const match of matches) {
+      const p1 = match.participations.find((p) => p.corner === Corner.BLUE);
+      const p2 = match.participations.find((p) => p.corner === Corner.WHITE);
+      if (!p1 || !p2) continue;
+
+      const s1 = standingMap.get(p1.registrationId);
+      const s2 = standingMap.get(p2.registrationId);
+      if (!s1 || !s2) continue;
+
+      const score1 = match.participant1Score ?? 0;
+      const score2 = match.participant2Score ?? 0;
+
+      s1.played++; s2.played++;
+      s1.pointsFor += score1; s1.pointsAgainst += score2;
+      s2.pointsFor += score2; s2.pointsAgainst += score1;
+      s1.pointDifference = s1.pointsFor - s1.pointsAgainst;
+      s2.pointDifference = s2.pointsFor - s2.pointsAgainst;
+
+      if (match.winnerRegistrationId === p1.registrationId) {
+        s1.won++; s1.points += 3; s2.lost++;
+      } else if (match.winnerRegistrationId === p2.registrationId) {
+        s2.won++; s2.points += 3; s1.lost++;
+      } else {
+        // empate
+        s1.drawn++; s1.points += 1; s2.drawn++; s2.points += 1;
+      }
+    }
+
+    await queryRunner.manager.save(GroupStanding, standings);
+  }
+
+  /**
+   * Genera todos los partidos round-robin (todos vs todos) para un grupo.
+   */
+  private async generateRoundRobinMatches(
+    groupPhaseId: number,
+    registrationIds: number[],
+  ): Promise<void> {
+    let matchNumber = 1;
+
+    for (let i = 0; i < registrationIds.length; i++) {
+      for (let j = i + 1; j < registrationIds.length; j++) {
+        const match = await this.matchRepository.save(
+          this.matchRepository.create({
+            phaseId: groupPhaseId,
+            matchNumber: matchNumber++,
+            round: 'grupo',
+            status: MatchStatus.PROGRAMADO,
+          }),
+        );
+
+        await this.participationRepository.save([
+          this.participationRepository.create({
+            matchId: match.matchId,
+            registrationId: registrationIds[i],
+            corner: Corner.BLUE,
+          }),
+          this.participationRepository.create({
+            matchId: match.matchId,
+            registrationId: registrationIds[j],
+            corner: Corner.WHITE,
+          }),
+        ]);
       }
     }
   }
