@@ -961,12 +961,13 @@ export class BracketService {
    * para sembrar el bracket de eliminación.
    */
   async closeGroupsAndGetQualifiers(parentPhaseId: number): Promise<{
-    qualifiedIds: number[];
-    groupResults: Array<{
-      groupLabel: string;
-      standings: GroupStanding[];
-      qualified: number[];
-    }>;
+  qualifiedIds: number[];
+  groupResults: Array<{
+    groupLabel: string;
+    standings: GroupStanding[];
+    qualified: number[];
+  }>;
+  bracketMatches: Match[];
   }> {
     const subPhases = await this.phaseRepository.find({
       where: { parentPhaseId },
@@ -1023,21 +1024,76 @@ export class BracketService {
         }
         await queryRunner.manager.save(GroupStanding, standings);
 
-        const qualifiedFromGroup = standings
-          .filter((s) => s.qualified)
-          .map((s) => s.registrationId);
-
-        allQualifiedIds.push(...qualifiedFromGroup);
-
+        // Seeding intercalado: 1°GrupoA, 1°GrupoB, 2°GrupoA, 2°GrupoB...
+        // Se construye después del for, aquí solo acumulamos por grupo
         groupResults.push({
           groupLabel: sub.groupLabel ?? sub.name,
           standings,
-          qualified: qualifiedFromGroup,
+          qualified: standings
+            .filter((s) => s.qualified)
+            .map((s) => s.registrationId),
         });
       }
 
+      // Construir lista de clasificados con seeding intercalado entre grupos
+      // Esto evita que 1°GrupoA juegue contra 1°GrupoB en primera ronda
+      const maxQualifiers = Math.max(...groupResults.map((g) => g.qualified.length));
+      for (let i = 0; i < maxQualifiers; i++) {
+        for (const group of groupResults) {
+          if (group.qualified[i] !== undefined) {
+            allQualifiedIds.push(group.qualified[i]);
+          }
+        }
+      }
+
+      // ── Generar matches de eliminación directa (sin participantes) ──────────
+      // Anti-duplicado: eliminar matches previos de la fase padre que NO sean
+      // de tipo 'grupo' (es decir, los de eliminación que se pudieron haber
+      // generado en una llamada anterior).
+      const existingEliminationMatches = await queryRunner.manager.find(Match, {
+        where: { phaseId: parentPhaseId },
+      });
+      if (existingEliminationMatches.length > 0) {
+        // Eliminar también las participaciones asociadas para no romper FK
+        const existingMatchIds = existingEliminationMatches.map((m) => m.matchId);
+        await queryRunner.manager
+          .createQueryBuilder()
+          .delete()
+          .from(Participation)
+          .where('matchId IN (:...ids)', { ids: existingMatchIds })
+          .execute();
+
+        await queryRunner.manager.remove(Match, existingEliminationMatches);
+      }
+
+      // Calcular estructura del bracket según cantidad de clasificados
+      const numParticipants = allQualifiedIds.length;
+      const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
+      const totalRounds = Math.log2(nextPowerOf2);
+
+      const bracketMatches: Match[] = [];
+      let matchNumber = 1;
+
+      for (let round = 0; round < totalRounds; round++) {
+        const matchesInRound = nextPowerOf2 / Math.pow(2, round + 1);
+        const roundName = this.getRoundName(matchesInRound);
+
+        for (let i = 0; i < matchesInRound; i++) {
+          const match = queryRunner.manager.create(Match, {
+            phaseId: parentPhaseId,
+            matchNumber: matchNumber++,
+            round: roundName,
+            status: MatchStatus.PROGRAMADO,
+          });
+          const savedMatch = await queryRunner.manager.save(Match, match);
+          bracketMatches.push(savedMatch);
+        }
+      }
+
       await queryRunner.commitTransaction();
-      return { qualifiedIds: allQualifiedIds, groupResults };
+
+      return { qualifiedIds: allQualifiedIds, groupResults, bracketMatches };
+
     } catch (error) {
       await queryRunner.rollbackTransaction();
       throw error;
