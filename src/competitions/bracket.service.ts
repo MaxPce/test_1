@@ -960,14 +960,14 @@ export class BracketService {
    * calcula rankings, marca clasificados y retorna los IDs
    * para sembrar el bracket de eliminación.
    */
-  async closeGroupsAndGetQualifiers(parentPhaseId: number): Promise<{
-  qualifiedIds: number[];
-  groupResults: Array<{
-    groupLabel: string;
-    standings: GroupStanding[];
-    qualified: number[];
-  }>;
-  bracketMatches: Match[];
+    async closeGroupsAndGetQualifiers(parentPhaseId: number): Promise<{
+    qualifiedIds: number[];
+    groupResults: Array<{
+      groupLabel: string;
+      standings: GroupStanding[];
+      qualified: number[];
+    }>;
+    bracketMatches: Match[];
   }> {
     const subPhases = await this.phaseRepository.find({
       where: { parentPhaseId },
@@ -1024,8 +1024,6 @@ export class BracketService {
         }
         await queryRunner.manager.save(GroupStanding, standings);
 
-        // Seeding intercalado: 1°GrupoA, 1°GrupoB, 2°GrupoA, 2°GrupoB...
-        // Se construye después del for, aquí solo acumulamos por grupo
         groupResults.push({
           groupLabel: sub.groupLabel ?? sub.name,
           standings,
@@ -1035,8 +1033,7 @@ export class BracketService {
         });
       }
 
-      // Construir lista de clasificados con seeding intercalado entre grupos
-      // Esto evita que 1°GrupoA juegue contra 1°GrupoB en primera ronda
+      // Seeding intercalado: 1°GrupoA, 1°GrupoB, 2°GrupoA, 2°GrupoB...
       const maxQualifiers = Math.max(...groupResults.map((g) => g.qualified.length));
       for (let i = 0; i < maxQualifiers; i++) {
         for (const group of groupResults) {
@@ -1046,15 +1043,31 @@ export class BracketService {
         }
       }
 
-      // ── Generar matches de eliminación directa (sin participantes) ──────────
-      // Anti-duplicado: eliminar matches previos de la fase padre que NO sean
-      // de tipo 'grupo' (es decir, los de eliminación que se pudieron haber
-      // generado en una llamada anterior).
+      // ── NUEVO: guardar clasificados como PhaseRegistration en fase padre ──
+      // Esto permite que el modal de asignación manual sepa qué participantes
+      // están disponibles para llenar los slots del bracket.
+      const existingParentRegs = await queryRunner.manager.find(PhaseRegistration, {
+        where: { phaseId: parentPhaseId },
+      });
+      if (existingParentRegs.length > 0) {
+        await queryRunner.manager.remove(PhaseRegistration, existingParentRegs);
+      }
+      const parentPhaseRegs = allQualifiedIds.map((registrationId) =>
+        queryRunner.manager.create(PhaseRegistration, {
+          phaseId: parentPhaseId,
+          registrationId,
+        }),
+      );
+      if (parentPhaseRegs.length > 0) {
+        await queryRunner.manager.save(PhaseRegistration, parentPhaseRegs);
+      }
+      // ─────────────────────────────────────────────────────────────────────
+
+      // ── Anti-duplicado: eliminar matches previos de la fase padre ─────────
       const existingEliminationMatches = await queryRunner.manager.find(Match, {
         where: { phaseId: parentPhaseId },
       });
       if (existingEliminationMatches.length > 0) {
-        // Eliminar también las participaciones asociadas para no romper FK
         const existingMatchIds = existingEliminationMatches.map((m) => m.matchId);
         await queryRunner.manager
           .createQueryBuilder()
@@ -1068,6 +1081,14 @@ export class BracketService {
 
       // Calcular estructura del bracket según cantidad de clasificados
       const numParticipants = allQualifiedIds.length;
+
+      // Guard: necesitamos al menos 2 clasificados para generar bracket
+      if (numParticipants < 2) {
+        throw new BadRequestException(
+          `Se necesitan al menos 2 clasificados para generar el bracket. Solo hay ${numParticipants}.`,
+        );
+      }
+
       const nextPowerOf2 = Math.pow(2, Math.ceil(Math.log2(numParticipants)));
       const totalRounds = Math.log2(nextPowerOf2);
 
