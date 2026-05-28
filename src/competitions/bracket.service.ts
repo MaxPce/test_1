@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Match, Participation, PhaseRegistration, PhaseManualRank, Phase } from './entities';
+import { Match, Participation, PhaseRegistration, PhaseManualRank, Phase, Standing } from './entities';
 import { GroupStanding } from './entities/group-standing.entity';
 import { GenerateBracketDto, AdvanceWinnerDto, GroupDefinitionDto } from './dto';
 import { MatchStatus, Corner, PhaseType } from '../common/enums';
@@ -25,6 +25,8 @@ export class BracketService {
     private phaseRepository: Repository<Phase>,
     @InjectRepository(GroupStanding)
     private groupStandingRepository: Repository<GroupStanding>,
+    @InjectRepository(Standing)
+    private readonly standingRepository: Repository<Standing>,
     private dataSource: DataSource,
   ) {}
 
@@ -908,14 +910,31 @@ export class BracketService {
       });
       const saved = await this.phaseRepository.save(groupPhase);
 
-      // Inicializar GroupStanding con registrationIds
-      const standings = group.registrationIds.map((registrationId) =>
+      // GroupStanding (ya existía)
+      const groupStandings = group.registrationIds.map((registrationId) =>
         this.groupStandingRepository.create({
           phaseId: saved.phaseId,
-          registrationId,                
+          registrationId,
         }),
       );
-      await this.groupStandingRepository.save(standings);
+      await this.groupStandingRepository.save(groupStandings);
+
+      // Standing — necesario para que updateStandings funcione ← NUEVO
+      const standings = group.registrationIds.map((registrationId) =>
+        this.standingRepository.create({
+          phaseId: saved.phaseId,
+          registrationId,
+          matchesPlayed: 0,
+          wins: 0,
+          draws: 0,
+          losses: 0,
+          points: 0,
+          scoreFor: 0,
+          scoreAgainst: 0,
+          scoreDiff: 0,
+        }),
+      );
+      await this.standingRepository.save(standings);
 
       await this.generateRoundRobinMatches(saved.phaseId, group.registrationIds);
 

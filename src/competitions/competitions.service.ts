@@ -398,7 +398,7 @@ export class CompetitionsService {
       const phase = await this.phaseRepository.findOne({
         where: { phaseId: savedMatch.phaseId },
       });
-      if (phase && phase.type === PhaseType.GRUPO) {
+      if (phase && (phase.type === PhaseType.GRUPO || phase.type === PhaseType.GROUP_STAGE)) {
         await this.updateStandings(savedMatch.phaseId);
       }
     }
@@ -795,10 +795,10 @@ export class CompetitionsService {
         standing.wins = 0;
         standing.draws = 0;
         standing.losses = 0;
-        standing.points = Number(standing.points);
-        standing.scoreFor = Number(standing.scoreFor);
-        standing.scoreAgainst = Number(standing.scoreAgainst);
-        standing.scoreDiff = Number(standing.scoreDiff);
+        standing.points = 0;        
+        standing.scoreFor = 0;      
+        standing.scoreAgainst = 0;  
+        standing.scoreDiff = 0;
       }
 
       for (const match of matches) {
