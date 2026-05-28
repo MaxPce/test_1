@@ -520,6 +520,15 @@ export class CompetitionsController {
     return this.competitionsService.generateCompetitionPhases(eventCategoryId, dto);
   }
 
+  @Post('event-categories/:eventCategoryId/tennis/generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generateTennisPhases(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() dto: GeneratePhasesDto,
+  ) {
+    return this.competitionsService.generateCompetitionPhases(eventCategoryId, dto);
+  }
+
   @Post('table-tennis/matches/:matchId/walkover')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async setTableTennisWalkover(

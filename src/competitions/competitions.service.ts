@@ -1524,7 +1524,7 @@ export class CompetitionsService {
   async generateCompetitionPhases(
     eventCategoryId: number,
     dto: GeneratePhasesDto,
-  ): Promise<{ created: number; phaseIds: number[] }> {
+  ): Promise<{ created: number; phaseIds: number[]; matchesGenerated: boolean }> {
     const phaseIds: number[] = [];
 
     const lastPhase = await this.phaseRepository.findOne({
@@ -1554,16 +1554,28 @@ export class CompetitionsService {
       });
       const savedPhase = await this.phaseRepository.save(phase);
 
-      
       for (const registrationId of group.registrationIds) {
         await this.assignPhaseRegistration(savedPhase.phaseId, registrationId);
       }
 
       phaseIds.push(savedPhase.phaseId);
+
+      // Si se pidió generar matches, crear el bracket para fases de eliminación
+      if (dto.generateMatches && group.format === 'single_elimination') {
+        await this.generateBracket({
+          phaseId: savedPhase.phaseId,
+          registrationIds: group.registrationIds,
+        });
+      }
     }
 
-    return { created: phaseIds.length, phaseIds };
+    return {
+      created: phaseIds.length,
+      phaseIds,
+      matchesGenerated: dto.generateMatches === true,
+    };
   }
+
 
   // ==================== POOMSAE / TAOLU (SCORE TABLE) ====================
 
