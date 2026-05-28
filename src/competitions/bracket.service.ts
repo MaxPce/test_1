@@ -331,7 +331,7 @@ export class BracketService {
 
       // Si el match es de grupo, recalcular standings del grupo
       if (match.round === 'grupo') {
-        await this.recalculateGroupStandings(queryRunner, match.phaseId);
+        await this._doRecalculateGroupStandings(queryRunner, match.phaseId);
       }
 
 
@@ -1004,7 +1004,7 @@ export class BracketService {
       const allQualifiedIds: number[] = [];
 
       for (const sub of subPhases) {
-        await this.recalculateGroupStandings(queryRunner, sub.phaseId);
+        await this._doRecalculateGroupStandings(queryRunner, sub.phaseId);
 
         const standings = await queryRunner.manager.find(GroupStanding, {
           where: { phaseId: sub.phaseId },
@@ -1048,9 +1048,43 @@ export class BracketService {
 
   /**
    * Recalcula los GroupStandings de un grupo desde los partidos finalizados.
-   * Llamado internamente por closeGroupsAndGetQualifiers.
+   * 
+   * Puede llamarse de dos formas:
+   *  1. Con queryRunner externo (uso interno en transacciones): recalculateGroupStandings(queryRunner, phaseId)
+   *  2. Sin queryRunner (uso externo desde otros servicios):     recalculateGroupStandings(phaseId)
    */
-  private async recalculateGroupStandings(
+  async recalculateGroupStandings(groupPhaseId: number): Promise<void>;
+  async recalculateGroupStandings(queryRunner: any, groupPhaseId: number): Promise<void>;
+  async recalculateGroupStandings(
+    queryRunnerOrPhaseId: any,
+    groupPhaseId?: number,
+  ): Promise<void> {
+    // Sobrecarga: si se llama solo con un número, crear queryRunner propio
+    if (typeof queryRunnerOrPhaseId === 'number') {
+      const qr = this.dataSource.createQueryRunner();
+      await qr.connect();
+      await qr.startTransaction();
+      try {
+        await this._doRecalculateGroupStandings(qr, queryRunnerOrPhaseId);
+        await qr.commitTransaction();
+      } catch (e) {
+        await qr.rollbackTransaction();
+        throw e;
+      } finally {
+        await qr.release();
+      }
+      return;
+    }
+
+    // Uso interno: se pasa queryRunner externo
+    await this._doRecalculateGroupStandings(queryRunnerOrPhaseId, groupPhaseId!);
+  }
+
+  /**
+   * Lógica real del recálculo — siempre usa un queryRunner.
+   * No llamar directamente desde fuera de BracketService.
+   */
+  private async _doRecalculateGroupStandings(
     queryRunner: any,
     groupPhaseId: number,
   ): Promise<void> {
@@ -1059,11 +1093,31 @@ export class BracketService {
       relations: ['participations'],
     });
 
-    const standings = await queryRunner.manager.find(GroupStanding, {
+    let standings = await queryRunner.manager.find(GroupStanding, {
       where: { phaseId: groupPhaseId },
     });
 
-    // Resetear stats antes de recalcular
+    const allParticipantIds = new Set<number>();
+    for (const match of matches) {
+      for (const p of match.participations) {
+        if (p.registrationId) allParticipantIds.add(p.registrationId);
+      }
+    }
+
+    for (const regId of allParticipantIds) {
+      const exists = standings.find((s) => s.registrationId === regId);
+      if (!exists) {
+        const newStanding = queryRunner.manager.create(GroupStanding, {
+          phaseId: groupPhaseId,
+          registrationId: regId,
+          played: 0, won: 0, drawn: 0, lost: 0,
+          pointsFor: 0, pointsAgainst: 0, pointDifference: 0, points: 0,
+        });
+        const saved = await queryRunner.manager.save(GroupStanding, newStanding);
+        standings.push(saved);
+      }
+    }
+
     for (const s of standings) {
       s.played = 0; s.won = 0; s.drawn = 0; s.lost = 0;
       s.pointsFor = 0; s.pointsAgainst = 0; s.pointDifference = 0; s.points = 0;
@@ -1073,32 +1127,37 @@ export class BracketService {
       standings.map((s) => [s.registrationId, s]),
     );
 
-
     for (const match of matches) {
-      const p1 = match.participations.find((p) => p.corner === Corner.BLUE);
-      const p2 = match.participations.find((p) => p.corner === Corner.WHITE);
-      if (!p1 || !p2) continue;
+      if (match.participations.length < 2) continue;
 
-      const s1 = standingMap.get(p1.registrationId);
-      const s2 = standingMap.get(p2.registrationId);
+      const p1RegId = match.participations[0].registrationId;
+      const p2RegId = match.participations[1].registrationId;
+
+      if (!p1RegId || !p2RegId) continue;
+
+      const s1 = standingMap.get(p1RegId);
+      const s2 = standingMap.get(p2RegId);
       if (!s1 || !s2) continue;
 
-      const score1 = match.participant1Score ?? 0;
-      const score2 = match.participant2Score ?? 0;
+      const score1 = Number(match.participant1Score) || 0;
+      const score2 = Number(match.participant2Score) || 0;
 
       s1.played++; s2.played++;
-      s1.pointsFor += score1; s1.pointsAgainst += score2;
-      s2.pointsFor += score2; s2.pointsAgainst += score1;
+
+      s1.pointsFor     = Number(s1.pointsFor)     + score1;
+      s1.pointsAgainst = Number(s1.pointsAgainst) + score2;
+      s2.pointsFor     = Number(s2.pointsFor)     + score2;
+      s2.pointsAgainst = Number(s2.pointsAgainst) + score1;
       s1.pointDifference = s1.pointsFor - s1.pointsAgainst;
       s2.pointDifference = s2.pointsFor - s2.pointsAgainst;
 
-      if (match.winnerRegistrationId === p1.registrationId) {
+      if (match.winnerRegistrationId === p1RegId) {
         s1.won++; s1.points += 3; s2.lost++;
-      } else if (match.winnerRegistrationId === p2.registrationId) {
+      } else if (match.winnerRegistrationId === p2RegId) {
         s2.won++; s2.points += 3; s1.lost++;
       } else {
-        // empate
-        s1.drawn++; s1.points += 1; s2.drawn++; s2.points += 1;
+        s1.drawn++; s1.points += 1;
+        s2.drawn++; s2.points += 1;
       }
     }
 

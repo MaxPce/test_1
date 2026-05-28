@@ -730,7 +730,6 @@ export class TableTennisService {
       );
     }
 
-    // Asegurarse de que registrationId no sea null
     if (!result.winner.registrationId) {
       throw new BadRequestException(
         'El ganador no tiene un registrationId válido',
@@ -739,12 +738,18 @@ export class TableTennisService {
 
     // Actualizar match
     match.status = 'finalizado' as any;
-    match.winnerRegistrationId = result.winner.registrationId; 
-
+    match.winnerRegistrationId = result.winner.registrationId;
     match.participant1Score = result.team1.wins;
     match.participant2Score = result.team2.wins;
 
     await this.matchRepository.save(match);
+
+    if (match.round === 'grupo' && match.phaseId) {
+      console.log(
+        `🔄 [finalizeMatch] Recalculando standings para grupo phaseId=${match.phaseId}`,
+      );
+      await this.bracketService.recalculateGroupStandings(match.phaseId);
+    }
 
     return {
       message: 'Match finalizado exitosamente',
@@ -752,6 +757,7 @@ export class TableTennisService {
       result,
     };
   }
+
 
   /**
    * Reabrir match (cambiar de finalizado a en_curso para permitir ediciones)
