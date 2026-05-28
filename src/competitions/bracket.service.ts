@@ -899,9 +899,20 @@ export class BracketService {
   ): Promise<Phase[]> {
     const createdGroups: Phase[] = [];
 
+
+    const parentPhase = await this.phaseRepository.findOne({
+      where: { phaseId: parentPhaseId },
+    });
+
+    if (!parentPhase) {
+      throw new NotFoundException(`Fase padre ${parentPhaseId} no encontrada`);
+    }
+
+
     for (const [idx, group] of groups.entries()) {
       const groupPhase = this.phaseRepository.create({
         parentPhaseId,
+        eventCategoryId: parentPhase.eventCategoryId,
         type: PhaseType.GROUP_STAGE,
         name: `Grupo ${group.label}`,
         groupLabel: group.label,

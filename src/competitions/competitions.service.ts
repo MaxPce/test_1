@@ -398,9 +398,14 @@ export class CompetitionsService {
       const phase = await this.phaseRepository.findOne({
         where: { phaseId: savedMatch.phaseId },
       });
-      if (phase && (phase.type === PhaseType.GRUPO || phase.type === PhaseType.GROUP_STAGE)) {
+      if (
+        phase &&
+        (phase.type === PhaseType.GRUPO ||
+          phase.type === PhaseType.GROUP_STAGE)
+      ) {
         await this.updateStandings(savedMatch.phaseId);
       }
+
     }
 
     return this.findOneMatch(id);
@@ -633,11 +638,12 @@ export class CompetitionsService {
 
     try {
       const phase = await this.findOnePhase(dto.phaseId);
-      if (phase.type !== PhaseType.GRUPO) {
+      if (phase.type !== PhaseType.GRUPO && phase.type !== PhaseType.GROUP_STAGE) {
         throw new BadRequestException(
           'Solo se puede inicializar round robin para fases de grupo',
         );
       }
+
 
       const isEmptyMode =
         dto.registrationIds.length === 0 && dto.emptyParticipantCount;
