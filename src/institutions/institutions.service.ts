@@ -281,7 +281,7 @@ export class InstitutionsService {
         if (sismasterInstitution) {
           institution = await this.institutionRepository.findOne({
             where: { institutionId: sismasterInstitution.idinstitution },
-            withDeleted: true,  // por si acaso está soft-deleted
+            withDeleted: true,
           });
           if (!institution) {
             institution = this.institutionRepository.create({
@@ -292,8 +292,6 @@ export class InstitutionsService {
             });
             institution = await this.institutionRepository.save(institution);
           }
-          
-          
         } else {
           throw new NotFoundException(
             `Institución con ID ${createDto.institutionId} no encontrada en Sismaster`,
@@ -310,24 +308,9 @@ export class InstitutionsService {
       }
     }
 
-    const existingTeam = await this.teamRepository.findOne({
-      where: {
-        name: createDto.name,
-        categoryId: createDto.categoryId,
-        institutionId: createDto.institutionId,
-      },
-    });
-
-    if (existingTeam) {
-      throw new BadRequestException(
-        `Ya existe un equipo "${createDto.name}" de esta institución en esta categoría`,
-      );
-    }
-
+    
     const team = this.teamRepository.create(createDto);
     const savedTeam = await this.teamRepository.save(team);
-
-    
 
     return savedTeam;
   }
