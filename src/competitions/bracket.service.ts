@@ -1124,7 +1124,7 @@ export class BracketService {
   }
 
   /**
-   * Recalcula los GroupStandings de un grupo desde los partidos finalizados.
+   * Recalcula los GroupStandings de un grupo desde los partigenerate-phases.dto.tsdos finalizados.
    * 
    * Puede llamarse de dos formas:
    *  1. Con queryRunner externo (uso interno en transacciones): recalculateGroupStandings(queryRunner, phaseId)
