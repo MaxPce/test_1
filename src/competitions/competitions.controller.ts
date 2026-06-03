@@ -426,6 +426,19 @@ export class CompetitionsController {
     return this.bracketService.getThirdPlace(+phaseId);
   }
 
+  /**
+   * PATCH /competitions/matches/:matchId/swap-participants
+   * Intercambia los 2 participantes de un match PROGRAMADO.
+   * Útil para corregir la asignación inicial del bracket.
+   */
+  @Patch('matches/:matchId/swap-participants')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  async swapMatchParticipants(
+    @Param('matchId', ParseIntPipe) matchId: number,
+  ) {
+    return this.bracketService.swapMatchParticipants(matchId);
+  }
+
     // ==================== GRUPO STAGE ====================
 
   /**

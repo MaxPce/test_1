@@ -1277,4 +1277,75 @@ export class BracketService {
     }
   }
 
+  // ==================== SWAP DE PARTICIPANTES ====================
+
+  /**
+   * Intercambia los dos participantes de un match (swap de corners/posiciones).
+   * Solo permitido si el match está en estado PROGRAMADO.
+   */
+  async swapMatchParticipants(matchId: number): Promise<{
+    success: boolean;
+    message: string;
+    participants: { participationId: number; registrationId: number | null; corner: Corner | null }[];
+  }> {
+    const match = await this.matchRepository.findOne({
+      where: { matchId },
+      relations: ['participations'],
+    });
+
+    if (!match) {
+      throw new NotFoundException(`Match ${matchId} no encontrado`);
+    }
+
+    if (match.status !== MatchStatus.PROGRAMADO) {
+      throw new BadRequestException(
+        `Solo se pueden intercambiar participantes en partidos con estado PROGRAMADO. Estado actual: ${match.status}`,
+      );
+    }
+
+    if (match.participations.length !== 2) {
+      throw new BadRequestException(
+        `El partido debe tener exactamente 2 participantes para hacer swap. Tiene: ${match.participations.length}`,
+      );
+    }
+
+    const [p1, p2] = match.participations;
+
+    const reg1 = p1.registrationId;
+    const reg2 = p2.registrationId;
+    const corner1 = p1.corner;
+    const corner2 = p2.corner;
+
+    await this.dataSource.transaction(async (manager) => {
+      // Paso 1: liberar p1 → NULL para romper la colisión
+      await manager.query(
+        `UPDATE participations SET registration_id = NULL WHERE participation_id = ?`,
+        [p1.participationId],
+      );
+
+      // Paso 2: p2 toma el valor original de p1
+      await manager.query(
+        `UPDATE participations SET registration_id = ?, corner = ? WHERE participation_id = ?`,
+        [reg1, corner1, p2.participationId],
+      );
+
+      // Paso 3: p1 toma el valor original de p2
+      await manager.query(
+        `UPDATE participations SET registration_id = ?, corner = ? WHERE participation_id = ?`,
+        [reg2, corner2, p1.participationId],
+      );
+    });
+
+    console.log(`Swap realizado en match ${matchId}: participantes intercambiados`);
+
+    return {
+      success: true,
+      message: `Participantes del match ${matchId} intercambiados correctamente`,
+      participants: [
+        { participationId: p1.participationId, registrationId: reg2, corner: corner2 },
+        { participationId: p2.participationId, registrationId: reg1, corner: corner1 },
+      ],
+    };
+  }
+
 }

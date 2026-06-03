@@ -388,7 +388,7 @@ export class TableTennisService {
       { gameNumber: 2, player1Index: 1, player2Index: 1, label: 'B vs Y' },
       { gameNumber: 3, player1Index: 2, player2Index: 2, label: 'C vs Z' },
       { gameNumber: 4, player1Index: 0, player2Index: 1, label: 'A vs Y' },
-      { gameNumber: 5, player1Index: 1, player2Index: 2, label: 'B vs Z' },
+      { gameNumber: 5, player1Index: 1, player2Index: 0, label: 'B vs X' }, 
     ];
 
     const createdGames = gamesConfig.map((config) =>
