@@ -279,6 +279,7 @@ export class BracketService {
       const match = await this.matchRepository.findOne({
         where: { matchId: dto.matchId },
         relations: ['participations', 'participations.registration', 'phase'],
+        order: { participations: { participationId: 'ASC' } },
       });
 
       if (!match) {
@@ -1317,22 +1318,14 @@ export class BracketService {
     const corner2 = p2.corner;
 
     await this.dataSource.transaction(async (manager) => {
-      // Paso 1: liberar p1 → NULL para romper la colisión
       await manager.query(
-        `UPDATE participations SET registration_id = NULL WHERE participation_id = ?`,
-        [p1.participationId],
+        `UPDATE participations SET corner = ? WHERE participation_id = ?`,
+        [corner2, p1.participationId],
       );
 
-      // Paso 2: p2 toma el valor original de p1
       await manager.query(
-        `UPDATE participations SET registration_id = ?, corner = ? WHERE participation_id = ?`,
-        [reg1, corner1, p2.participationId],
-      );
-
-      // Paso 3: p1 toma el valor original de p2
-      await manager.query(
-        `UPDATE participations SET registration_id = ?, corner = ? WHERE participation_id = ?`,
-        [reg2, corner2, p1.participationId],
+        `UPDATE participations SET corner = ? WHERE participation_id = ?`,
+        [corner1, p2.participationId],
       );
     });
 
