@@ -1318,16 +1318,35 @@ export class BracketService {
     const corner2 = p2.corner;
 
     await this.dataSource.transaction(async (manager) => {
+      // Paso 1: Liberar p1 → NULL para evitar el constraint duplicado
+      await manager.query(
+        `UPDATE participations SET registration_id = NULL WHERE participation_id = ?`,
+        [p1.participationId],
+      );
+
+      // Paso 2: Ahora que p1 está libre, mover reg1 a p2
+      await manager.query(
+        `UPDATE participations SET registration_id = ? WHERE participation_id = ?`,
+        [reg1, p2.participationId],
+      );
+
+      // Paso 3: Asignar reg2 a p1 (ya no hay conflicto)
+      await manager.query(
+        `UPDATE participations SET registration_id = ? WHERE participation_id = ?`,
+        [reg2, p1.participationId],
+      );
+
+      // Paso 4: Intercambiar corners (igual que antes)
       await manager.query(
         `UPDATE participations SET corner = ? WHERE participation_id = ?`,
         [corner2, p1.participationId],
       );
-
       await manager.query(
         `UPDATE participations SET corner = ? WHERE participation_id = ?`,
         [corner1, p2.participationId],
       );
     });
+
 
     console.log(`Swap realizado en match ${matchId}: participantes intercambiados`);
 
