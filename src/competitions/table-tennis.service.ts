@@ -150,9 +150,9 @@ export class TableTennisService {
       );
     }
 
-    if (suplentes.length !== 1) {
+    if (suplentes.length > 1) {
       throw new BadRequestException(
-        'Debe haber exactamente 1 jugador suplente',
+        'No puede haber más de 1 jugador suplente',
       );
     }
 
@@ -384,12 +384,13 @@ export class TableTennisService {
     }
 
     const gamesConfig = [
-      { gameNumber: 1, player1Index: 0, player2Index: 0, label: 'A vs X' },
-      { gameNumber: 2, player1Index: 1, player2Index: 1, label: 'B vs Y' },
-      { gameNumber: 3, player1Index: 2, player2Index: 2, label: 'C vs Z' },
-      { gameNumber: 4, player1Index: 0, player2Index: 1, label: 'A vs Y' },
-      { gameNumber: 5, player1Index: 1, player2Index: 0, label: 'B vs X' }, 
+      { gameNumber: 1, player1Index: 0, player2Index: 0, label: 'A vs A' },
+      { gameNumber: 2, player1Index: 1, player2Index: 1, label: 'B vs B' },
+      { gameNumber: 3, player1Index: 2, player2Index: 2, label: 'C vs C' },
+      { gameNumber: 4, player1Index: 0, player2Index: 1, label: 'A vs B' },
+      { gameNumber: 5, player1Index: 1, player2Index: 0, label: 'B vs A' },
     ];
+
 
     const createdGames = gamesConfig.map((config) =>
       this.gameRepository.create({
