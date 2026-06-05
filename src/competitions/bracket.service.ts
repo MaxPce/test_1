@@ -820,6 +820,66 @@ export class BracketService {
     };
   }
 
+  /**
+   * Intercambia los 2 participantes de un match PROGRAMADO.
+   * Útil para corregir la asignación inicial del bracket desde el frontend.
+   * Solo funciona si el match está en estado PROGRAMADO (no EN_CURSO ni FINALIZADO).
+   */
+  async swapMatchParticipants(matchId: number): Promise<{
+    match: Match;
+    message: string;
+  }> {
+    const match = await this.matchRepository.findOne({
+      where: { matchId },
+      relations: ['participations'],
+    });
+
+    if (!match) {
+      throw new NotFoundException(`Match ${matchId} no encontrado`);
+    }
+
+    if (match.status !== MatchStatus.PROGRAMADO) {
+      throw new BadRequestException(
+        `Solo se puede intercambiar participantes en matches con estado PROGRAMADO. Estado actual: ${match.status}`,
+      );
+    }
+
+    const participations = match.participations;
+
+    if (participations.length !== 2) {
+      throw new BadRequestException(
+        `El match debe tener exactamente 2 participantes para intercambiar. Actualmente tiene: ${participations.length}`,
+      );
+    }
+
+    // Intercambiar corners
+    const [p1, p2] = participations;
+    const tempCorner = p1.corner;
+    p1.corner = p2.corner;
+    p2.corner = tempCorner;
+
+    await this.participationRepository.save([p1, p2]);
+
+    // Recargar el match con las relaciones actualizadas
+    const updatedMatch = await this.matchRepository.findOne({
+      where: { matchId },
+      relations: [
+        'participations',
+        'participations.registration',
+        'participations.registration.athlete',
+        'participations.registration.athlete.institution',
+        'participations.registration.team',
+        'participations.registration.team.institution',
+      ],
+      order: { participations: { corner: 'ASC' } },
+    });
+
+    return {
+      match: updatedMatch!,
+      message: `Participantes del match ${matchId} intercambiados correctamente`,
+    };
+  }
+
   private async autoRegisterEliminationRanks(
     queryRunner: any,
     phaseId: number,
@@ -1278,86 +1338,7 @@ export class BracketService {
     }
   }
 
-  // ==================== SWAP DE PARTICIPANTES ====================
+  
 
-  /**
-   * Intercambia los dos participantes de un match (swap de corners/posiciones).
-   * Solo permitido si el match está en estado PROGRAMADO.
-   */
-  async swapMatchParticipants(matchId: number): Promise<{
-    success: boolean;
-    message: string;
-    participants: { participationId: number; registrationId: number | null; corner: Corner | null }[];
-  }> {
-    const match = await this.matchRepository.findOne({
-      where: { matchId },
-      relations: ['participations'],
-    });
-
-    if (!match) {
-      throw new NotFoundException(`Match ${matchId} no encontrado`);
-    }
-
-    if (match.status !== MatchStatus.PROGRAMADO) {
-      throw new BadRequestException(
-        `Solo se pueden intercambiar participantes en partidos con estado PROGRAMADO. Estado actual: ${match.status}`,
-      );
-    }
-
-    if (match.participations.length !== 2) {
-      throw new BadRequestException(
-        `El partido debe tener exactamente 2 participantes para hacer swap. Tiene: ${match.participations.length}`,
-      );
-    }
-
-    const [p1, p2] = match.participations;
-
-    const reg1 = p1.registrationId;
-    const reg2 = p2.registrationId;
-    const corner1 = p1.corner;
-    const corner2 = p2.corner;
-
-    await this.dataSource.transaction(async (manager) => {
-      // Paso 1: Liberar p1 → NULL para evitar el constraint duplicado
-      await manager.query(
-        `UPDATE participations SET registration_id = NULL WHERE participation_id = ?`,
-        [p1.participationId],
-      );
-
-      // Paso 2: Ahora que p1 está libre, mover reg1 a p2
-      await manager.query(
-        `UPDATE participations SET registration_id = ? WHERE participation_id = ?`,
-        [reg1, p2.participationId],
-      );
-
-      // Paso 3: Asignar reg2 a p1 (ya no hay conflicto)
-      await manager.query(
-        `UPDATE participations SET registration_id = ? WHERE participation_id = ?`,
-        [reg2, p1.participationId],
-      );
-
-      // Paso 4: Intercambiar corners (igual que antes)
-      await manager.query(
-        `UPDATE participations SET corner = ? WHERE participation_id = ?`,
-        [corner2, p1.participationId],
-      );
-      await manager.query(
-        `UPDATE participations SET corner = ? WHERE participation_id = ?`,
-        [corner1, p2.participationId],
-      );
-    });
-
-
-    console.log(`Swap realizado en match ${matchId}: participantes intercambiados`);
-
-    return {
-      success: true,
-      message: `Participantes del match ${matchId} intercambiados correctamente`,
-      participants: [
-        { participationId: p1.participationId, registrationId: reg2, corner: corner2 },
-        { participationId: p2.participationId, registrationId: reg1, corner: corner1 },
-      ],
-    };
-  }
 
 }
