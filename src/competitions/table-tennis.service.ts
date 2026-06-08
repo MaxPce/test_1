@@ -369,13 +369,21 @@ export class TableTennisService {
     const lineupsData = await this.getMatchLineups(matchId);
 
     if (lineupsData.length !== 2) {
-      throw new BadRequestException(
-        'El match debe tener exactamente 2 equipos',
-      );
+      throw new BadRequestException('El match debe tener exactamente 2 equipos');
     }
 
-    const team1Lineups = lineupsData[0].lineups.filter((l) => !l.isSubstitute);
-    const team2Lineups = lineupsData[1].lineups.filter((l) => !l.isSubstitute);
+    // ← AGREGAR ESTE SORT: blue/A/left siempre es team1
+    const FIRST_CORNERS = ['blue', 'left', 'A', 'top'];
+    const sortedLineups = [...lineupsData].sort((a, b) => {
+      const cornerA = a.participation?.corner ?? '';
+      const cornerB = b.participation?.corner ?? '';
+      const orderA = FIRST_CORNERS.includes(cornerA) ? 0 : 1;
+      const orderB = FIRST_CORNERS.includes(cornerB) ? 0 : 1;
+      return orderA - orderB;
+    });
+
+    const team1Lineups = sortedLineups[0].lineups.filter((l) => !l.isSubstitute);
+    const team2Lineups = sortedLineups[1].lineups.filter((l) => !l.isSubstitute);
 
     if (team1Lineups.length < 3 || team2Lineups.length < 3) {
       throw new BadRequestException(
@@ -841,6 +849,39 @@ export class TableTennisService {
       nextMatch: advanceResult.nextMatch,
       score: modality === 'team' ? '3 - 0 (WO)' : '1 - 0 (WO)',
       modality,
+    };
+  }
+
+  /**
+   * Intercambiar posiciones (corner) de los participantes de un match
+   */
+  async swapParticipants(matchId: number) {
+    const participations = await this.participationRepository.find({
+      where: { matchId },
+      relations: [
+        'registration',
+        'registration.athlete',
+        'registration.team',
+        'registration.team.institution',
+      ],
+    });
+
+    if (participations.length !== 2) {
+      throw new BadRequestException(
+        'El match debe tener exactamente 2 participantes para hacer swap',
+      );
+    }
+
+    // Intercambiar los valores de corner
+    const corner0 = participations[0].corner;
+    participations[0].corner = participations[1].corner;
+    participations[1].corner = corner0;
+
+    const saved = await this.participationRepository.save(participations);
+
+    return {
+      message: 'Participantes intercambiados exitosamente',
+      participants: saved,
     };
   }
 
