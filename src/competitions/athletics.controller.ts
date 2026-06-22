@@ -236,5 +236,19 @@ export class AthleticsController {
     return this.athleticsService.updatePhaseSettings(phaseId, dto);
   }
 
+  // GET /competitions/phases/:phaseId/classification-status
+@Get('phases/:phaseId/classification-status')
+@Public()
+getClassificationStatus(@Param('phaseId', ParseIntPipe) phaseId: number) {
+  return this.classificationService.getClassificationStatus(phaseId);
+}
+
+// DELETE /competitions/phases/:phaseId/classify
+@Delete('phases/:phaseId/classify')
+@Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+reopenPhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+  return this.classificationService.reopenPhase(phaseId);
+}
+
  
 }

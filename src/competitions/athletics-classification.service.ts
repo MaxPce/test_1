@@ -429,4 +429,26 @@ export class AthleticsClassificationService {
 
     return this.classificationRepo.save(cls);
   }
+
+  // ─────────────────────────────────────────────────────────────
+  // ¿Está la fase finalizada? → true si existen clasificaciones
+  // ─────────────────────────────────────────────────────────────
+  async getClassificationStatus(phaseId: number): Promise<{ isFinalized: boolean; classifiedAt: Date | null }> {
+    const latest = await this.classificationRepo.findOne({
+      where: { phaseId },
+      order: { classifiedAt: 'DESC' },
+    });
+    return {
+      isFinalized: !!latest,
+      classifiedAt: latest?.classifiedAt ?? null,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Reabrir fase → borra clasificaciones del phaseId
+  // ─────────────────────────────────────────────────────────────
+  async reopenPhase(phaseId: number): Promise<{ phaseId: number; isFinalized: false }> {
+    await this.classificationRepo.delete({ phaseId });
+    return { phaseId, isFinalized: false };
+  }
 }
