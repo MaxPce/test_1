@@ -570,4 +570,137 @@ export class AthleticsService {
     return this.phaseRepo.save(phase);
   }
 
+  async getResultsByEvent(externalEventId: number, localSportId: number) {
+    const rows: Array<{
+      eventCategoryId: number;
+      eventName: string;
+      gender: string | null;   // 'damas' | 'varones' | 'mixto' | null
+      level: string | null;    // 'avanzados' | 'noveles' | null
+      rankPosition: number;
+      athleteName: string;
+      institutionName: string;
+      institutionAbrev: string | null;
+      finalTime: string | null;
+      finalDistance: string | null;
+      finalHeight: string | null;
+      finalIaafPoints: number | null;
+      wind: string | null;
+      pointsAwarded: number;
+      isRelay: boolean;
+    }> = await this.athleticsResultRepo.query(
+      `SELECT
+          ec.event_category_id                                  AS eventCategoryId,
+          ph.name                                               AS eventName,
+          ph.gender                                             AS gender,
+          ph.level                                              AS level,
+          ph.is_relay                                           AS isRelay,
+          apc.rank_position                                     AS rankPosition,
+          apc.points_awarded                                    AS pointsAwarded,
+          apc.final_time                                        AS finalTime,
+          apc.final_distance                                    AS finalDistance,
+          apc.final_height                                      AS finalHeight,
+          apc.final_iaaf_points                                 AS finalIaafPoints,
+          (
+            SELECT ar2.wind
+            FROM athletics_result ar2
+            WHERE ar2.phase_registration_id = pr.phase_registration_id
+              AND ar2.wind IS NOT NULL
+            ORDER BY ar2.athletics_result_id DESC
+            LIMIT 1
+          )                                                     AS wind,
+          COALESCE(a.name, tm.name)                             AS athleteName,
+          COALESCE(inst.name,   t_inst.name,   'N/A')           AS institutionName,
+          COALESCE(inst.abrev,  t_inst.abrev,  '')              AS institutionAbrev
+        FROM athletics_phase_classification apc
+          INNER JOIN phase_registrations pr ON pr.phase_registration_id = apc.phase_registration_id
+          INNER JOIN phases ph              ON ph.phase_id = apc.phase_id
+          INNER JOIN event_categories ec    ON ec.event_category_id = ph.event_category_id
+          INNER JOIN sports s               ON s.sismaster_sport_id = ec.external_sport_id
+          INNER JOIN registrations reg      ON reg.registration_id = pr.registration_id
+          LEFT  JOIN athletes a             ON a.athlete_id = reg.athlete_id
+          LEFT  JOIN institutions inst      ON inst.institution_id = a.institution_id
+          LEFT  JOIN teams tm               ON tm.team_id = reg.team_id
+          LEFT  JOIN institutions t_inst    ON t_inst.institution_id = tm.institution_id
+        WHERE ec.external_event_id = ?
+          AND s.sport_id            = ?
+          AND apc.rank_position IS NOT NULL
+          AND apc.rank_position BETWEEN 1 AND 10
+          AND ph.deleted_at IS NULL
+          AND ph.level IS NOT NULL
+          AND ph.gender IS NOT NULL
+        ORDER BY ph.level, ph.gender, ph.display_order, ph.name, apc.rank_position`,
+      [externalEventId, localSportId],
+    );
+
+    // ── Marca legible según tipo de prueba ──────────────────────────────────
+    const formatMark = (row: (typeof rows)[0]): string => {
+      if (row.finalIaafPoints) return `${row.finalIaafPoints} pts`;
+      if (row.finalTime)       return row.finalTime;
+      if (row.finalDistance)   return `${parseFloat(row.finalDistance).toFixed(2)} m`;
+      if (row.finalHeight)     return `${parseFloat(row.finalHeight).toFixed(2)} m`;
+      return '–';
+    };
+
+    // ── Normaliza level → 'AVANZADOS' | 'NOVELES' ──────────────────────────
+    const normalizeLevel = (raw: string | null): 'AVANZADOS' | 'NOVELES' => {
+      const v = (raw ?? '').toLowerCase().trim();
+      return v === 'noveles' ? 'NOVELES' : 'AVANZADOS';
+    };
+
+    // ── Agrupar: category → eventCategoryId → { eventName, female[], male[] }
+    const grouped: Record<
+      string,
+      Record<number, { eventName: string; female: object[]; male: object[] }>
+    > = {};
+
+    for (const row of rows) {
+      const cat = normalizeLevel(row.level);
+      const catId = Number(row.eventCategoryId);
+      const gen = (row.gender ?? '').toLowerCase().trim(); // 'damas' | 'varones' | 'mixto'
+
+      grouped[cat] ??= {};
+
+      if (!grouped[cat][catId]) {
+        // Nombre limpio: quitar prefijo "Damas Az " / "Varones Nv " etc.
+        const cleanName = row.eventName
+          .replace(/^\s*(damas|varones)\s+(az|nv)\s+/i, '')
+          .replace(/^\s*(damas|varones)\s+/i, '')
+          .trim();
+
+        grouped[cat][catId] = { eventName: cleanName, female: [], male: [] };
+      }
+
+      const entry = {
+        position:        Number(row.rankPosition),
+        athleteName:     row.athleteName ?? 'N/A',
+        university:      row.institutionName,
+        universityAbrev: row.institutionAbrev ?? '',
+        mark:            formatMark(row),
+        windSpeed:
+          row.wind != null
+            ? `${Number(row.wind) > 0 ? '+' : ''}${Number(row.wind).toFixed(1)}`
+            : null,
+        points: Number(row.pointsAwarded),
+      };
+
+      if (gen === 'damas')        grouped[cat][catId].female.push(entry);
+      else if (gen === 'varones') grouped[cat][catId].male.push(entry);
+      else {
+        // mixto (postas mixtas): aparece en ambas columnas
+        grouped[cat][catId].female.push(entry);
+        grouped[cat][catId].male.push(entry);
+      }
+    }
+
+    // ── Serializar al formato esperado por el frontend ──────────────────────
+    return Object.entries(grouped).map(([category, eventsById]) => ({
+      category, // 'AVANZADOS' | 'NOVELES'
+      events: Object.values(eventsById).map(({ eventName, female, male }) => ({
+        eventName,
+        femaleResults: female,
+        maleResults:   male,
+      })),
+    }));
+  }
+
 }

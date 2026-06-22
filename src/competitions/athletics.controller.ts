@@ -109,6 +109,16 @@ export class AthleticsController {
     return this.athleticsService.deleteSection(id);
   }
 
+  // GET /competitions/events/external/:externalEventId/local-sport/:localSportId/results-by-event
+  @Get('events/external/:externalEventId/local-sport/:localSportId/results-by-event')
+  @Public()
+  getResultsByEvent(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.athleticsService.getResultsByEvent(externalEventId, localSportId);
+  }
+
   // ── Resultados individuales ───────────────────────────────────────────────────
 
   @Get('athletics/:id')
