@@ -109,7 +109,8 @@ export class AthleticsClassificationService {
     const isScoringEligible = institutionIds.size > 1;
 
     // 4. Calcular puntos y guardar clasificaciones
-    const isCombinedOrRelay = COMBINED_PHASE_TYPES.includes(phase.type) || phase.isRelay;
+    const isCombinedEvent = /heptat|decat/i.test(phase.name ?? '');
+    const isCombinedOrRelay = phase.isRelay || isCombinedEvent;
     const saved: AthleticsPhaseClassification[] = [];
 
     for (const row of ranked) {
@@ -357,7 +358,8 @@ export class AthleticsClassificationService {
         }
     }
 
-    const isCombinedOrRelay = COMBINED_PHASE_TYPES.includes(phase.type) || phase.isRelay;
+      const isCombinedEvent = /heptat|decat/i.test(phase.name ?? '');
+      const isCombinedOrRelay = phase.isRelay || isCombinedEvent;
 
     for (const cls of classifications) {
         if (
