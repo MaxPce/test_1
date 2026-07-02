@@ -731,4 +731,147 @@ export class AthleticsService {
     return rows;
   }
 
+  // ── Ranking combinadas (Heptatlón / Decatlón) ─────────────────────
+  async getCombinedRanking(
+    externalEventId: number,
+    localSportId: number,
+    combinedType: 'heptatlon' | 'decatlon',
+  ): Promise<{ combinedType: string; athletes: object[] }> {
+    const totalEvents = combinedType === 'heptatlon' ? 7 : 10;
+
+    const rows: Array<{
+      phaseRegistrationId: number;
+      athleteId: number;
+      athleteName: string;
+      gender: string | null;
+      level: string | null;
+      institutionId: number | null;
+      institutionName: string;
+      institutionAbrev: string | null;
+      institutionLogo: string | null;
+      phaseName: string;
+      phaseType: string;
+      phaseDisplayOrder: number | null;
+      finalIaafPoints: number | null;
+      finalTime: string | null;
+      finalDistance: string | null;
+      finalHeight: string | null;
+    }> = await this.athleticsResultRepo.query(
+      `SELECT
+          pr.phase_registration_id                              AS phaseRegistrationId,
+          COALESCE(a.athlete_id, 0)                            AS athleteId,
+          COALESCE(a.name, tm.name)                            AS athleteName,
+          ph.gender                                            AS gender,
+          ph.level                                             AS level,
+          COALESCE(inst.institution_id, t_inst.institution_id) AS institutionId,
+          COALESCE(inst.name,   t_inst.name,   'N/A')          AS institutionName,
+          COALESCE(inst.abrev,  t_inst.abrev,  '')             AS institutionAbrev,
+          COALESCE(inst.logo_url, t_inst.logo_url, NULL)       AS institutionLogo,
+          ph.name                                              AS phaseName,
+          ph.type                                              AS phaseType,
+          ph.display_order                                     AS phaseDisplayOrder,
+          apc.final_iaaf_points                                AS finalIaafPoints,
+          apc.final_time                                       AS finalTime,
+          apc.final_distance                                   AS finalDistance,
+          apc.final_height                                     AS finalHeight
+        FROM athletics_phase_classification apc
+          INNER JOIN phase_registrations pr  ON pr.phase_registration_id = apc.phase_registration_id
+          INNER JOIN phases ph               ON ph.phase_id = apc.phase_id
+          INNER JOIN event_categories ec     ON ec.event_category_id = ph.event_category_id
+          INNER JOIN categories cat          ON cat.category_id = ec.category_id
+          INNER JOIN sports s                ON s.sismaster_sport_id = ec.external_sport_id
+          INNER JOIN registrations reg       ON reg.registration_id = pr.registration_id
+          LEFT  JOIN athletes a              ON a.athlete_id = reg.athlete_id
+          LEFT  JOIN institutions inst       ON inst.institution_id = a.institution_id
+          LEFT  JOIN teams tm                ON tm.team_id = reg.team_id
+          LEFT  JOIN institutions t_inst     ON t_inst.institution_id = tm.institution_id
+        WHERE ec.external_event_id = ?
+          AND s.sport_id            = ?
+          AND ph.deleted_at IS NULL
+          AND ph.type IN ('combined_pista', 'combined_distancia', 'combined_altura')
+          AND REPLACE(LOWER(cat.name), 'ó', 'o') LIKE ?
+        ORDER BY
+          COALESCE(a.athlete_id, tm.team_id),
+          ph.display_order ASC`,
+      [externalEventId, localSportId, `%${combinedType}%`],
+    );
+
+    if (!rows.length) return { combinedType, athletes: [] };
+
+    const formatMark = (row: (typeof rows)[0]): string | null => {
+      if (row.finalTime)     return row.finalTime;
+      if (row.finalDistance) return parseFloat(row.finalDistance).toFixed(2);
+      if (row.finalHeight)   return parseFloat(row.finalHeight).toFixed(2);
+      return null;
+    };
+
+    const tableTypeFromPhaseType = (pt: string): 'pista' | 'distancia' | 'altura' => {
+      if (pt === 'combined_pista')  return 'pista';
+      if (pt === 'combined_altura') return 'altura';
+      return 'distancia';
+    };
+
+    const map = new Map<string, {
+      athleteId: number;
+      athleteName: string;
+      gender: string;
+      category: string;
+      institutionId: number;
+      institutionName: string;
+      institutionAbrev: string | null;
+      institutionLogo: string | null;
+      totalIaafPoints: number;
+      subResults: {
+        subEventName: string;
+        tableType: 'pista' | 'distancia' | 'altura';
+        mark: string | null;
+        iaafPoints: number;
+        order: number;
+      }[];
+    }>();
+
+    for (const row of rows) {
+      const genderKey = (row.gender ?? '').toLowerCase().startsWith('v') ? 'M' : 'F';
+      const category  = (row.level ?? '').toLowerCase() === 'noveles' ? 'NOVELES' : 'AVANZADOS';
+      const key       = `${row.athleteName}__${genderKey}__${category}`;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          athleteId:        Number(row.athleteId),
+          athleteName:      row.athleteName ?? 'N/A',
+          gender:           genderKey,
+          category,
+          institutionId:    Number(row.institutionId ?? 0),
+          institutionName:  row.institutionName,
+          institutionAbrev: row.institutionAbrev ?? null,
+          institutionLogo:  row.institutionLogo ?? null,
+          totalIaafPoints:  0,
+          subResults:       [],
+        });
+      }
+
+      const athlete = map.get(key)!;
+      const pts = Number(row.finalIaafPoints ?? 0);
+      athlete.totalIaafPoints += pts;
+      athlete.subResults.push({
+        subEventName: row.phaseName,
+        tableType:    tableTypeFromPhaseType(row.phaseType),
+        mark:         formatMark(row),
+        iaafPoints:   pts,
+        order:        Number(row.phaseDisplayOrder ?? athlete.subResults.length + 1),
+      });
+    }
+
+    const athletes = Array.from(map.values())
+      .map((a) => ({
+        ...a,
+        completedEvents: a.subResults.filter((s) => s.mark !== null).length,
+        totalEvents,
+        isFinished: a.subResults.filter((s) => s.mark !== null).length === totalEvents,
+      }))
+      .sort((a, b) => b.totalIaafPoints - a.totalIaafPoints)
+      .map((a, i) => ({ rank: i + 1, ...a }));
+
+    return { combinedType, athletes };
+  }
 }

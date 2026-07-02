@@ -127,6 +127,20 @@ export class AthleticsController {
   ) {
     return this.athleticsService.getResultsByEvent(externalEventId, localSportId);
   }
+  // GET /competitions/events/external/:externalEventId/local-sport/:localSportId/combined-ranking/:combinedType
+  @Get('events/external/:externalEventId/local-sport/:localSportId/combined-ranking/:combinedType')
+  @Public()
+  getCombinedRanking(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+    @Param('combinedType')                  combinedType: 'heptatlon' | 'decatlon',
+  ) {
+    return this.athleticsService.getCombinedRanking(
+      externalEventId,
+      localSportId,
+      combinedType,
+    );
+}
 
   // ── Resultados individuales ───────────────────────────────────────────────────
 
