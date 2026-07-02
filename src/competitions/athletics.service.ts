@@ -703,4 +703,32 @@ export class AthleticsService {
     }));
   }
 
+  async getParticipatingInstitutions(
+    externalEventId: number,
+    localSportId: number,
+  ): Promise<{ institutionId: number; institutionName: string; institutionAbrev: string | null; logoUrl: string | null }[]> {
+    const rows: any[] = await this.athleticsResultRepo.query(
+      `SELECT DISTINCT
+          COALESCE(inst.institution_id, t_inst.institution_id) AS institutionId,
+          COALESCE(inst.name,   t_inst.name,   'N/A')          AS institutionName,
+          COALESCE(inst.abrev,  t_inst.abrev,  '')             AS institutionAbrev,
+          COALESCE(inst.logo_url, t_inst.logo_url, NULL)       AS logoUrl
+        FROM phase_registrations pr
+          INNER JOIN phases ph           ON ph.phase_id = pr.phase_id
+          INNER JOIN event_categories ec ON ec.event_category_id = ph.event_category_id
+          INNER JOIN sports s            ON s.sismaster_sport_id = ec.external_sport_id
+          INNER JOIN registrations reg   ON reg.registration_id = pr.registration_id
+          LEFT  JOIN athletes a          ON a.athlete_id = reg.athlete_id
+          LEFT  JOIN institutions inst   ON inst.institution_id = a.institution_id
+          LEFT  JOIN teams tm            ON tm.team_id = reg.team_id
+          LEFT  JOIN institutions t_inst ON t_inst.institution_id = tm.institution_id
+        WHERE ec.external_event_id = ?
+          AND s.sport_id = ?
+          AND ph.deleted_at IS NULL
+          AND COALESCE(inst.institution_id, t_inst.institution_id) IS NOT NULL`,
+      [externalEventId, localSportId],
+    );
+    return rows;
+  }
+
 }

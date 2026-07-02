@@ -109,6 +109,15 @@ export class AthleticsController {
     return this.athleticsService.deleteSection(id);
   }
 
+  @Get('events/external/:externalEventId/local-sport/:localSportId/participating-institutions')
+  @Public()
+  getParticipatingInstitutions(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.athleticsService.getParticipatingInstitutions(externalEventId, localSportId);
+  }
+
   // GET /competitions/events/external/:externalEventId/local-sport/:localSportId/results-by-event
   @Get('events/external/:externalEventId/local-sport/:localSportId/results-by-event')
   @Public()
