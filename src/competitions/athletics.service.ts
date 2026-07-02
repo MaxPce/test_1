@@ -739,6 +739,20 @@ export class AthleticsService {
   ): Promise<{ combinedType: string; athletes: object[] }> {
     const totalEvents = combinedType === 'heptatlon' ? 7 : 10;
 
+    // ── Orden canónico de sub-pruebas ──────────────────────────────────────────
+    const CANON_ORDER: Record<string, Record<string, number>> = {
+      heptatlon: {
+        '100m vallas': 1, 'salto alto': 2, 'salto largo': 3, '200m': 4,
+        'lanzamiento de bala': 5, 'lanzamiento de jabalina': 6, '800m': 7,
+      },
+      decatlon: {
+        '100m': 1, 'salto largo': 2, 'lanzamiento de bala': 3, 'salto alto': 4,
+        '400m': 5, '110m vallas': 6, 'lanzamiento de disco': 7,
+        'salto con pértiga': 8, 'lanzamiento de jabalina': 9, '1500m': 10,
+      },
+    };
+    const canonOrder = CANON_ORDER[combinedType] ?? {};
+
     const rows: Array<{
       phaseRegistrationId: number;
       athleteId: number;
@@ -853,21 +867,29 @@ export class AthleticsService {
       const athlete = map.get(key)!;
       const pts = Number(row.finalIaafPoints ?? 0);
       athlete.totalIaafPoints += pts;
+
+      // FIX 1: orden canónico por nombre, display_order solo como fallback
+      const nameNormalized = (row.phaseName ?? '').toLowerCase().trim();
+      const order = canonOrder[nameNormalized] ?? Number(row.phaseDisplayOrder ?? 99);
+
       athlete.subResults.push({
         subEventName: row.phaseName,
         tableType:    tableTypeFromPhaseType(row.phaseType),
         mark:         formatMark(row),
         iaafPoints:   pts,
-        order:        Number(row.phaseDisplayOrder ?? athlete.subResults.length + 1),
+        order,
       });
     }
 
     const athletes = Array.from(map.values())
       .map((a) => ({
         ...a,
-        completedEvents: a.subResults.filter((s) => s.mark !== null).length,
+        // FIX 3: ordenar sub-pruebas por order canónico antes de retornar
+        subResults: [...a.subResults].sort((x, y) => x.order - y.order),
+        // FIX 2: usar iaafPoints > 0 como criterio de "completado", no mark !== null
+        completedEvents: a.subResults.filter((s) => s.iaafPoints > 0).length,
         totalEvents,
-        isFinished: a.subResults.filter((s) => s.mark !== null).length === totalEvents,
+        isFinished: a.subResults.filter((s) => s.iaafPoints > 0).length === totalEvents,
       }))
       .sort((a, b) => b.totalIaafPoints - a.totalIaafPoints)
       .map((a, i) => ({ rank: i + 1, ...a }));

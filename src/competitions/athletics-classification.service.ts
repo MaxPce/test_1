@@ -169,18 +169,43 @@ export class AthleticsClassificationService {
     finalIaafPoints?: number;
     resultSource: AthleticsPhaseClassification['resultSource'];
   }>> {
+    // ── Detectar si esta fase pertenece a un heptatlón/decatlón ───────────────
+    // Las sub-fases de combinadas comparten los mismos phase.type que pruebas
+    // normales (combined_pista, combined_distancia, combined_altura), por eso
+    // se identifica por el nombre de la CATEGORÍA padre en event_categories.
+    const parentCatName: string = await this.phaseRepo.manager
+      .query(
+        `SELECT cat.name AS catName
+        FROM phases ph
+        INNER JOIN event_categories ec ON ec.event_category_id = ph.event_category_id
+        INNER JOIN categories cat      ON cat.category_id = ec.category_id
+        WHERE ph.phase_id = ?`,
+        [phase.phaseId],
+      )
+      .then((rows: any[]) => rows[0]?.catName ?? '');
+
+    const isCombinedSubPhase = /heptat|decat/i.test(parentCatName);
+
     switch (phase.type) {
       case PhaseType.COMBINED_DISTANCIA:
+        // Saltos/lanzamientos dentro de combinada → iaaf_points
+        // Saltos/lanzamientos individuales        → mejor intento válido
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
         return this.resolveDistanceMarks(prIds);
 
       case PhaseType.COMBINED_ALTURA:
+        // Salto alto/pértiga dentro de combinada → iaaf_points
+        // Salto alto/pértiga individual          → mejor altura 'O'
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
         return this.resolveHeightMarks(prIds);
 
       case PhaseType.GRUPO:
       case PhaseType.ELIMINACION:
       case PhaseType.COMBINED_PISTA:
       default:
-        // Carreras, postas, vallas, marcha → tiempos en sección entries
+        // Carreras dentro de combinada    → iaaf_points
+        // Carreras/postas/vallas normales → tiempos en sección entries
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
         return this.resolveTrackMarks(phase.phaseId, prIds);
     }
   }
