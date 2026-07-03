@@ -19,6 +19,8 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { GenerateAthleticsSeriesDto } from './dto/generate-athletics-series.dto';
+import { Res } from '@nestjs/common';   
+import type { Response } from 'express';
 import {
   CreateAthleticsSectionDto,
   UpdateAthleticsSectionDto,
@@ -262,7 +264,11 @@ export class AthleticsController {
   // GET /competitions/phases/:phaseId/classification-status
 @Get('phases/:phaseId/classification-status')
 @Public()
-getClassificationStatus(@Param('phaseId', ParseIntPipe) phaseId: number) {
+getClassificationStatus(
+  @Param('phaseId', ParseIntPipe) phaseId: number,
+  @Res({ passthrough: true }) res: Response,
+) {
+  res.setHeader('Cache-Control', 'no-store');
   return this.classificationService.getClassificationStatus(phaseId);
 }
 

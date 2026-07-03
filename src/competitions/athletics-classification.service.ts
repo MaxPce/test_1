@@ -140,7 +140,7 @@ export class AthleticsClassificationService {
       entity.finalHeight       = row.finalHeight ?? null;
       entity.finalIaafPoints   = row.finalIaafPoints ?? null;
       entity.resultSource      = row.resultSource;
-
+      entity.classifiedAt = new Date();
       saved.push(await this.classificationRepo.save(entity));
     }
 
@@ -169,10 +169,6 @@ export class AthleticsClassificationService {
     finalIaafPoints?: number;
     resultSource: AthleticsPhaseClassification['resultSource'];
   }>> {
-    // ── Detectar si esta fase pertenece a un heptatlón/decatlón ───────────────
-    // Las sub-fases de combinadas comparten los mismos phase.type que pruebas
-    // normales (combined_pista, combined_distancia, combined_altura), por eso
-    // se identifica por el nombre de la CATEGORÍA padre en event_categories.
     const parentCatName: string = await this.phaseRepo.manager
       .query(
         `SELECT cat.name AS catName
@@ -188,24 +184,18 @@ export class AthleticsClassificationService {
 
     switch (phase.type) {
       case PhaseType.COMBINED_DISTANCIA:
-        // Saltos/lanzamientos dentro de combinada → iaaf_points
-        // Saltos/lanzamientos individuales        → mejor intento válido
-        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds, phase.type);
         return this.resolveDistanceMarks(prIds);
 
       case PhaseType.COMBINED_ALTURA:
-        // Salto alto/pértiga dentro de combinada → iaaf_points
-        // Salto alto/pértiga individual          → mejor altura 'O'
-        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds, phase.type);
         return this.resolveHeightMarks(prIds);
 
       case PhaseType.GRUPO:
       case PhaseType.ELIMINACION:
       case PhaseType.COMBINED_PISTA:
       default:
-        // Carreras dentro de combinada    → iaaf_points
-        // Carreras/postas/vallas normales → tiempos en sección entries
-        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds);
+        if (isCombinedSubPhase) return this.resolveCombinedEventMarks(prIds, phase.type);
         return this.resolveTrackMarks(phase.phaseId, prIds);
     }
   }
@@ -306,23 +296,94 @@ export class AthleticsClassificationService {
   }
 
   // Heptatlón/Decatlón: suma de iaaf_points (reservado para futuro)
-  private async resolveCombinedEventMarks(prIds: number[]) {
-    const rows: Array<{ phaseRegistrationId: number; total: string }> =
-      await this.athleticsResultRepo
-        .createQueryBuilder('ar')
-        .select('ar.phaseRegistrationId', 'phaseRegistrationId')
-        .addSelect('SUM(ar.iaaf_points)', 'total')
-        .where('ar.phaseRegistrationId IN (:...prIds)', { prIds })
-        .andWhere('ar.iaaf_points IS NOT NULL')
-        .groupBy('ar.phaseRegistrationId')
-        .getRawMany();
+  private async resolveCombinedEventMarks(
+    prIds: number[],
+    phaseType: PhaseType,
+  ) {
+    // 1. Intentar leer marca ya guardada en apc (fase ya clasificada antes)
+    const apcRows: Array<{
+      phaseRegistrationId: number;
+      finalTime: string | null;
+      finalDistance: string | null;
+      finalHeight: string | null;
+    }> = await this.classificationRepo
+      .createQueryBuilder('apc')
+      .select('apc.phaseRegistrationId', 'phaseRegistrationId')
+      .addSelect('apc.finalTime',        'finalTime')
+      .addSelect('apc.finalDistance',    'finalDistance')
+      .addSelect('apc.finalHeight',      'finalHeight')
+      .where('apc.phaseRegistrationId IN (:...prIds)', { prIds })
+      .getRawMany();
 
-    return rows.map((r) => ({
-      phaseRegistrationId: Number(r.phaseRegistrationId),
-      finalIaafPoints: Number(r.total),
-      resultSource: 'iaaf_points' as const,
+    if (apcRows.length > 0) {
+      return apcRows
+        .filter((r) => r.finalTime || r.finalDistance || r.finalHeight)
+        .map((r) => ({
+          phaseRegistrationId: Number(r.phaseRegistrationId),
+          finalTime:     r.finalTime                             ?? undefined,
+          finalDistance: r.finalDistance ? Number(r.finalDistance) : undefined,
+          finalHeight:   r.finalHeight   ? Number(r.finalHeight)   : undefined,
+          resultSource:  'mejor_intento' as const,
+        }));
+    }
+
+    // 2. Fallback: leer directo según tipo (primera clasificación)
+    if (phaseType === PhaseType.COMBINED_DISTANCIA) {
+      const marks = await this.resolveDistanceMarks(prIds);
+      if (marks.length === 0) {
+        return prIds.map((id) => ({
+          phaseRegistrationId: id,
+          resultSource: 'iaaf_points' as const,
+        }));
+      }
+      return marks;
+    }
+
+    if (phaseType === PhaseType.COMBINED_ALTURA) {
+      const marks = await this.resolveHeightMarks(prIds);
+      if (marks.length === 0) {
+        return prIds.map((id) => ({
+          phaseRegistrationId: id,
+          resultSource: 'iaaf_points' as const,
+        }));
+      }
+      return marks;
+    }
+
+    // COMBINED_PISTA: leer desde athletics_section_entry (no athletics_result)
+    const entries = await this.sectionEntryRepo
+      .createQueryBuilder('se')
+      .where('se.phaseRegistrationId IN (:...prIds)', { prIds })
+      .andWhere('se.time IS NOT NULL')
+      .getMany();
+
+    const best = new Map<number, string>();
+    for (const e of entries) {
+      if (!e.time) continue;
+      const cur = best.get(e.phaseRegistrationId);
+      if (!cur || this.compareTime(e.time, cur) < 0) {
+        best.set(e.phaseRegistrationId, e.time);
+      }
+    }
+
+    if (best.size === 0) {
+      return prIds.map((id) => ({
+        phaseRegistrationId: id,
+        finalTime:      undefined,
+        finalDistance:  undefined,
+        finalHeight:    undefined,
+        finalIaafPoints: undefined,
+        resultSource:   'iaaf_points' as const,
+      }));
+    }
+
+    return Array.from(best.entries()).map(([phaseRegistrationId, finalTime]) => ({
+      phaseRegistrationId,
+      finalTime,
+      resultSource: 'mejor_serie' as const,
     }));
   }
+
 
   // ─────────────────────────────────────────────────────────────
   // Ordenar marcas y asignar rank_position con manejo de empates
@@ -478,4 +539,6 @@ export class AthleticsClassificationService {
     await this.classificationRepo.delete({ phaseId });
     return { phaseId, isFinalized: false };
   }
+
+  
 }
