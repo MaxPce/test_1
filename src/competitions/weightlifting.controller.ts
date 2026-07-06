@@ -16,6 +16,7 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { GenerateWeightliftingPhasesDto } from './dto/generate-weightlifting-phases.dto';
 
 
 @Controller('competitions/weightlifting')
@@ -61,5 +62,12 @@ export class WeightliftingController {
     @Body() dto: InitializeWeightliftingPhaseDto,
   ) {
     return this.weightliftingService.initializePhase(phaseId, dto.entries);
+  }
+
+  // POST /competitions/weightlifting/generate-phases
+  @Post('generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generatePhases(@Body() dto: GenerateWeightliftingPhasesDto) {
+    return this.weightliftingService.generatePhases(dto);
   }
 }

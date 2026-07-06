@@ -8,6 +8,9 @@ import { Phase } from './entities/phase.entity';
 import { Match } from './entities/match.entity';
 import { UpsertWeightliftingAttemptDto } from './dto/create-weightlifting-attempt.dto';
 import { MatchStatus } from '../common/enums';
+import { PhaseRegistration } from './entities/phase-registration.entity';
+import { PhaseType } from '../common/enums';
+import { GenerateWeightliftingPhasesDto } from './dto/generate-weightlifting-phases.dto';
 
 export interface WeightliftingAthleteResult {
   participation: Participation;
@@ -33,6 +36,8 @@ export class WeightliftingService {
     private readonly phaseRepo: Repository<Phase>,
     @InjectRepository(Match)
     private readonly matchRepo: Repository<Match>,
+    @InjectRepository(PhaseRegistration)
+    private readonly phaseRegistrationRepo: Repository<PhaseRegistration>,
   ) {}
 
   // ── Resultados de la fase ────────────────────────────────────────────────
@@ -187,6 +192,40 @@ export class WeightliftingService {
       message: 'Fase inicializada correctamente',
       participationsCreated: newEntries.length,
     };
+  }
+
+  // ── Generación automática de múltiples fases ─────────────────────────────
+  async generatePhases(
+    dto: GenerateWeightliftingPhasesDto,
+  ): Promise<{ created: number; phaseIds: number[] }> {
+    const phaseIds: number[] = [];
+
+    for (const group of dto.groups) {
+      if (group.registrationIds.length === 0) continue;
+
+      // 1. Crear la fase
+      const phase = this.phaseRepo.create({
+        eventCategoryId: dto.eventCategoryId,
+        name: group.name,
+        type: PhaseType.GRUPO,
+      });
+      const savedPhase = await this.phaseRepo.save(phase);
+      phaseIds.push(savedPhase.phaseId);
+
+      // 2. Pool de participantes en phase_registrations
+      const phaseRegs = group.registrationIds.map((registrationId) =>
+        this.phaseRegistrationRepo.create({
+          phaseId: savedPhase.phaseId,
+          registrationId,
+        }),
+      );
+      await this.phaseRegistrationRepo.save(phaseRegs);
+
+      // 3. Reutilizar initializePhase — crea el match único y guarda weightClass
+      await this.initializePhase(savedPhase.phaseId, group.entries);
+    }
+
+    return { created: phaseIds.length, phaseIds };
   }
 
   private getBestLift(attempts: WeightliftingAttempt[]): number | null {
