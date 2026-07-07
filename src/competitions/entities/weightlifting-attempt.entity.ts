@@ -10,7 +10,7 @@ import {
 } from 'typeorm';
 import { Participation } from './participation.entity';
 
-export type AttemptResult = 'valid' | 'invalid' | 'not_attempted';
+export type AttemptResult = 'valid' | 'invalid' | 'not_attempted' | 'retired';
 export type LiftType = 'snatch' | 'clean_and_jerk';
 
 @Entity('weightlifting_attempts')
@@ -50,7 +50,7 @@ export class WeightliftingAttempt {
   @Column({
     name: 'result',
     type: 'enum',
-    enum: ['valid', 'invalid', 'not_attempted'],
+    enum: ['valid', 'invalid', 'not_attempted', 'retired'],
     default: 'not_attempted',
     comment: 'Resultado del intento',
   })

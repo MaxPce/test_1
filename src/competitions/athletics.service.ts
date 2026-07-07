@@ -587,6 +587,7 @@ export class AthleticsService {
       wind: string | null;
       pointsAwarded: number;
       isRelay: boolean;
+      teamMemberNames: string | null;
     }> = await this.athleticsResultRepo.query(
       `SELECT
           ec.event_category_id                                  AS eventCategoryId,
@@ -610,7 +611,13 @@ export class AthleticsService {
           )                                                     AS wind,
           COALESCE(a.name, tm.name)                             AS athleteName,
           COALESCE(inst.name,   t_inst.name,   'N/A')           AS institutionName,
-          COALESCE(inst.abrev,  t_inst.abrev,  '')              AS institutionAbrev
+          COALESCE(inst.abrev,  t_inst.abrev,  '')              AS institutionAbrev,
+          (
+            SELECT GROUP_CONCAT(a2.name ORDER BY tm2.tm_id SEPARATOR '||')
+            FROM team_members tm2
+            INNER JOIN athletes a2 ON a2.athlete_id = tm2.athlete_id
+            WHERE tm2.team_id = tm.team_id
+          )                                                       AS teamMemberNames
         FROM athletics_phase_classification apc
           INNER JOIN phase_registrations pr ON pr.phase_registration_id = apc.phase_registration_id
           INNER JOIN phases ph              ON ph.phase_id = apc.phase_id
@@ -670,6 +677,11 @@ export class AthleticsService {
         grouped[cat][catId] = { eventName: cleanName, female: [], male: [] };
       }
 
+      const teamMembers =
+        row.isRelay && row.teamMemberNames
+          ? row.teamMemberNames.split('||').filter(Boolean)
+          : [];
+
       const entry = {
         position:        Number(row.rankPosition),
         athleteName:     row.athleteName ?? 'N/A',
@@ -680,8 +692,11 @@ export class AthleticsService {
           row.wind != null
             ? `${Number(row.wind) > 0 ? '+' : ''}${Number(row.wind).toFixed(1)}`
             : null,
-        points: Number(row.pointsAwarded),
+        points:      Number(row.pointsAwarded),
+        isRelay:     Boolean(row.isRelay),   
+        teamMembers,                          
       };
+
 
       if (gen === 'damas')        grouped[cat][catId].female.push(entry);
       else if (gen === 'varones') grouped[cat][catId].male.push(entry);

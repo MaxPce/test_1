@@ -12,6 +12,6 @@ export class UpsertWeightliftingAttemptDto {
   @Min(0)
   weightKg?: number | null;
 
-  @IsEnum(['valid', 'invalid', 'not_attempted'])
-  result: 'valid' | 'invalid' | 'not_attempted';
+  @IsEnum(['valid', 'invalid', 'not_attempted', 'retired'])
+  result: 'valid' | 'invalid' | 'not_attempted' | 'retired';
 }

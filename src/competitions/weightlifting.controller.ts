@@ -3,6 +3,7 @@ import {
   Get,
   Put,
   Post,
+  Delete,
   Param,
   Body,
   ParseIntPipe,
@@ -69,5 +70,14 @@ export class WeightliftingController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   async generatePhases(@Body() dto: GenerateWeightliftingPhasesDto) {
     return this.weightliftingService.generatePhases(dto);
+  }
+  // DELETE /competitions/weightlifting/phases/:phaseId/athletes/:registrationId
+  @Delete('phases/:phaseId/athletes/:registrationId')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async removeAthlete(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Param('registrationId', ParseIntPipe) registrationId: number,
+  ) {
+    return this.weightliftingService.removeAthleteFromPhase(phaseId, registrationId);
   }
 }

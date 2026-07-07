@@ -127,12 +127,47 @@ export class WeightliftingService {
       attempt = this.attemptRepo.create({ participationId });
     }
 
-    attempt.liftType = dto.liftType;
+    attempt.liftType     = dto.liftType;
     attempt.attemptNumber = dto.attemptNumber;
-    attempt.weightKg = dto.weightKg ?? null;
-    attempt.result = dto.result;
+    attempt.weightKg     = dto.weightKg ?? null;
+    attempt.result       = dto.result;
 
-    return this.attemptRepo.save(attempt);
+    await this.attemptRepo.save(attempt);
+
+    if (dto.result === 'retired') {
+      await this.propagateRetirement(
+        participationId,
+        dto.liftType,
+        dto.attemptNumber,
+      );
+    }
+
+    return attempt;
+  }
+
+  private async propagateRetirement(
+    participationId: number,
+    liftType: 'snatch' | 'clean_and_jerk',
+    fromAttempt: 1 | 2 | 3,
+  ): Promise<void> {
+    const remaining = ([1, 2, 3] as const).filter((n) => n > fromAttempt);
+
+    for (const num of remaining) {
+      let next = await this.attemptRepo.findOne({
+        where: { participationId, liftType, attemptNumber: num },
+      });
+
+      if (!next) {
+        next = this.attemptRepo.create({ participationId });
+      }
+
+      next.liftType      = liftType;
+      next.attemptNumber = num;
+      next.weightKg      = null;
+      next.result        = 'retired';
+
+      await this.attemptRepo.save(next);
+    }
   }
 
   // ── Inicializar fase con atletas y divisiones ────────────────────────────
@@ -245,5 +280,33 @@ export class WeightliftingService {
     const snatchGlobal = lastValidSnatch ? lastValidSnatch.attemptNumber : 99;
     const cnjGlobal = lastValidCnj ? lastValidCnj.attemptNumber + 3 : 99;
     return Math.max(snatchGlobal, cnjGlobal);
+  }
+
+  // ── Remover atleta de una fase ───────────────────────────────────────────────
+  async removeAthleteFromPhase(
+    phaseId: number,
+    registrationId: number,
+  ): Promise<{ message: string }> {
+    // 1. Buscar el match único de la fase
+    const match = await this.matchRepo.findOne({ where: { phaseId } });
+    if (!match) throw new NotFoundException(`Phase ${phaseId} no tiene match`);
+
+    // 2. Buscar la participation del atleta en ese match
+    const participation = await this.participationRepo.findOne({
+      where: { matchId: match.matchId, registrationId },
+    });
+    if (!participation)
+      throw new NotFoundException('El atleta no está en esta fase');
+
+    // 3. Borrar sus intentos primero (FK constraint)
+    await this.attemptRepo.delete({ participationId: participation.participationId });
+
+    // 4. Borrar la participation
+    await this.participationRepo.delete({ participationId: participation.participationId });
+
+    // 5. Borrar el phase_registration
+    await this.phaseRegistrationRepo.delete({ phaseId, registrationId });
+
+    return { message: 'Atleta removido de la fase correctamente' };
   }
 }
