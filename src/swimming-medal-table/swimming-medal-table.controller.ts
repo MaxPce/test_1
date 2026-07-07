@@ -7,7 +7,7 @@ import { Public } from '../common/decorators/public.decorator';
 export class SwimmingMedalTableController {
   constructor(private readonly service: SwimmingMedalTableService) {}
 
-  // GET /swimming-medal-table/external/223/local-sport/X/summary
+  // GET /swimming-medal-table/external/:externalEventId/local-sport/:localSportId/summary
   @Get('external/:externalEventId/local-sport/:localSportId/summary')
   @Public()
   getSummary(
@@ -15,5 +15,15 @@ export class SwimmingMedalTableController {
     @Param('localSportId',    ParseIntPipe) localSportId:    number,
   ) {
     return this.service.getMedalSummary(externalEventId, localSportId);
+  }
+
+  // GET /swimming-medal-table/external/:externalEventId/local-sport/:localSportId/results
+  @Get('external/:externalEventId/local-sport/:localSportId/results')
+  @Public()
+  getFullResults(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.service.getFullResults(externalEventId, localSportId);
   }
 }
