@@ -71,4 +71,15 @@ export class TaekwondoPoomsaeController {
   ) {
     return await this.poomsaeService.initializeGroupPhase(phaseId, body.registrationIds);
   }
+
+  @Post('generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generatePoomsaePhases(
+    @Body() body: {
+      eventCategoryId: number;
+      groups: { name: string; registrationIds: number[] }[];
+    },
+  ) {
+    return await this.poomsaeService.generatePoomsaePhases(body);
+  }
 }

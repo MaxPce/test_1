@@ -11,7 +11,7 @@ import { Phase } from './entities/phase.entity';
 import { Match } from './entities/match.entity';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 import { BracketService } from './bracket.service';
-import { MatchStatus } from '../common/enums';
+import { MatchStatus, PhaseType } from '../common/enums';
 
 @Injectable()
 export class TaekwondoPoomsaeService {
@@ -519,6 +519,30 @@ export class TaekwondoPoomsaeService {
     }
   }
 
-  
+  // ==================== GENERACIÓN BATCH DE FASES ====================
+
+  async generatePoomsaePhases(dto: {
+    eventCategoryId: number;
+    groups: { name: string; registrationIds: number[] }[];
+  }): Promise<{ created: number; phaseIds: number[] }> {
+    const phaseIds: number[] = [];
+
+    for (const group of dto.groups) {
+      if (group.registrationIds.length === 0) continue;
+
+      const phase = this.phaseRepository.create({
+        eventCategoryId: dto.eventCategoryId,
+        name: group.name,
+        type: PhaseType.GRUPO,  // ← era 'grupo' (string), ahora es el enum
+      });
+      const savedPhase = await this.phaseRepository.save(phase);
+      phaseIds.push(savedPhase.phaseId);
+
+      await this.initializeGroupPhase(savedPhase.phaseId, group.registrationIds);
+    }
+
+    return { created: phaseIds.length, phaseIds };
+  }
+    
 
 }

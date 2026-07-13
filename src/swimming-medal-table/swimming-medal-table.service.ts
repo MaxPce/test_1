@@ -286,7 +286,7 @@ export class SwimmingMedalTableService {
             ELSE 'Mixed'
             END,
             ' ',
-            ec.name
+            ph.name
         )                                                             AS eventName,
         cat.name                                                      AS categoryName,
         CASE cat.gender
@@ -295,17 +295,17 @@ export class SwimmingMedalTableService {
             ELSE 'Mixto'
         END                                                           AS gender,
         ph.is_relay                                                   AS isRelay,
-        ec.min_mark                                                   AS minMark,
+        NULL                                                          AS minMark,
         r.rank_position                                               AS rankPosition,
-        a.last_name                                                   AS athleteLastName,
-        a.first_name                                                  AS athleteFirstName,
+        NULL                                                          AS athleteLastName,
+        a.name                                                        AS athleteFirstName,
         tm.name                                                       AS teamName,
-        TIMESTAMPDIFF(YEAR, a.birth_date, CURDATE())                  AS age,
+        TIMESTAMPDIFF(YEAR, a.date_birth, CURDATE())                  AS age,
         COALESCE(inst.name, t_inst.name, 'N/A')                       AS institutionName,
-        COALESCE(inst.abbreviation, t_inst.abbreviation, NULL)        AS institutionAbbrev,
-        r.final_time                                                  AS finalTime,
+        COALESCE(inst.abrev, t_inst.abrev, NULL)                      AS institutionAbbrev,
+        r.time_value                                                  AS finalTime,
         r.notes                                                       AS notes,
-        COALESCE(r.is_excluded, 0)                                    AS isExcluded
+        NULL                                                          AS isExcluded
         FROM results r
         INNER JOIN phases ph
         ON ph.phase_id = r.phase_id
@@ -315,7 +315,6 @@ export class SwimmingMedalTableService {
         AND ec.external_event_id = ?
         INNER JOIN categories cat
         ON cat.category_id = ec.category_id
-        
         INNER JOIN sports s
         ON s.sport_id = cat.sport_id
         AND s.sport_id = ?
