@@ -523,26 +523,42 @@ export class TaekwondoPoomsaeService {
 
   async generatePoomsaePhases(dto: {
     eventCategoryId: number;
-    groups: { name: string; registrationIds: number[] }[];
+    groups: {
+      name: string;
+      type: 'grupo' | 'eliminacion';  
+      registrationIds: number[];
+    }[];
   }): Promise<{ created: number; phaseIds: number[] }> {
     const phaseIds: number[] = [];
 
     for (const group of dto.groups) {
       if (group.registrationIds.length === 0) continue;
 
+      const phaseType =
+        group.type === 'eliminacion' ? PhaseType.ELIMINACION : PhaseType.GRUPO;
+
       const phase = this.phaseRepository.create({
         eventCategoryId: dto.eventCategoryId,
         name: group.name,
-        type: PhaseType.GRUPO,  // ← era 'grupo' (string), ahora es el enum
+        type: phaseType,
       });
       const savedPhase = await this.phaseRepository.save(phase);
       phaseIds.push(savedPhase.phaseId);
 
-      await this.initializeGroupPhase(savedPhase.phaseId, group.registrationIds);
+      if (phaseType === PhaseType.GRUPO) {
+        await this.initializeGroupPhase(savedPhase.phaseId, group.registrationIds);
+      } else {
+        await this.bracketService.generateCompleteBracket({
+          phaseId: savedPhase.phaseId,
+          registrationIds: group.registrationIds,
+          includeThirdPlace: false,
+        });
+      }
     }
 
     return { created: phaseIds.length, phaseIds };
   }
+
     
 
 }

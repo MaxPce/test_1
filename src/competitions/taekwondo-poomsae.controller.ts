@@ -77,7 +77,11 @@ export class TaekwondoPoomsaeController {
   async generatePoomsaePhases(
     @Body() body: {
       eventCategoryId: number;
-      groups: { name: string; registrationIds: number[] }[];
+      groups: {
+        name: string;
+        type: 'grupo' | 'eliminacion';  
+        registrationIds: number[];
+      }[];
     },
   ) {
     return await this.poomsaeService.generatePoomsaePhases(body);
