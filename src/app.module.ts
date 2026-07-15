@@ -16,6 +16,11 @@ import { OperatorPermissionsModule } from './operator-permissions/operator-permi
 import { ScoreTablesModule } from './score-tables/score-tables.module';
 import { JudoMedalTableModule } from './judo-medal-table/judo-medal-table.module';
 import { SwimmingMedalTableModule } from './swimming-medal-table/swimming-medal-table.module';
+import { TaekwondoKyoruguiMedalTableModule } from './taekwondo-kyorugui-medal-table/taekwondo-kyorugui-medal-table.module';
+import { KarateMedalTableModule } from './karate-medal-table/karate-medal-table.module';
+import { WushuMedalTableModule } from './wushu-medal-table/wushu-medal-table.module';
+import { WeightliftingMedalTableModule } from './weightlifting-medal-table/weightlifting-medal-table.module';
+
 
 @Module({
   imports: [
@@ -71,6 +76,10 @@ import { SwimmingMedalTableModule } from './swimming-medal-table/swimming-medal-
     ScoreTablesModule,
     JudoMedalTableModule,
     SwimmingMedalTableModule,
+    TaekwondoKyoruguiMedalTableModule,
+    KarateMedalTableModule,
+    WushuMedalTableModule,
+    WeightliftingMedalTableModule,
   ],
   providers: [
     {

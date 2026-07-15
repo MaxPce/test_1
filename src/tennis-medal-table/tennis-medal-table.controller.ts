@@ -1,13 +1,14 @@
-// src/judo-medal-table/judo-medal-table.controller.ts
+// src/tennis-medal-table/tennis-medal-table.controller.ts
 import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
-import { JudoMedalTableService } from './judo-medal-table.service';
+import { TennisMedalTableService } from './tennis-medal-table.service';
 import { Public } from '../common/decorators/public.decorator';
 
-@Controller('judo-medal-table')
-export class JudoMedalTableController {
-  constructor(private readonly service: JudoMedalTableService) {}
+@Controller('tennis-medal-table')
+export class TennisMedalTableController {
+  constructor(private readonly service: TennisMedalTableService) {}
 
-  // GET /judo-medal-table/external/223/local-sport/5/summary
+  // GET /tennis-medal-table/external/223/local-sport/3/summary   ← Tenis de campo
+  // GET /tennis-medal-table/external/223/local-sport/8/summary   ← Tenis de mesa
   @Get('external/:externalEventId/local-sport/:localSportId/summary')
   @Public()
   getSummary(
@@ -17,7 +18,7 @@ export class JudoMedalTableController {
     return this.service.getMedalSummary(externalEventId, localSportId);
   }
 
-  // GET /judo-medal-table/external/223/local-sport/5/institution/45/detail
+  // GET /tennis-medal-table/external/223/local-sport/3/institution/45/detail
   @Get('external/:externalEventId/local-sport/:localSportId/institution/:institutionId/detail')
   @Public()
   getInstitutionDetail(

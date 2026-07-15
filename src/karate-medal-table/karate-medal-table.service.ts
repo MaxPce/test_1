@@ -1,26 +1,20 @@
-// src/judo-medal-table/judo-medal-table.service.ts
+// src/karate-medal-table/karate-medal-table.service.ts
 import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import {
-  JudoMedalRow,
-  JudoMedalSummaryResponse,
+  KarateMedalRow,
+  KarateMedalSummaryResponse,
 } from './dto/medal-summary-response.dto';
-import { JudoMedalDetailResponse, JudoMedalDetailRow } from './dto/medal-detail-response.dto';
+import { KarateMedalDetailResponse, KarateMedalDetailRow } from './dto/medal-detail-response.dto';
 
 @Injectable()
-export class JudoMedalTableService {
+export class KarateMedalTableService {
   constructor(private readonly dataSource: DataSource) {}
 
   async getMedalSummary(
     externalEventId: number,
     localSportId: number,
-  ): Promise<JudoMedalSummaryResponse> {
-    // ─────────────────────────────────────────────────────────────────────
-    // El puesto manual (manual_rank_position) es la única fuente de verdad.
-    // Judo es el único deporte que también otorga medallas de 5° y 7°
-    // puesto (sistema de repesca), por eso mantiene esos dos campos extra
-    // que los demás deportes no tienen.
-    // ─────────────────────────────────────────────────────────────────────
+  ): Promise<KarateMedalSummaryResponse> {
     const rows: Array<{
       phaseId: number;
       registrationId: number;
@@ -83,9 +77,6 @@ export class JudoMedalTableService {
       [externalEventId, localSportId],
     );
 
-    // ─────────────────────────────────────────────────────────────────────
-    // Acumulador con los 5 campos que exige JudoMedalRow
-    // ─────────────────────────────────────────────────────────────────────
     const accumulator = new Map<
       number,
       {
@@ -95,8 +86,6 @@ export class JudoMedalTableService {
         gold: number;
         silver: number;
         bronze: number;
-        fifth: number;
-        seventh: number;
       }
     >();
 
@@ -113,8 +102,6 @@ export class JudoMedalTableService {
           gold: 0,
           silver: 0,
           bronze: 0,
-          fifth: 0,
-          seventh: 0,
         });
       }
       return accumulator.get(id)!;
@@ -128,7 +115,7 @@ export class JudoMedalTableService {
 
     for (const phaseRows of rowsByPhase.values()) {
       const count = Number(phaseRows[0]?.participantCount ?? 0);
-      if (count < 2) continue; // R1: sin medalla
+      if (count < 2) continue;
 
       for (const row of phaseRows) {
         const pos  = Number(row.position);
@@ -138,13 +125,9 @@ export class JudoMedalTableService {
           row.institutionLogoUrl,
         );
 
-        // Posición manual manda directamente, sin exigir victorias
-        // y sin tope de empates (soporta 2+ personas en el mismo puesto).
-        if (pos === 1) inst.gold    += 1;
+        if (pos === 1) inst.gold   += 1;
         else if (pos === 2) inst.silver += 1;
-        else if (pos === 3) inst.bronze  += 1;
-        else if (pos === 5) inst.fifth   += 1;
-        else if (pos === 7) inst.seventh += 1;
+        else if (pos === 3) inst.bronze += 1;
       }
     }
 
@@ -155,7 +138,7 @@ export class JudoMedalTableService {
     });
 
     let currentRank = 1;
-    const general: JudoMedalRow[] = sorted.map((row, idx) => {
+    const general: KarateMedalRow[] = sorted.map((row, idx) => {
       if (idx > 0) {
         const prev = sorted[idx - 1];
         const tied =
@@ -169,11 +152,12 @@ export class JudoMedalTableService {
 
     return { general };
   }
+
   async getMedalDetailByInstitution(
     externalEventId: number,
     localSportId: number,
     institutionId: number,
-  ): Promise<JudoMedalDetailResponse> {
+  ): Promise<KarateMedalDetailResponse> {
     const rows: Array<{
       phaseId: number;
       phaseName: string;
@@ -235,16 +219,12 @@ export class JudoMedalTableService {
       [externalEventId, localSportId, institutionId],
     );
 
-    const athletes: JudoMedalDetailRow[] = rows
-      .filter((row) => Number(row.participantCount) >= 2) // aplica R1
+    const athletes: KarateMedalDetailRow[] = rows
+      .filter((row) => Number(row.participantCount) >= 2)
       .map((row) => {
         const pos = Number(row.position);
-        const medalType: JudoMedalDetailRow['medalType'] =
-          pos === 1 ? 'gold' :
-          pos === 2 ? 'silver' :
-          pos === 3 ? 'bronze' :
-          pos === 5 ? 'fifth' : 'seventh';
-
+        const medalType: KarateMedalDetailRow['medalType'] =
+          pos === 1 ? 'gold' : pos === 2 ? 'silver' : 'bronze';
         return {
           registrationId: row.registrationId,
           athleteName: row.athleteName,
@@ -254,7 +234,7 @@ export class JudoMedalTableService {
           medalType,
         };
       })
-      .filter((row) => ['gold', 'silver', 'bronze', 'fifth', 'seventh'].includes(row.medalType));
+      .filter((row) => [1, 2, 3].includes(row.position));
 
     return {
       institutionId,
