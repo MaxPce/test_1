@@ -28,6 +28,16 @@ export class ShootingController {
     return this.shootingService.getPhaseScores(phaseId);
   }
 
+  @Post('event-categories/:eventCategoryId/generate-phases')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async generatePhases(
+    @Param('eventCategoryId', ParseIntPipe) eventCategoryId: number,
+    @Body() body: { phases: { name: string; registrationIds: number[] }[] },
+  ) {
+    return this.shootingService.generatePhases(eventCategoryId, body.phases);
+  }
+  
+
   // PATCH /competitions/shooting/participations/:participationId/score
   @Patch('participations/:participationId/score')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
@@ -62,4 +72,6 @@ export class ShootingController {
   ) {
     return this.shootingService.initializeGroupPhase(phaseId, body.registrationIds);
   }
+
+  
 }

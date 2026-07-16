@@ -7,6 +7,7 @@ import { Phase } from './entities/phase.entity';
 import { UpdateShootingScoreDto } from './dto/update-shooting-score.dto';
 import { Match } from './entities/match.entity';      
 import { MatchStatus } from '../common/enums'; 
+import { PhaseType } from '../common/enums';
 
 @Injectable()
 export class ShootingService {
@@ -153,6 +154,32 @@ export class ShootingService {
 
     return results;
   }
+
+  async generatePhases(
+    eventCategoryId: number,
+    phases: { name: string; registrationIds: number[] }[],
+  ): Promise<{ phaseName: string; matchId: number; participationsCreated: number; participationsSkipped: number }[]> {
+    
+    const results: { phaseName: string; matchId: number; participationsCreated: number; participationsSkipped: number }[] = [];
+
+    for (const phaseData of phases) {
+      const phase = this.phaseRepository.create({
+        eventCategoryId,
+        name: phaseData.name,
+        type: PhaseType.GRUPO,  // ← usar el enum, no el string
+      });
+      await this.phaseRepository.save(phase);
+
+      const result = await this.initializeGroupPhase(
+        phase.phaseId,
+        phaseData.registrationIds,
+      );
+      results.push({ phaseName: phaseData.name, ...result });
+    }
+    
+    return results;
+  }
+
 
   async getParticipationScore(participationId: number): Promise<ShootingScore> {
     const score = await this.shootingScoreRepository.findOne({
