@@ -65,6 +65,25 @@ import { WeightliftingMedalTableModule } from './weightlifting-medal-table/weigh
       }),
     }),
 
+    TypeOrmModule.forRootAsync({
+      name: 'haymaster',
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'mysql',
+        host: config.get<string>('HAYMASTER_DB_HOST'),
+        port: Number(config.get<string>('HAYMASTER_DB_PORT')),
+        username: config.get<string>('HAYMASTER_DB_USER'),
+        password: config.get<string>('HAYMASTER_DB_PASS'),
+        database: config.get<string>('HAYMASTER_DB_NAME'),
+        entities: [__dirname + '/sismaster/entities/*.entity{.ts,.js}'],
+        // ↑ Reutiliza las MISMAS entidades, solo cambia el schema
+        synchronize: false,
+        logging: false,
+        charset: 'utf8mb4',
+      }),
+    }),
+
+
     AuthModule,
     SportsModule,
     InstitutionsModule,
