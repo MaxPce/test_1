@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, IsNull, Not } from 'typeorm';
 import { Event, EventCategory, Registration } from './entities';
 import { SismasterService } from '../sismaster/sismaster.service';
+import { HaymasterService } from '../haymaster/haymaster.service';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
 import { Category } from '../sports/entities/category.entity';
@@ -56,6 +57,7 @@ export class EventsService {
 
     private dataSource: DataSource,
     private sismasterService: SismasterService,
+    private haymasterService: HaymasterService, 
   ) {}
 
   // ==================== EVENTS ====================
@@ -1115,6 +1117,115 @@ export class EventsService {
       });
     }
     return this.featuredAthleteRepository.save(entity);
+  }
+
+  // ==================== HAYMASTER INTEGRATION ====================
+
+  /**
+   * Obtener categorías asignadas a un evento de Haymaster
+   * (misma lógica que findEventCategoriesByExternalEventId pero filtra por haymasterEventId)
+   */
+  async findEventCategoriesByHaymasterEventId(
+    haymasterEventId: number,
+  ): Promise<EventCategory[]> {
+    return this.eventCategoryRepository
+      .createQueryBuilder('eventCategory')
+      .leftJoinAndSelect('eventCategory.event', 'event')
+      .leftJoinAndSelect('eventCategory.category', 'category')
+      .leftJoinAndSelect('category.sport', 'sport')
+      .leftJoinAndSelect('eventCategory.registrations', 'registrations')
+      .leftJoinAndSelect('registrations.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
+      .leftJoinAndSelect('registrations.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .where('eventCategory.haymasterEventId = :haymasterEventId', { haymasterEventId })
+      .andWhere('registrations.deletedAt IS NULL')
+      .getMany();
+  }
+
+  /**
+   * Registrar todas las categorías de un evento desde Haymaster
+   * POST /events/haymaster/:id/register-categories
+   */
+  async registerHaymasterEventCategories(
+    haymasterEventId: number,
+  ): Promise<RegisterEventCategoriesResponseDto> {
+    const sports = await this.sportRepository.find({
+      where: {
+        sismasterSportId: Not(IsNull()),
+        deletedAt: IsNull(),
+      },
+    });
+
+    let created = 0;
+    let skipped = 0;
+    let alreadyExists = 0;
+
+    for (const sport of sports) {
+      let params;
+      try {
+        params = await this.haymasterService.getSportParamsByLocalSportId(
+          sport.sportId,
+          haymasterEventId,
+        );
+      } catch {
+        continue;
+      }
+
+      if (!params?.length) continue;
+
+      for (const param of params) {
+        const localCategory = await this.categoryRepository.findOne({
+          where: {
+            sismasterIdParam: param.idparam,
+            deletedAt: IsNull(),
+          },
+        });
+
+        if (!localCategory) {
+          this.logger.warn(`Sin mapeo local → sismasterIdParam=${param.idparam} "${param.name}"`);
+          skipped++;
+          continue;
+        }
+
+        const existing = await this.eventCategoryRepository.findOne({
+          where: {
+            haymasterEventId,
+            categoryId: localCategory.categoryId,
+          },
+        });
+
+        if (existing) {
+          alreadyExists++;
+          continue;
+        }
+
+        await this.eventCategoryRepository.save(
+          this.eventCategoryRepository.create({
+            eventId: null,
+            categoryId: localCategory.categoryId,
+            status: 'pendiente',
+            haymasterEventId,
+            externalSportId: param.idsport,
+          }),
+        );
+
+        created++;
+      }
+    }
+
+    this.logger.log(
+      `registerHaymasterEventCategories → haymasterEvent=${haymasterEventId} | created=${created} skipped=${skipped} alreadyExists=${alreadyExists}`,
+    );
+
+    return {
+      localEventId: null,
+      sismasterEventId: haymasterEventId,  
+      sportsProcessed: sports.length,
+      created,
+      skipped,
+      alreadyExists,
+    };
   }
 
 

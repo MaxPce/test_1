@@ -7,6 +7,7 @@ import { UploadService } from '../common/services/upload.service';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Institution } from '../institutions/entities/institution.entity';
 import { SismasterModule } from '../sismaster/sismaster.module';
+import { HaymasterModule } from '../haymaster/haymaster.module';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { Company } from '../companies/entities/company.entity';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
@@ -26,6 +27,7 @@ import { Category } from '../sports/entities/category.entity';
       Sport,
     ]),
     SismasterModule,
+    HaymasterModule,
   ],
   controllers: [EventsController],
   providers: [EventsService, UploadService, RegistrationEnrichmentService],

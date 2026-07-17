@@ -315,7 +315,30 @@ export class EventsController {
     return this.eventsService.registerEventCategories(sismasterEventId);
   }
 
-  //ss
+  // ==================== HAYMASTER INTEGRATION ====================
+
+  /**
+   * GET /events/haymaster/:externalEventId/categories
+   * Obtener categorías de un evento de Haymaster
+   */
+  @Get('haymaster/:externalEventId/categories')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
+  findEventCategoriesByHaymasterEvent(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+  ) {
+    return this.eventsService.findEventCategoriesByHaymasterEventId(externalEventId);
+  }
+
+  /**
+   * POST /events/haymaster/:haymasterEventId/register-categories
+   */
+  @Post('haymaster/:haymasterEventId/register-categories')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async registerHaymasterEventCategories(
+    @Param('haymasterEventId', ParseIntPipe) haymasterEventId: number,
+  ) {
+    return this.eventsService.registerHaymasterEventCategories(haymasterEventId);
+  }
 
   // ==================== FEATURED ATHLETES ====================
 

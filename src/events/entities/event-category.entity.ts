@@ -15,6 +15,7 @@ import { Registration } from './registration.entity';
 @Index(['eventId'])
 @Index(['categoryId'])
 @Index(['externalEventId'])
+@Index(['haymasterEventId'])   // ← NUEVO índice
 export class EventCategory {
   @PrimaryGeneratedColumn({ name: 'event_category_id' })
   eventCategoryId: number;
@@ -29,16 +30,23 @@ export class EventCategory {
     name: 'external_event_id',
     type: 'int',
     nullable: true,
-    comment: 'ID del evento en sismaster.events (para inscripción masiva)',
+    comment: 'ID del evento en sismaster.events',
   })
   externalEventId: number | null;
+
+  @Column({
+    name: 'haymaster_event_id',     // ← NUEVO
+    type: 'int',
+    nullable: true,
+    comment: 'ID del evento en haymaster.events',
+  })
+  haymasterEventId: number | null;
 
   @Column({
     name: 'external_sport_id',
     type: 'int',
     nullable: true,
-    comment:
-      'DEPRECADO: ID del deporte en sismaster.sport (ya no se usa para inscripción)',
+    comment: 'DEPRECADO: ID del deporte en sismaster.sport',
   })
   externalSportId: number | null;
 
