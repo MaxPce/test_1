@@ -20,6 +20,7 @@ import { TaekwondoKyoruguiMedalTableModule } from './taekwondo-kyorugui-medal-ta
 import { KarateMedalTableModule } from './karate-medal-table/karate-medal-table.module';
 import { WushuMedalTableModule } from './wushu-medal-table/wushu-medal-table.module';
 import { WeightliftingMedalTableModule } from './weightlifting-medal-table/weightlifting-medal-table.module';
+import { HaymasterModule } from './haymaster/haymaster.module';
 
 
 @Module({
@@ -91,6 +92,7 @@ import { WeightliftingMedalTableModule } from './weightlifting-medal-table/weigh
     CompetitionsModule,
     ResultsModule,
     CompaniesModule,
+    HaymasterModule,
     OperatorPermissionsModule,
     ScoreTablesModule,
     JudoMedalTableModule,

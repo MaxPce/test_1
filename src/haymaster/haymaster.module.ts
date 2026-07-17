@@ -4,10 +4,10 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { HaymasterService } from './haymaster.service';
 import { HaymasterController } from './haymaster.controller';
 import { HaymasterCacheService } from './haymaster-cache.service';
+import { HaymasterEvent } from './entities/haymaster-event.entity';
 
 import {
-  SismasterEvent,
-  SismasterPerson,
+  SismasterPerson,          // ← SismasterEvent removido de aquí
   SismasterInstitution,
   SismasterSport,
   SismasterAccreditation,
@@ -15,7 +15,6 @@ import {
   SismasterSportParam,
 } from '../sismaster/entities';
 
-import { Event } from '../events/entities/event.entity';
 import { EventCategory } from '../events/entities/event-category.entity';
 import { Registration } from '../events/entities/registration.entity';
 import { Phase } from '../competitions/entities/phase.entity';
@@ -36,10 +35,9 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
 
 @Module({
   imports: [
-    // Entidades de haymaster — mismas tablas, diferente conexión
     TypeOrmModule.forFeature(
       [
-        SismasterEvent,
+        HaymasterEvent,        // ← solo HaymasterEvent, sin SismasterEvent
         SismasterPerson,
         SismasterInstitution,
         SismasterSport,
@@ -47,9 +45,8 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
         SismasterEventSport,
         SismasterSportParam,
       ],
-      'haymaster',   // ← la única diferencia respecto a sismaster.module.ts
+      'haymaster',
     ),
-    // Entidades locales (conexión default)
     TypeOrmModule.forFeature([
       EventCategory,
       Registration,

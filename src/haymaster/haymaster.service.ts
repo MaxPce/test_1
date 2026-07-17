@@ -12,6 +12,7 @@ import {
   SismasterSportParam,
 } from '../sismaster/entities';
 import { EventSismasterDto } from '../sismaster/dto/event-sismaster.dto';
+import { HaymasterEvent } from './entities/haymaster-event.entity';
 import { AthleteSismasterDto } from '../sismaster/dto/athlete-sismaster.dto';
 import { AthleteByCategoryDto } from '../sismaster/dto/athlete-by-category.dto';
 import { AccreditationFilters } from '../sismaster/interfaces/sismaster-filters.interface';
@@ -23,8 +24,8 @@ export class HaymasterService {
   private readonly logger = new Logger(HaymasterService.name);
 
   constructor(
-    @InjectRepository(SismasterEvent, 'haymaster')           // ← 'haymaster'
-    private readonly eventRepo: Repository<SismasterEvent>,
+    @InjectRepository(HaymasterEvent, 'haymaster')           
+    private readonly eventRepo: Repository<HaymasterEvent>,
 
     @InjectRepository(SismasterPerson, 'haymaster')
     private readonly personRepo: Repository<SismasterPerson>,
@@ -53,15 +54,18 @@ export class HaymasterService {
     if (!event) {
       throw new NotFoundException(`Evento ${idevent} no encontrado en Haymaster`);
     }
-    return event;
+    return event as unknown as EventSismasterDto; 
   }
 
+
   async getAllEvents(): Promise<EventSismasterDto[]> {
-    return await this.eventRepo.find({
-      where: { mstatus: 1 },
+    const events = await this.eventRepo.find({
       order: { startdate: 'DESC' },
     });
+    return events as unknown as EventSismasterDto[];  // ← cast necesario
   }
+
+
 
   async getSportById(idsport: number) {
     const sport = await this.sportRepo.findOne({ where: { idsport } });
