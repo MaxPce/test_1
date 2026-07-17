@@ -76,8 +76,10 @@ import { HaymasterModule } from './haymaster/haymaster.module';
         username: config.get<string>('HAYMASTER_DB_USER'),
         password: config.get<string>('HAYMASTER_DB_PASS'),
         database: config.get<string>('HAYMASTER_DB_NAME'),
-        entities: [__dirname + '/sismaster/entities/*.entity{.ts,.js}'],
-        // ↑ Reutiliza las MISMAS entidades, solo cambia el schema
+        entities: [
+          __dirname + '/sismaster/entities/*.entity{.ts,.js}',
+          __dirname + '/haymaster/entities/*.entity{.ts,.js}', 
+        ],
         synchronize: false,
         logging: false,
         charset: 'utf8mb4',
