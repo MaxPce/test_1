@@ -303,6 +303,12 @@ export class EventsController {
     return this.eventsService.bulkRegisterFromSismaster(bulkDto);
   }
 
+  @Post('registrations/bulk-haymaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async bulkRegisterFromHaymaster(@Body() bulkDto: BulkRegisterSismasterDto) {
+    return this.eventsService.bulkRegisterFromHaymaster(bulkDto);
+  }
+
   /**
    * POST /events/:id/register-categories
    * Body: { sismasterEventId: number }

@@ -133,7 +133,7 @@ export class HaymasterService {
         'NULL AS photo',
         'MAX(a.idinstitution) AS idinstitution',
         'MAX(a.idevent) AS idevent',
-        'MAX(i.name) AS institutionName',
+        'MAX(i.business) AS institutionName',
         'MAX(i.abrev) AS institutionAbrev',
         'MAX(i.avatar) AS institutionLogo',
       ])

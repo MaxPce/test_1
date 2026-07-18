@@ -952,6 +952,143 @@ export class EventsService {
     }
   }
 
+  async bulkRegisterFromHaymaster(
+    bulkDto: BulkRegisterSismasterDto,  
+  ): Promise<Registration[]> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Validar eventCategory — buscar por haymasterEventId
+      const eventCategory = await this.eventCategoryRepository.findOne({
+        where: { eventCategoryId: bulkDto.eventCategoryId },
+        relations: ['category'],
+      });
+
+      if (!eventCategory) {
+        throw new NotFoundException(
+          `EventCategory ${bulkDto.eventCategoryId} no encontrada`,
+        );
+      }
+
+      if (!eventCategory.haymasterEventId) {
+        throw new BadRequestException(
+          'EventCategory no tiene haymasterEventId configurado',
+        );
+      }
+
+      // 2. Obtener atletas acreditados de HAYMASTER (no Sismaster)
+      const allAccreditedAthletes = await this.haymasterService.getAccreditedAthletes({
+        idevent: eventCategory.haymasterEventId,
+      });
+
+      const athletesMap = new Map(
+        allAccreditedAthletes.map((athlete) => [athlete.idperson, athlete])
+      );
+
+      const registrationIds: number[] = [];
+      const errors: string[] = [];
+
+      for (const externalAthleteId of bulkDto.external_athlete_ids) {
+        try {
+          const haymasterAthlete = athletesMap.get(externalAthleteId);
+
+          if (!haymasterAthlete) {
+            errors.push(`Atleta ${externalAthleteId} no encontrado en Haymaster`);
+            continue;
+          }
+
+          // Buscar o crear institución
+          let localInstitution = await this.institutionRepository.findOne({
+            where: { abrev: haymasterAthlete.institutionAbrev },
+          });
+
+          if (!localInstitution) {
+            localInstitution = this.institutionRepository.create({
+              name: haymasterAthlete.institutionName,
+              abrev: haymasterAthlete.institutionAbrev,
+              logoUrl: haymasterAthlete.institutionLogo,
+            });
+            localInstitution = await queryRunner.manager.save(localInstitution);
+          }
+
+          // Buscar o crear atleta
+          let localAthlete = await this.athleteRepository.findOne({
+            where: { docNumber: haymasterAthlete.docnumber },
+          });
+
+          if (!localAthlete) {
+            const fullName = `${haymasterAthlete.firstname} ${haymasterAthlete.lastname} ${haymasterAthlete.surname || ''}`.trim();
+            localAthlete = this.athleteRepository.create({
+              name: fullName,
+              dateBirth: haymasterAthlete.birthday,
+              gender: haymasterAthlete.gender === 'M' ? Gender.MASCULINO : Gender.FEMENINO,
+              nationality: haymasterAthlete.country || 'PER',
+              docNumber: haymasterAthlete.docnumber,
+              photoUrl: haymasterAthlete.photo || null,
+              institutionId: localInstitution.institutionId,
+            });
+            localAthlete = await queryRunner.manager.save(localAthlete);
+          } else {
+            const fullName = `${haymasterAthlete.firstname} ${haymasterAthlete.lastname} ${haymasterAthlete.surname || ''}`.trim();
+            localAthlete.name = fullName;
+            localAthlete.institutionId = localInstitution.institutionId;
+            if (haymasterAthlete.photo) localAthlete.photoUrl = haymasterAthlete.photo;
+            await queryRunner.manager.save(localAthlete);
+          }
+
+          // Crear o actualizar registration
+          const existingRegistration = await this.registrationRepository.findOne({
+            where: {
+              eventCategoryId: bulkDto.eventCategoryId,
+              athleteId: localAthlete.athleteId,
+            },
+          });
+
+          if (existingRegistration) {
+            existingRegistration.externalAthleteId = externalAthleteId;
+            existingRegistration.externalInstitutionId = haymasterAthlete.idinstitution;
+            await queryRunner.manager.save(existingRegistration);
+            registrationIds.push(existingRegistration.registrationId);
+          } else {
+            const registration = this.registrationRepository.create({
+              eventCategoryId: bulkDto.eventCategoryId,
+              athleteId: localAthlete.athleteId,
+              externalAthleteId: externalAthleteId,
+              externalInstitutionId: haymasterAthlete.idinstitution,
+            });
+            const saved = await queryRunner.manager.save(registration);
+            registrationIds.push(saved.registrationId);
+          }
+        } catch (error) {
+          this.logger.error(`Error con atleta ${externalAthleteId}:`, error.message);
+          errors.push(`Error con atleta ${externalAthleteId}: ${error.message}`);
+        }
+      }
+
+      await queryRunner.commitTransaction();
+
+      if (registrationIds.length === 0) return [];
+
+      return this.registrationRepository
+        .createQueryBuilder('registration')
+        .leftJoinAndSelect('registration.athlete', 'athlete')
+        .leftJoinAndSelect('athlete.institution', 'institution')
+        .leftJoinAndSelect('registration.eventCategory', 'eventCategory')
+        .leftJoinAndSelect('eventCategory.category', 'category')
+        .whereInIds(registrationIds)
+        .getMany();
+
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error('Error en bulkRegisterFromHaymaster:', error.message);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   /**
    * Registrar todas las categorías de un evento desde Sismaster
    * POST /events/:id/register-categories
