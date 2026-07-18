@@ -96,6 +96,14 @@ export class Category {
   })
   sismasterIdSport: number | null;
 
+  @Column({
+    name: 'haymaster_idparam',
+    type: 'int',
+    nullable: true,
+    comment: 'idparam en haymaster.sportparams (idcompany=1)',
+  })
+  haymasterIdParam: number | null;
+
   @ManyToOne(() => Sport, (sport) => sport.categories)
   @JoinColumn({ name: 'sport_id' })
   sport: Sport;

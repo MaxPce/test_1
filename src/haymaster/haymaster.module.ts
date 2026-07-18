@@ -32,6 +32,7 @@ import {
 } from 'src/competitions/entities';
 import { AthleticsSection } from 'src/competitions/entities/athletics-section.entity';
 import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-section-entry.entity';
+import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
         SismasterAccreditation,
         SismasterEventSport,
         SismasterSportParam,
+        HaymasterSportParam,
       ],
       'haymaster',
     ),

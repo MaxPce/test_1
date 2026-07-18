@@ -18,6 +18,9 @@ import { AthleteByCategoryDto } from '../sismaster/dto/athlete-by-category.dto';
 import { AccreditationFilters } from '../sismaster/interfaces/sismaster-filters.interface';
 import { toSismasterUrl } from '../sismaster/constants/sismaster.constants';
 import { SportParamDto } from '../sismaster/dto/sport-param.dto';
+import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
+
+const HAYMASTER_IDCOMPANY = 1;
 
 @Injectable()
 export class HaymasterService {
@@ -42,8 +45,8 @@ export class HaymasterService {
     @InjectRepository(SismasterEventSport, 'haymaster')
     private readonly eventSportRepo: Repository<SismasterEventSport>,
 
-    @InjectRepository(SismasterSportParam, 'haymaster')
-    private readonly sportParamRepo: Repository<SismasterSportParam>,
+    @InjectRepository(HaymasterSportParam, 'haymaster')
+    private readonly sportParamRepo: Repository<HaymasterSportParam>,
 
     @InjectDataSource()
     private readonly localDataSource: DataSource,
@@ -292,9 +295,11 @@ export class HaymasterService {
       .createQueryBuilder('sp')
       .select(['sp.idparam', 'sp.name', 'sp.abrev', 'sp.idsport', 'sp.idfather', 'sp.code', 'sp.isleaf'])
       .where('sp.idsport = :idsport', { idsport })
+      .andWhere('sp.idcompany = :idcompany', { idcompany: HAYMASTER_IDCOMPANY })
       .orderBy('sp.name', 'ASC')
       .getMany();
   }
+
 
   async getAthletesByCategory(idevent: number, idsport: number, idparam: number): Promise<AthleteByCategoryDto[]> {
       const results = await this.accreditationRepo.query(`
@@ -313,7 +318,10 @@ export class HaymasterService {
         INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
         INNER JOIN institution i ON i.idinstitution = a.idinstitution
         INNER JOIN accreditation_test atest ON atest.idacreditation = a.idacreditation AND atest.mstatus = 1
-        INNER JOIN sport_params sp ON sp.code = atest.idtest AND sp.idsport = ? AND sp.idparam = ?
+        INNER JOIN sport_params sp ON sp.code = atest.idtest
+          AND sp.idsport = ?
+          AND sp.idparam = ?
+          AND sp.idcompany = ${HAYMASTER_IDCOMPANY}
         WHERE a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
         ORDER BY p.lastname ASC, p.firstname ASC
       `, [idsport, idevent, idsport, idparam, idsport, idevent]);
@@ -339,13 +347,19 @@ export class HaymasterService {
     const param = await this.sportParamRepo
       .createQueryBuilder('sp')
       .where('sp.idsport = :idsport', { idsport: sissportId })
+      .andWhere('sp.idcompany = :idcompany', { idcompany: HAYMASTER_IDCOMPANY })
       .andWhere('LOWER(TRIM(sp.name)) = LOWER(TRIM(:name))', { name: categoryName })
       .getOne();
+
     if (!param) return [];
     return this.getAthletesByCategory(sismasterEventId, sissportId, param.idparam);
   }
 
-  async getAthletesByCategoryLocal(sismasterEventId: number, localSportId: number, idparam: number): Promise<AthleteByCategoryDto[]> {
+  async getAthletesByCategoryLocal(
+    sismasterEventId: number,
+    localSportId: number,
+    idparam: number,   // ← este ya llega como haymaster_idparam desde el front
+  ): Promise<AthleteByCategoryDto[]> {
     const rows = await this.localDataSource.query<{ sismaster_sport_id: number | null }[]>(
       `SELECT sismaster_sport_id FROM sports WHERE sport_id = ? AND deleted_at IS NULL LIMIT 1`,
       [localSportId],
@@ -353,6 +367,7 @@ export class HaymasterService {
     if (!rows.length || !rows[0].sismaster_sport_id) {
       throw new NotFoundException(`El deporte local #${localSportId} no tiene sismaster_sport_id configurado`);
     }
+    // idsport es el mismo para haymaster, idparam ya viene como haymaster_idparam
     return this.getAthletesByCategory(sismasterEventId, rows[0].sismaster_sport_id, idparam);
   }
 
@@ -364,17 +379,22 @@ export class HaymasterService {
       INNER JOIN accreditation a ON a.idacreditation = atest.idacreditation
         AND a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
       WHERE sp.idsport = ?
+        AND sp.idcompany = ?          -- ← nuevo filtro seguro
       GROUP BY sp.idparam, sp.code, sp.name, sp.idsport
       HAVING COUNT(DISTINCT a.idperson) > 0
       ORDER BY sp.name ASC
-    `, [idsport, idevent, idsport]);
+    `, [idsport, idevent, idsport, HAYMASTER_IDCOMPANY]);
     return results.map((row: any) => ({
       idparam: parseInt(row.idparam), code: row.code, name: row.name,
       idsport: parseInt(row.idsport), athleteCount: parseInt(row.athleteCount) || 0,
     }));
   }
 
-  async getSportParamsByLocalSportId(localSportId: number, sismasterEventId: number): Promise<SportParamDto[]> {
+  async getSportParamsByLocalSportId(
+    localSportId: number,
+    sismasterEventId: number,
+  ): Promise<SportParamDto[]> {
+    // 1. Resolver idsport (es el mismo en ambas DBs, OK)
     const rows = await this.localDataSource.query<{ sismaster_sport_id: number | null }[]>(
       `SELECT sismaster_sport_id FROM sports WHERE sport_id = ? AND deleted_at IS NULL LIMIT 1`,
       [localSportId],
@@ -382,7 +402,51 @@ export class HaymasterService {
     if (!rows.length || !rows[0].sismaster_sport_id) {
       throw new NotFoundException(`El deporte local #${localSportId} no tiene sismaster_sport_id configurado`);
     }
-    return this.getSportParamsByEvent(rows[0].sismaster_sport_id, sismasterEventId);
+    const idsport = rows[0].sismaster_sport_id; // mismo valor para haymaster
+
+    // 2. Obtener los haymaster_idparam que tiene configurados este deporte localmente
+    const localCategories = await this.localDataSource.query<
+      { haymaster_idparam: number }[]
+    >(
+      `SELECT DISTINCT haymaster_idparam
+      FROM categories        -- o como se llame tu tabla categories
+      WHERE sport_id = ?
+        AND haymaster_idparam IS NOT NULL
+        AND deleted_at IS NULL`,
+      [localSportId],
+    );
+
+    if (!localCategories.length) {
+      // fallback: si no hay haymaster_idparam, retornar vacío o usar sismaster
+      return [];
+    }
+
+    const haymasterIdparams = localCategories.map((c) => c.haymaster_idparam);
+
+    // 3. Query a haymaster.sport_params filtrado por idcompany=1
+    //    y solo los idparam que existen en tus categorías locales
+    const placeholders = haymasterIdparams.map(() => '?').join(',');
+    const results = await this.sportParamRepo.query(`
+      SELECT sp.idparam, sp.code, sp.name, sp.idsport,
+            COUNT(DISTINCT a.idperson) AS athleteCount
+      FROM sport_params sp
+      LEFT JOIN accreditation_test atest ON atest.idtest = sp.code AND atest.mstatus = 1
+      LEFT JOIN accreditation a ON a.idacreditation = atest.idacreditation
+        AND a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
+      WHERE sp.idsport = ?
+        AND sp.idcompany = 1
+        AND sp.idparam IN (${placeholders})
+      GROUP BY sp.idparam, sp.code, sp.name, sp.idsport
+      ORDER BY sp.name ASC
+    `, [idsport, sismasterEventId, idsport, ...haymasterIdparams]);
+
+    return results.map((row: any) => ({
+      idparam: parseInt(row.idparam),
+      code: row.code,
+      name: row.name,
+      idsport: parseInt(row.idsport),
+      athleteCount: parseInt(row.athleteCount) || 0,
+    }));
   }
 
   async getNivCatOptions(sismasterEventId: number, sismasterSportId: number, eventCategoryId?: number) {
