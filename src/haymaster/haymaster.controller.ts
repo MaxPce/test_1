@@ -80,14 +80,14 @@ export class HaymasterController {
 
   @Get('athletes/by-category-local')
   async getAthletesByCategoryLocal(
-    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterEventId: number,
+    @Query('haymasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) haymasterEventId: number,
     @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 })) localSportId: number,
     @Query('idparam', new ParseIntPipe({ errorHttpStatusCode: 400 })) idparam: number,
   ) {
-    if (!sismasterEventId || !localSportId || !idparam) {
-      throw new BadRequestException('sismasterEventId, localSportId e idparam son requeridos');
+    if (!haymasterEventId || !localSportId || !idparam) {
+      throw new BadRequestException('haymasterEventId, localSportId e idparam son requeridos');
     }
-    return this.haymasterService.getAthletesByCategoryLocal(sismasterEventId, localSportId, idparam);
+    return this.haymasterService.getAthletesByCategoryLocal(haymasterEventId, localSportId, idparam);
   }
 
   @Get('athletes/niv-cat-options')
