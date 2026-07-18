@@ -127,10 +127,10 @@ export class HaymasterService {
         'p.gender AS gender',
         'p.birthday AS birthday',
         'p.country AS country',
-        'MAX(a.photo) AS photo',
+        'NULL AS photo',
         'MAX(a.idinstitution) AS idinstitution',
         'MAX(a.idevent) AS idevent',
-        'MAX(i.business_name) AS institutionName',
+        'MAX(i.business) AS institutionName',
         'MAX(i.abrev) AS institutionAbrev',
         'MAX(i.avatar) AS institutionLogo',
       ])
@@ -185,8 +185,9 @@ export class HaymasterService {
         'p.firstname AS firstname', 'p.lastname AS lastname',
         'p.surname AS surname', 'p.gender AS gender',
         'p.birthday AS birthday', 'p.country AS country',
-        'MAX(a.photo) AS photo', 'MAX(a.idinstitution) AS idinstitution',
-        'MAX(i.business_name) AS institutionName', 'MAX(i.abrev) AS institutionAbrev',
+        'NULL AS photo', 'MAX(a.idinstitution) AS idinstitution',
+        'i.business_name AS institutionName', 
+        'MAX(i.abrev) AS institutionAbrev',
         'MAX(i.avatar) AS institutionLogo',
       ])
       .where('a.mstatus = 1').andWhere('p.mstatus = 1')
@@ -296,34 +297,34 @@ export class HaymasterService {
   }
 
   async getAthletesByCategory(idevent: number, idsport: number, idparam: number): Promise<AthleteByCategoryDto[]> {
-    const results = await this.accreditationRepo.query(`
-      SELECT a.idacreditation, a.idevent, a.idsport, a.idinstitution, a.idperson, a.photo,
-        p.docnumber, p.firstname, p.lastname, p.surname, p.birthday, p.gender,
-        CASE WHEN p.gender = 'M' THEN 'Masculino' WHEN p.gender = 'F' THEN 'Femenino' ELSE 'No especificado' END AS gender_text,
-        i.business_name AS institutionName, i.abrev AS institutionAbrev, i.avatar AS institutionLogo,
-        sp.name AS division_inscrita, sp.idparam AS idparam
-      FROM accreditation a
-      INNER JOIN (
-        SELECT idperson, MAX(idacreditation) AS idacreditation
-        FROM accreditation
-        WHERE idsport = ? AND idevent = ? AND tregister = 'D' AND mstatus = 1
-        GROUP BY idperson
-      ) latest ON latest.idperson = a.idperson AND latest.idacreditation = a.idacreditation
-      INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
-      INNER JOIN institution i ON i.idinstitution = a.idinstitution
-      INNER JOIN accreditation_test atest ON atest.idacreditation = a.idacreditation AND atest.mstatus = 1
-      INNER JOIN sport_params sp ON sp.code = atest.idtest AND sp.idsport = ? AND sp.idparam = ?
-      WHERE a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
-      ORDER BY p.lastname ASC, p.firstname ASC
-    `, [idsport, idevent, idsport, idparam, idsport, idevent]);
+      const results = await this.accreditationRepo.query(`
+        SELECT a.idacreditation, a.idevent, a.idsport, a.idinstitution, a.idperson, NULL AS photo,
+          p.docnumber, p.firstname, p.lastname, p.surname, p.birthday, p.gender,
+          CASE WHEN p.gender = 'M' THEN 'Masculino' WHEN p.gender = 'F' THEN 'Femenino' ELSE 'No especificado' END AS gender_text,
+          i.business AS institutionName, i.abrev AS institutionAbrev, i.avatar AS institutionLogo,
+          sp.name AS division_inscrita, sp.idparam AS idparam
+        FROM accreditation a
+        INNER JOIN (
+          SELECT idperson, MAX(idacreditation) AS idacreditation
+          FROM accreditation
+          WHERE idsport = ? AND idevent = ? AND tregister = 'D' AND mstatus = 1
+          GROUP BY idperson
+        ) latest ON latest.idperson = a.idperson AND latest.idacreditation = a.idacreditation
+        INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
+        INNER JOIN institution i ON i.idinstitution = a.idinstitution
+        INNER JOIN accreditation_test atest ON atest.idacreditation = a.idacreditation AND atest.mstatus = 1
+        INNER JOIN sport_params sp ON sp.code = atest.idtest AND sp.idsport = ? AND sp.idparam = ?
+        WHERE a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
+        ORDER BY p.lastname ASC, p.firstname ASC
+      `, [idsport, idevent, idsport, idparam, idsport, idevent]);
 
-    return results.map((row: any) => ({
-      ...row,
-      photo: toSismasterUrl(row.photo),
-      institutionLogo: toSismasterUrl(row.institutionLogo),
-      fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
-      age: this.calculateAge(row.birthday),
-    }));
+      return results.map((row: any) => ({
+        ...row,
+        photo: toSismasterUrl(row.photo),
+        institutionLogo: toSismasterUrl(row.institutionLogo),
+        fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
+        age: this.calculateAge(row.birthday),
+      }));
   }
 
   async getAthletesByCategoryName(sismasterEventId: number, localSportId: number, categoryName: string): Promise<AthleteByCategoryDto[]> {
@@ -436,11 +437,11 @@ export class HaymasterService {
       .innerJoin('accreditation_test', 'atest', 'atest.idacreditation = a.idacreditation AND atest.mstatus = 1')
       .select([
         'a.idacreditation AS idacreditation', 'a.idevent AS idevent', 'a.idsport AS idsport',
-        'a.idinstitution AS idinstitution', 'a.idperson AS idperson', 'a.photo AS photo',
+        'a.idinstitution AS idinstitution', 'a.idperson AS idperson', 'NULL AS photo',
         'p.docnumber AS docnumber', 'p.firstname AS firstname', 'p.lastname AS lastname',
         'p.surname AS surname', 'p.birthday AS birthday', 'p.gender AS gender',
         `CASE WHEN p.gender = 'M' THEN 'Masculino' WHEN p.gender = 'F' THEN 'Femenino' ELSE 'No especificado' END AS gender_text`,
-        'i.business_name AS institutionName', 'i.abrev AS institutionAbrev', 'i.avatar AS institutionLogo',
+        'i.business AS institutionName', 'i.abrev AS institutionAbrev', 'i.avatar AS institutionLogo',
         'atest.idniv AS idniv', 'atest.idcat AS idcat', 'atest.idtest AS idtest',
       ])
       .where('a.idsport = :idsport', { idsport })
@@ -454,7 +455,7 @@ export class HaymasterService {
 
     return results.map((row) => ({
       ...row,
-      photo: toSismasterUrl(row.photo),
+      photo: null,
       institutionLogo: toSismasterUrl(row.institutionLogo),
       fullName: `${row.firstname} ${row.lastname ?? ''} ${row.surname ?? ''}`.trim(),
       age: this.calculateAge(row.birthday),
