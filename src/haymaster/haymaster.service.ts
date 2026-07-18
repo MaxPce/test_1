@@ -303,27 +303,36 @@ export class HaymasterService {
 
   async getAthletesByCategory(idevent: number, idsport: number, idparam: number): Promise<AthleteByCategoryDto[]> {
     const results = await this.accreditationRepo.query(`
-      SELECT a.idacreditation, a.idevent, a.idsport, a.idinstitution, a.idperson, NULL AS photo,
+      SELECT
+        a.idperson,
+        MAX(a.idacreditation) AS idacreditation,
+        a.idevent, a.idsport,
+        MAX(a.idinstitution) AS idinstitution,
+        NULL AS photo,
         p.docnumber, p.firstname, p.lastname, p.surname, p.birthday, p.gender,
         CASE WHEN p.gender = 'M' THEN 'Masculino' WHEN p.gender = 'F' THEN 'Femenino' ELSE 'No especificado' END AS gender_text,
-        i.name AS institutionName, i.abrev AS institutionAbrev, i.avatar AS institutionLogo,
-        sp.name AS division_inscrita, sp.idparam AS idparam
+        MAX(i.name) AS institutionName,
+        MAX(i.abrev) AS institutionAbrev,
+        MAX(i.avatar) AS institutionLogo
       FROM accreditation a
-      INNER JOIN (
-        SELECT idperson, MAX(idacreditation) AS idacreditation
-        FROM accreditation
-        WHERE idsport = ? AND idevent = ? AND tregister = 'D' AND mstatus = 1
-        GROUP BY idperson
-      ) latest ON latest.idperson = a.idperson AND latest.idacreditation = a.idacreditation
       INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
       INNER JOIN institution i ON i.idinstitution = a.idinstitution
-      INNER JOIN accreditation_test atest ON atest.idacreditation = a.idacreditation AND atest.mstatus = 1
-      INNER JOIN sport_params sp ON sp.code = atest.idtest
-        AND sp.idsport = ?
-        AND sp.idcompany = ${HAYMASTER_IDCOMPANY}
       WHERE a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
+        AND EXISTS (
+          SELECT 1 FROM accreditation_test atest
+          INNER JOIN sport_params sp ON sp.code = atest.idtest
+            AND sp.idsport = ?
+            AND sp.idcompany = ${HAYMASTER_IDCOMPANY}
+            AND sp.idparam = ?
+          WHERE atest.idacreditation = a.idacreditation AND atest.mstatus = 1
+        )
+      GROUP BY a.idperson, a.idevent, a.idsport,
+              p.docnumber, p.firstname, p.lastname, p.surname, p.birthday, p.gender
       ORDER BY p.lastname ASC, p.firstname ASC
-    `, [idsport, idevent, idsport, idsport, idevent]);
+    `, [idsport, idevent, idsport, idparam]);
+
+
+
 
     return results.map((row: any) => ({
       ...row,
