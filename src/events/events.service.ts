@@ -1177,13 +1177,14 @@ export class EventsService {
       for (const param of params) {
         const localCategory = await this.categoryRepository.findOne({
           where: {
-            sismasterIdParam: param.idparam,
+            haymasterIdParam: param.idparam,  
             deletedAt: IsNull(),
           },
         });
 
+
         if (!localCategory) {
-          this.logger.warn(`Sin mapeo local → sismasterIdParam=${param.idparam} "${param.name}"`);
+          this.logger.warn(`Sin mapeo local → haymasterIdParam=${param.idparam} "${param.name}"`);
           skipped++;
           continue;
         }
