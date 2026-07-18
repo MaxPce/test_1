@@ -171,6 +171,18 @@ export class EventsController {
     return { message: 'Registro eliminado permanentemente' };
   }
 
+  @Post('registrations/bulk-sismaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async bulkRegisterFromSismaster(@Body() bulkDto: BulkRegisterSismasterDto) {
+    return this.eventsService.bulkRegisterFromSismaster(bulkDto);
+  }
+
+  @Post('registrations/bulk-haymaster')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async bulkRegisterFromHaymaster(@Body() bulkDto: BulkRegisterSismasterDto) {
+    return this.eventsService.bulkRegisterFromHaymaster(bulkDto);
+  }
+
   // ==================== EVENTS BY ID ====================
 
   @Get(':id')
@@ -297,17 +309,7 @@ export class EventsController {
       externalEventId,
     );
   }
-  @Post('registrations/bulk-sismaster')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async bulkRegisterFromSismaster(@Body() bulkDto: BulkRegisterSismasterDto) {
-    return this.eventsService.bulkRegisterFromSismaster(bulkDto);
-  }
-
-  @Post('registrations/bulk-haymaster')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
-  async bulkRegisterFromHaymaster(@Body() bulkDto: BulkRegisterSismasterDto) {
-    return this.eventsService.bulkRegisterFromHaymaster(bulkDto);
-  }
+  
 
   /**
    * POST /events/:id/register-categories
