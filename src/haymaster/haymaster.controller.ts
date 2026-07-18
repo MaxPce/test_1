@@ -79,12 +79,14 @@ export class HaymasterController {
   }
 
   @Get('athletes/by-category-local')
-  @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getAthletesByCategoryLocal(
     @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterEventId: number,
     @Query('localSportId', new ParseIntPipe({ errorHttpStatusCode: 400 })) localSportId: number,
     @Query('idparam', new ParseIntPipe({ errorHttpStatusCode: 400 })) idparam: number,
   ) {
+    if (!sismasterEventId || !localSportId || !idparam) {
+      throw new BadRequestException('sismasterEventId, localSportId e idparam son requeridos');
+    }
     return this.haymasterService.getAthletesByCategoryLocal(sismasterEventId, localSportId, idparam);
   }
 
