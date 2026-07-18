@@ -44,7 +44,6 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
         SismasterSport,
         SismasterAccreditation,
         SismasterEventSport,
-        SismasterSportParam,
         HaymasterSportParam,
       ],
       'haymaster',
