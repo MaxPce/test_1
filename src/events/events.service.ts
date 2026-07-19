@@ -984,7 +984,7 @@ export class EventsService {
       });
 
       const athletesMap = new Map(
-        allAccreditedAthletes.map((athlete) => [athlete.idperson, athlete])
+        allAccreditedAthletes.map((athlete) => [Number(athlete.idperson), athlete])
       );
 
       const registrationIds: number[] = [];
