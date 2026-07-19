@@ -118,11 +118,14 @@ export class HaymasterService {
         MAX(i.name) AS institutionName,
         MAX(i.abrev) AS institutionAbrev,
         MAX(i.avatar) AS institutionLogo
-
       FROM accreditation a
       INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
       INNER JOIN institution i ON i.idinstitution = a.idinstitution
-      WHERE a.idevent = ? AND a.mstatus = 1 AND a.tregister = 'D'
+        AND i.idcompany = ${HAYMASTER_IDCOMPANY}          
+      WHERE a.idevent = ?
+        AND a.idcompany = ${HAYMASTER_IDCOMPANY}           
+        AND a.mstatus = 1
+        AND a.tregister = 'D'
     `;
 
     if (filters.idinstitution) {
@@ -295,6 +298,7 @@ export class HaymasterService {
 
 
   async getAthletesByCategory(idevent: number, idsport: number, idparam: number): Promise<AthleteByCategoryDto[]> {
+    
     const results = await this.accreditationRepo.query(`
       SELECT
         a.idperson,
@@ -310,7 +314,10 @@ export class HaymasterService {
       FROM accreditation a
       INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
       INNER JOIN institution i ON i.idinstitution = a.idinstitution
-      WHERE a.idsport = ? AND a.idevent = ? AND a.tregister = 'D' AND a.mstatus = 1
+        AND i.idcompany = ${HAYMASTER_IDCOMPANY}          -- ← NUEVO
+      WHERE a.idsport = ? AND a.idevent = ?
+        AND a.idcompany = ${HAYMASTER_IDCOMPANY}           -- ← NUEVO
+        AND a.tregister = 'D' AND a.mstatus = 1
         AND EXISTS (
           SELECT 1 FROM accreditation_test atest
           INNER JOIN sport_params sp ON sp.code = atest.idtest
@@ -498,7 +505,8 @@ export class HaymasterService {
     const results = await this.accreditationRepo
       .createQueryBuilder('a')
       .innerJoin('person', 'p', 'a.idperson = p.idperson')
-      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
+      // ✅ CAMBIO 1: agrega AND i.idcompany = al JOIN de institution
+      .innerJoin('institution', 'i', `a.idinstitution = i.idinstitution AND i.idcompany = ${HAYMASTER_IDCOMPANY}`)
       .innerJoin('accreditation_test', 'atest', 'atest.idacreditation = a.idacreditation AND atest.mstatus = 1')
       .select([
         'a.idacreditation AS idacreditation', 'a.idevent AS idevent', 'a.idsport AS idsport',
@@ -512,7 +520,10 @@ export class HaymasterService {
       .where('a.idsport = :idsport', { idsport })
       .andWhere('a.idevent = :idevent', { idevent: sismasterEventId })
       .andWhere('a.tregister = :tregister', { tregister: 'D' })
-      .andWhere('a.mstatus = 1').andWhere('p.mstatus = 1')
+      // ✅ CAMBIO 2: filtra accreditation por idcompany = 1
+      .andWhere(`a.idcompany = ${HAYMASTER_IDCOMPANY}`)
+      .andWhere('a.mstatus = 1')
+      .andWhere('p.mstatus = 1')
       .andWhere('atest.idniv = :idniv', { idniv })
       .andWhere('atest.idcat = :idcat', { idcat })
       .orderBy('p.lastname', 'ASC').addOrderBy('p.firstname', 'ASC')
