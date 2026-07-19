@@ -106,60 +106,53 @@ export class HaymasterService {
   async getAccreditedAthletes(filters: AccreditationFilters): Promise<AthleteSismasterDto[]> {
     this.logger.log(`[Haymaster] Consultando acreditaciones: ${JSON.stringify(filters)}`);
 
-    let resolvedSportId: number | undefined;
+    const params: any[] = [filters.idevent];
+
+    let sql = `
+      SELECT
+        p.idperson, p.docnumber, p.firstname, p.lastname, p.surname,
+        p.gender, p.birthday,
+        NULL AS photo,
+        MAX(a.idinstitution) AS idinstitution,
+        MAX(a.idevent) AS idevent,
+        MAX(i.name) AS institutionName,
+        MAX(i.abrev) AS institutionAbrev,
+        MAX(i.avatar) AS institutionLogo
+
+      FROM accreditation a
+      INNER JOIN person p ON p.idperson = a.idperson AND p.mstatus = 1
+      INNER JOIN institution i ON i.idinstitution = a.idinstitution
+      WHERE a.idevent = ? AND a.mstatus = 1 AND a.tregister = 'D'
+    `;
+
+    if (filters.idinstitution) {
+      sql += ` AND a.idinstitution = ?`;
+      params.push(filters.idinstitution);
+    }
+    if (filters.gender) {
+      sql += ` AND p.gender = ?`;
+      params.push(filters.gender);
+    }
     if (filters.localSportId) {
       const rows = await this.localDataSource.query<{ sismaster_sport_id: number | null }[]>(
         `SELECT sismaster_sport_id FROM sports WHERE sport_id = ? AND deleted_at IS NULL LIMIT 1`,
         [filters.localSportId],
       );
       if (rows.length && rows[0].sismaster_sport_id) {
-        resolvedSportId = rows[0].sismaster_sport_id;
+        sql += ` AND a.idsport = ?`;
+        params.push(rows[0].sismaster_sport_id);
       }
     }
 
-    const query = this.accreditationRepo
-      .createQueryBuilder('a')
-      .innerJoin('person', 'p', 'a.idperson = p.idperson')
-      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
-      .select([
-        'p.idperson AS idperson',
-        'p.docnumber AS docnumber',
-        'p.firstname AS firstname',
-        'p.lastname AS lastname',
-        'p.surname AS surname',
-        'p.gender AS gender',
-        'p.birthday AS birthday',
-        'p.country AS country',
-        'NULL AS photo',
-        'MAX(a.idinstitution) AS idinstitution',
-        'MAX(a.idevent) AS idevent',
-        'MAX(i.business) AS institutionName',
-        'MAX(i.abrev) AS institutionAbrev',
-        'MAX(i.avatar) AS institutionLogo',
-      ])
-      .where('a.idevent = :idevent', { idevent: filters.idevent })
-      .andWhere('a.mstatus = 1')
-      .andWhere('p.mstatus = 1')
-      .andWhere('a.tregister = :tregister', { tregister: 'D' });
+    sql += `
+      GROUP BY p.idperson, p.docnumber, p.firstname, p.lastname, p.surname,
+              p.gender, p.birthday
+      ORDER BY p.lastname ASC, p.firstname ASC
+    `;
 
-    if (filters.idinstitution) {
-      query.andWhere('a.idinstitution = :idinstitution', { idinstitution: filters.idinstitution });
-    }
-    if (filters.gender) {
-      query.andWhere('p.gender = :gender', { gender: filters.gender });
-    }
-    if (resolvedSportId) {
-      query.andWhere('a.idsport = :idsport', { idsport: resolvedSportId });
-    }
+    const results = await this.accreditationRepo.query(sql, params);
 
-    query
-      .groupBy('p.idperson').addGroupBy('p.docnumber').addGroupBy('p.firstname')
-      .addGroupBy('p.lastname').addGroupBy('p.surname').addGroupBy('p.gender')
-      .addGroupBy('p.birthday').addGroupBy('p.country')
-      .orderBy('p.lastname', 'ASC').addOrderBy('p.firstname', 'ASC');
-
-    const results = await query.getRawMany();
-    return results.map((row) => ({
+    return results.map((row: any) => ({
       ...row,
       photo: toSismasterUrl(row.photo),
       institutionLogo: toSismasterUrl(row.institutionLogo),

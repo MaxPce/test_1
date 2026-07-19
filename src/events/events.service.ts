@@ -987,6 +987,15 @@ export class EventsService {
         allAccreditedAthletes.map((athlete) => [Number(athlete.idperson), athlete])
       );
 
+      this.logger.log(`[DEBUG] Total atletas en Haymaster map: ${athletesMap.size}`);
+      this.logger.log(`[DEBUG] IDs en el map: ${JSON.stringify([...athletesMap.keys()].slice(0, 10))}`);
+      this.logger.log(`[DEBUG] IDs recibidos del front: ${JSON.stringify(bulkDto.external_athlete_ids)}`);
+
+      for (const externalAthleteId of bulkDto.external_athlete_ids) {
+        const found = athletesMap.get(externalAthleteId);
+        this.logger.log(`[DEBUG] Buscando ${externalAthleteId} (${typeof externalAthleteId}) → ${found ? 'ENCONTRADO' : 'NO ENCONTRADO'}`);
+      }
+
       const registrationIds: number[] = [];
       const errors: string[] = [];
 
