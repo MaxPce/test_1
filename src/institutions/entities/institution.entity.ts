@@ -14,7 +14,7 @@ export class Institution {
   @Column({ name: 'logo_url', length: 255, nullable: true })
   logoUrl: string;
 
-  @Column({ length: 10, nullable: true })
+  @Column({ length: 50, nullable: true })
   abrev: string;
 
   @DeleteDateColumn({ name: 'deleted_at' })
