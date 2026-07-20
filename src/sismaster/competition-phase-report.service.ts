@@ -20,6 +20,7 @@ import { MatchStatus } from '../common/enums';
 import { Result }        from '../results/entities/result.entity';
 import { Participation } from '../competitions/entities/participation.entity';
 import { toSismasterUrl } from './constants/sismaster.constants';
+import { WeightliftingAttempt } from '../competitions/entities/weightlifting-attempt.entity';
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -80,6 +81,9 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(Participation)
     private readonly participationRepo: Repository<Participation>,
+
+    @InjectRepository(WeightliftingAttempt)
+    private readonly weightliftingAttemptRepo: Repository<WeightliftingAttempt>,
 
     private readonly sismasterService: SismasterService,
   ) {}
@@ -384,6 +388,38 @@ export class CompetitionPhaseReportService {
   );
 
 
+  const weightliftingEcIds = new Set(
+    filteredCategories
+      .filter((ec) => {
+        const sn = (ec.category as any)?.sport?.name?.toLowerCase() ?? '';
+        return (
+          sn.includes('halterofilia') ||
+          sn.includes('levantamiento de pesas') ||
+          sn.includes('weightlifting')
+        );
+      })
+      .map((ec) => ec.eventCategoryId),
+  );
+
+  const weightliftingParticipationIds = matches
+    .filter((m) => weightliftingEcIds.has(
+      phases.find((p) => p.phaseId === m.phaseId)?.eventCategoryId ?? -1,
+    ))
+    .flatMap((m) => (m.participations ?? []).map((p) => p.participationId));
+
+  const weightliftingAttempts = weightliftingParticipationIds.length
+    ? await this.weightliftingAttemptRepo.find({
+        where: weightliftingParticipationIds.map((id) => ({ participationId: id })),
+        order: { participationId: 'ASC', liftType: 'ASC', attemptNumber: 'ASC' },
+      })
+    : [];
+
+  const weightliftingAttemptsByParticipationId = this.groupBy(
+    weightliftingAttempts,
+    'participationId',
+  );
+
+
    const swimmingResultsByPhaseId = this.groupBy(swimmingResults, 'phaseId');
 
     return {
@@ -412,6 +448,7 @@ export class CompetitionPhaseReportService {
         athleticsResultsByPrId,
         swimmingResultsByPhaseId,
         swimmingParticipationToRegId,
+        weightliftingAttemptsByParticipationId,
         detailLevel,             
       ),
     };
@@ -454,6 +491,7 @@ export class CompetitionPhaseReportService {
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
     swimmingResultsByPhaseId:       Record<number, Result[]>,        
     swimmingParticipationToRegId:   Map<number, number>,
+    weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const sportMap: Record<string, any> = {};
@@ -461,6 +499,8 @@ export class CompetitionPhaseReportService {
     for (const ec of eventCategories) {
       const sport = (ec.category as any)?.sport;
       const sportKey = String(sport?.sportId ?? 'sin_deporte');
+
+      
 
       if (!sportMap[sportKey]) {
         sportMap[sportKey] = {
@@ -545,6 +585,11 @@ export class CompetitionPhaseReportService {
         sportName.includes('lucha olímpica') ||
         sportName.includes('lucha olimpica') ||
         sportName.includes('wrestling');
+
+      const isWeightlifting =
+        sportName.includes('halterofilia') ||
+        sportName.includes('levantamiento de pesas') ||
+        sportName.includes('weightlifting');
       // ─────────────────────────────────────────────────────────────────────
 
       sportMap[sportKey].categories.push({
@@ -589,6 +634,8 @@ export class CompetitionPhaseReportService {
               athleticsEntriesBySectionId,
               athleticsResultsByPrId,
               phaseRegsByPhaseId[phase.phaseId] ?? [],
+              isWeightlifting,                                      
+              weightliftingAttemptsByParticipationId,
               detailLevel,              
             ),
           ),
@@ -622,6 +669,8 @@ export class CompetitionPhaseReportService {
     athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
     phaseRegsForAthletics: PhaseRegistration[],
+    isWeightlifting: boolean,
+    weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const phaseMatches = matchesByPhaseId[phase.phaseId] ?? [];
@@ -670,6 +719,15 @@ export class CompetitionPhaseReportService {
         swimmingResultsForPhase,
         swimmingParticipationToRegId,
         regMap,
+      );
+    }
+
+    if (isWeightlifting) {
+      return this.buildWeightliftingPhase(
+        phase,
+        phaseMatches,
+        regMap,
+        weightliftingAttemptsByParticipationId,
       );
     }
 
@@ -1818,6 +1876,111 @@ export class CompetitionPhaseReportService {
       ranking,
       brackets: brackets.sort((a, b) => (a.matchNumber ?? 0) - (b.matchNumber ?? 0)),
     };
+  }
+
+  private buildWeightliftingPhase(
+    phase: Phase,
+    phaseMatches: Match[],
+    regMap: Record<number, any>,
+    attemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
+  ) {
+    const rows: any[] = [];
+
+    for (const match of phaseMatches) {
+      for (const participation of match.participations ?? []) {
+        const attempts =
+          attemptsByParticipationId[participation.participationId] ?? [];
+
+        const snatchAttempts = attempts
+          .filter((a) => a.liftType === 'snatch')
+          .sort((a, b) => a.attemptNumber - b.attemptNumber);
+
+        const cjAttempts = attempts
+          .filter((a) => a.liftType === 'clean_and_jerk')
+          .sort((a, b) => a.attemptNumber - b.attemptNumber);
+
+        const bestSnatch = this._bestWeightlift(snatchAttempts);
+        const bestCJ     = this._bestWeightlift(cjAttempts);
+        const total      = bestSnatch !== null && bestCJ !== null
+          ? bestSnatch + bestCJ
+          : null;
+
+        const allRetiredSnatch =
+          snatchAttempts.length > 0 &&
+          snatchAttempts.every((a) => a.result === 'retired');
+        const allRetiredCJ =
+          cjAttempts.length > 0 &&
+          cjAttempts.every((a) => a.result === 'retired');
+
+        const status =
+          allRetiredSnatch || allRetiredCJ ? 'DNF' :
+          attempts.length === 0 ? 'DNS' :
+          null;
+
+        rows.push({
+          participationId: participation.participationId,
+          registrationId:  participation.registrationId ?? null,
+          athlete:
+            participation.registrationId != null
+              ? (regMap[participation.registrationId] ?? { registrationId: participation.registrationId })
+              : null,
+          weightClass: regMap[participation.registrationId ?? -1]?.weightClass ?? null,
+          snatch: {
+            best: bestSnatch,
+            attempts: snatchAttempts.map((a) => ({
+              attemptNumber: a.attemptNumber,
+              weight: a.weightKg != null ? Number(a.weightKg) : null,
+              result: a.result,
+            })),
+          },
+          cleanAndJerk: {
+            best: bestCJ,
+            attempts: cjAttempts.map((a) => ({
+              attemptNumber: a.attemptNumber,
+              weight: a.weightKg != null ? Number(a.weightKg) : null,
+              result: a.result,
+            })),
+          },
+          total,
+          status,
+        });
+      }
+    }
+
+    const sorted = [...rows].sort((a, b) => {
+      if (a.status && !b.status) return 1;
+      if (!a.status && b.status) return -1;
+      if (a.total !== null && b.total !== null) return b.total - a.total;
+      if (a.total !== null) return -1;
+      if (b.total !== null) return 1;
+      return 0;
+    });
+
+    let posCounter = 0;
+    const athletes = sorted.map((row) => {
+      if (row.total !== null && !row.status) posCounter++;
+      return {
+        pos: row.total !== null && !row.status ? posCounter : null,
+        ...row,
+      };
+    });
+
+    return {
+      phaseId:           phase.phaseId,
+      phaseName:         phase.name         ?? null,
+      phaseType:         phase.type         ?? null,
+      displayOrder:      phase.displayOrder ?? null,
+      isWeightlifting:   true,
+      totalParticipants: athletes.length,
+      athletes,
+    };
+  }
+
+  private _bestWeightlift(attempts: WeightliftingAttempt[]): number | null {
+    const valid = attempts
+      .filter((a) => a.result === 'valid' && a.weightKg != null)
+      .map((a) => Number(a.weightKg));
+    return valid.length > 0 ? Math.max(...valid) : null;
   }
   
 }
