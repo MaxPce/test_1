@@ -52,6 +52,7 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
       'sismaster',
     ),
     TypeOrmModule.forFeature([
+      Event,
       EventCategory,
       Registration,
       Phase,

@@ -22,6 +22,7 @@ import { Participation } from '../competitions/entities/participation.entity';
 import { toSismasterUrl } from './constants/sismaster.constants';
 import { WeightliftingAttempt } from '../competitions/entities/weightlifting-attempt.entity';
 import { Athlete } from '../institutions/entities/athlete.entity';
+import { Event } from '../events/entities/event.entity';
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -87,6 +88,9 @@ export class CompetitionPhaseReportService {
     @InjectRepository(WeightliftingAttempt)
     private readonly weightliftingAttemptRepo: Repository<WeightliftingAttempt>,
 
+    @InjectRepository(Event)
+    private readonly eventRepo: Repository<Event>,
+
     private readonly sismasterService: SismasterService,
   ) {}
 
@@ -98,17 +102,30 @@ export class CompetitionPhaseReportService {
     sismasterEventId: number,
     filters: PhaseReportFilters = {},
   ) {
-    // 1. Evento desde Sismaster
-    const sismasterEvent =
-      await this.sismasterService.getEventById(sismasterEventId);
-    if (!sismasterEvent) {
-      throw new NotFoundException(
-        `Evento Sismaster #${sismasterEventId} no encontrado`,
-      );
+    const isHaymaster = filters.source === 'haymaster';
+
+    let eventInfo: any;
+    if (isHaymaster) {
+      const localEvent = await this.eventRepo.findOne({
+        where: { eventId: sismasterEventId },
+      });
+      if (!localEvent) {
+        throw new NotFoundException(
+          `Evento local #${sismasterEventId} no encontrado`,
+        );
+      }
+      eventInfo = localEvent;
+    } else {
+      eventInfo = await this.sismasterService.getEventById(sismasterEventId);
+      if (!eventInfo) {
+        throw new NotFoundException(
+          `Evento Sismaster #${sismasterEventId} no encontrado`,
+        );
+      }
     }
 
+
     // 2. Categorías del evento
-    const isHaymaster = filters.source === 'haymaster';
     const eventCategories = await this.eventCategoryRepo.find({
       where: isHaymaster
         ? { haymasterEventId: sismasterEventId }
@@ -130,7 +147,7 @@ export class CompetitionPhaseReportService {
 
     const eventCategoryIds = filteredCategories.map((ec) => ec.eventCategoryId);
     if (!eventCategoryIds.length) {
-      return this.buildEmptyReport(sismasterEvent);
+      return this.buildEmptyReport(eventInfo, isHaymaster);
     }
 
     const detailLevel: 'sport' | 'category' | 'phase' =
@@ -435,7 +452,7 @@ export class CompetitionPhaseReportService {
         version: '2.0',
         source: 'competition-system',
       },
-      event: this.buildEventInfo(sismasterEvent),
+      event: this.buildEventInfo(eventInfo, isHaymaster),
       sports: this.buildSports(
         filteredCategories,
         regsByEcId,
@@ -465,17 +482,32 @@ export class CompetitionPhaseReportService {
   // BUILDERS PRIVADOS
   // ─────────────────────────────────────────────────────────────────────────
 
-  private buildEventInfo(event: EventSismasterDto) {
+  private buildEventInfo(event: any, isHaymaster = false) {
+    if (isHaymaster) {
+      return {
+        localEventId:    event.eventId,
+        sismasterEventId: null,
+        name:     event.name       ?? null,
+        startDate: event.startDate ?? null,
+        endDate:   event.endDate   ?? null,
+        place:     event.location  ?? null,
+        logo:      event.logoUrl   ?? null,
+        status:    event.status    ?? null,
+        modality:  null,
+        tipo:      null,
+        level:     null,
+      };
+    }
     return {
       sismasterEventId: event.idevent,
-      name: event.name,
-      startDate: event.startdate,
-      endDate: event.enddate,
-      place: event.place ?? null,
-      logo: event.logo ?? null,
-      modality: event.modality ?? null,
-      tipo: event.tipo ?? null,
-      level: event.level ?? null,
+      name:      event.name      ?? null,
+      startDate: event.startdate ?? null,
+      endDate:   event.enddate   ?? null,
+      place:     event.place     ?? null,
+      logo:      event.logo      ?? null,
+      modality:  event.modality  ?? null,
+      tipo:      event.tipo      ?? null,
+      level:     event.level     ?? null,
     };
   }
 
@@ -1352,14 +1384,14 @@ export class CompetitionPhaseReportService {
     return map;
   }
 
-  private buildEmptyReport(event: EventSismasterDto) {
+  private buildEmptyReport(event: any, isHaymaster = false) {
     return {
       meta: {
         generatedAt: new Date().toISOString(),
         version: '2.0',
         source: 'competition-system',
       },
-      event: this.buildEventInfo(event),
+      event: this.buildEventInfo(event, isHaymaster),
       sports: [],
     };
   }

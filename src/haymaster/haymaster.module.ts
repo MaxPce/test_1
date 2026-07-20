@@ -7,7 +7,7 @@ import { HaymasterCacheService } from './haymaster-cache.service';
 import { HaymasterEvent } from './entities/haymaster-event.entity';
 import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
 import { SismasterModule } from '../sismaster/sismaster.module';
-
+import { Event } from '../events/entities/event.entity';
 import {
   SismasterPerson,          // ← SismasterEvent removido de aquí
   SismasterInstitution,
@@ -71,6 +71,7 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
       AthleticsResult,
       Result,
       WeightliftingAttempt,
+      Event,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
