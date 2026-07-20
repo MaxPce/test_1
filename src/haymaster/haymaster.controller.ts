@@ -8,11 +8,16 @@ import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
+import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
 
 @Controller('haymaster')        // ← ruta base 'haymaster'
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class HaymasterController {
-  constructor(private readonly haymasterService: HaymasterService) {}
+  constructor(
+    private readonly haymasterService: HaymasterService,
+    private readonly competitionPhaseReportService: CompetitionPhaseReportService,  
+  ) {}
+
 
   @Get('events')
   @Public()
@@ -172,5 +177,29 @@ export class HaymasterController {
     @Param('sismasterEventId', ParseIntPipe) sismasterEventId: number,
   ) {
     return this.haymasterService.getSportParamsByLocalSportId(localSportId, sismasterEventId);
+  }
+
+  /**
+   * GET /haymaster/competition-report/:eventId
+   * idcompany = 1 (HAYMASTER) — hardcodeado en el servicio de datos externos
+   *
+   * GET /haymaster/competition-report/200
+   * GET /haymaster/competition-report/200?sportId=7
+   * GET /haymaster/competition-report/200?eventCategoryId=155
+   * GET /haymaster/competition-report/200?eventCategoryId=155&phaseId=212
+   */
+  @Get('competition-report/:eventId')
+  @Public()
+  async getPhaseReport(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Query('sportId') sportId?: string,
+    @Query('eventCategoryId') eventCategoryId?: string,
+    @Query('phaseId') phaseId?: string,
+  ) {
+    return this.competitionPhaseReportService.getPhaseReport(eventId, {
+      sportId:         sportId         ? Number(sportId)         : undefined,
+      eventCategoryId: eventCategoryId ? Number(eventCategoryId) : undefined,
+      phaseId:         phaseId         ? Number(phaseId)         : undefined,
+    });
   }
 }

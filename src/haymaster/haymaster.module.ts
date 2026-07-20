@@ -5,6 +5,7 @@ import { HaymasterService } from './haymaster.service';
 import { HaymasterController } from './haymaster.controller';
 import { HaymasterCacheService } from './haymaster-cache.service';
 import { HaymasterEvent } from './entities/haymaster-event.entity';
+import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
 
 import {
   SismasterPerson,          // ← SismasterEvent removido de aquí
@@ -29,6 +30,7 @@ import {
   IndividualScore,
   PhaseRegistration,
   ShootingScore,
+  WeightliftingAttempt,
 } from 'src/competitions/entities';
 import { AthleticsSection } from 'src/competitions/entities/athletics-section.entity';
 import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-section-entry.entity';
@@ -64,11 +66,12 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
       AthleticsSectionEntry,
       AthleticsResult,
       Result,
+      WeightliftingAttempt,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
   controllers: [HaymasterController],
-  providers: [HaymasterService, HaymasterCacheService],
+  providers: [HaymasterService, HaymasterCacheService,CompetitionPhaseReportService,],
   exports: [HaymasterService, HaymasterCacheService],
 })
 export class HaymasterModule {}
