@@ -21,6 +21,7 @@ import { Result }        from '../results/entities/result.entity';
 import { Participation } from '../competitions/entities/participation.entity';
 import { toSismasterUrl } from './constants/sismaster.constants';
 import { WeightliftingAttempt } from '../competitions/entities/weightlifting-attempt.entity';
+import { Athlete } from '../institutions/entities/athlete.entity';
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -141,6 +142,7 @@ export class CompetitionPhaseReportService {
     const registrations = await this.registrationRepo
       .createQueryBuilder('r')
       .leftJoinAndSelect('r.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'athleteInstitution') 
       .leftJoinAndSelect('r.team', 'team')
       .leftJoinAndSelect('team.members', 'teamMembers')
       .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
@@ -1289,19 +1291,25 @@ export class CompetitionPhaseReportService {
           },
         };
       } else if (reg.athlete) {
+        const localAthlete = reg.athlete as Athlete;
+        const localInst    = localAthlete.institution ?? null;
+
         athleteInfo = {
-          source: 'local',
-          personId: null,
-          fullName: [
-            (reg.athlete as any).lastName,
-            (reg.athlete as any).firstName,
-          ]
-            .filter(Boolean)
-            .join(', '),
-          document: (reg.athlete as any).docNumber ?? null,
-          gender: (reg.athlete as any).gender ?? null,
-          birthDate: (reg.athlete as any).birthDate ?? null,
-          institution: null,
+          source:    'local',
+          personId:  null,
+          fullName:  localAthlete.name ?? null,
+          document:  localAthlete.docNumber ?? null,
+          gender:    localAthlete.gender ?? null,
+          birthDate: localAthlete.dateBirth ?? null,
+          photoUrl:  localAthlete.photoUrl ?? null,
+          institution: localInst
+            ? {
+                id:      localInst.institutionId,
+                name:    localInst.name ?? null,
+                abrev:   localInst.abrev ?? null,
+                logoUrl: localInst.logoUrl ?? null,
+              }
+            : null,
         };
       } else if (reg.team) {
         const members = ((reg.team as any).members ?? []).map((m: any) => ({
