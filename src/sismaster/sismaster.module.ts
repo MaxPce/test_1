@@ -1,10 +1,11 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { SismasterService } from './sismaster.service';
 import { SismasterController } from './sismaster.controller';
 import { SismasterCacheService } from './sismaster-cache.service';
 import { CompetitionSnapshotService } from './competition-snapshot.service';
+import { HaymasterModule } from '../haymaster/haymaster.module'; 
 import {
   SismasterEvent,
   SismasterPerson,
@@ -71,6 +72,7 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
       WeightliftingAttempt,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
+    forwardRef(() => HaymasterModule),  
   ],
   controllers: [SismasterController],
   providers: [

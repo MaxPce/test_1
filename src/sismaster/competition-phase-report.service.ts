@@ -23,6 +23,9 @@ import { toSismasterUrl } from './constants/sismaster.constants';
 import { WeightliftingAttempt } from '../competitions/entities/weightlifting-attempt.entity';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Event } from '../events/entities/event.entity';
+import { HaymasterService } from '../haymaster/haymaster.service';
+import { Inject, forwardRef } from '@nestjs/common';
+
 
 interface PhaseReportFilters {
   sportId?: number;
@@ -92,6 +95,8 @@ export class CompetitionPhaseReportService {
     private readonly eventRepo: Repository<Event>,
 
     private readonly sismasterService: SismasterService,
+     @Inject(forwardRef(() => HaymasterService))  // ← así
+      private readonly haymasterService: HaymasterService, 
   ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -106,15 +111,8 @@ export class CompetitionPhaseReportService {
 
     let eventInfo: any;
     if (isHaymaster) {
-      const localEvent = await this.eventRepo.findOne({
-        where: { eventId: sismasterEventId },
-      });
-      if (!localEvent) {
-        throw new NotFoundException(
-          `Evento local #${sismasterEventId} no encontrado`,
-        );
-      }
-      eventInfo = localEvent;
+      eventInfo = await this.haymasterService.getEventById(sismasterEventId);
+      // haymasterService.getEventById ya lanza NotFoundException si no existe
     } else {
       eventInfo = await this.sismasterService.getEventById(sismasterEventId);
       if (!eventInfo) {

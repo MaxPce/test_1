@@ -1,22 +1,21 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CacheModule } from '@nestjs/cache-manager';
 import { HaymasterService } from './haymaster.service';
 import { HaymasterController } from './haymaster.controller';
 import { HaymasterCacheService } from './haymaster-cache.service';
 import { HaymasterEvent } from './entities/haymaster-event.entity';
-import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
-import { SismasterModule } from '../sismaster/sismaster.module';
-import { Event } from '../events/entities/event.entity';
+import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
+import { SismasterModule } from '../sismaster/sismaster.module'; // ← necesario para forwardRef
 import {
-  SismasterPerson,          // ← SismasterEvent removido de aquí
+  SismasterPerson,
   SismasterInstitution,
   SismasterSport,
   SismasterAccreditation,
   SismasterEventSport,
   SismasterSportParam,
 } from '../sismaster/entities';
-
+import { Event } from '../events/entities/event.entity';
 import { EventCategory } from '../events/entities/event-category.entity';
 import { Registration } from '../events/entities/registration.entity';
 import { Phase } from '../competitions/entities/phase.entity';
@@ -35,15 +34,12 @@ import {
 } from 'src/competitions/entities';
 import { AthleticsSection } from 'src/competitions/entities/athletics-section.entity';
 import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-section-entry.entity';
-import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
 
 @Module({
   imports: [
-    SismasterModule,   // ← AQUÍ, fuera del TypeOrmModule.forFeature
-
+    forwardRef(() => SismasterModule), // ← primero y solo con forwardRef
     TypeOrmModule.forFeature(
       [
-        
         HaymasterEvent,
         SismasterPerson,
         SismasterInstitution,
@@ -55,6 +51,7 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
       'haymaster',
     ),
     TypeOrmModule.forFeature([
+      Event,
       EventCategory,
       Registration,
       Phase,
@@ -71,12 +68,11 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
       AthleticsResult,
       Result,
       WeightliftingAttempt,
-      Event,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
   controllers: [HaymasterController],
-  providers: [HaymasterService, HaymasterCacheService, CompetitionPhaseReportService],
+  providers: [HaymasterService, HaymasterCacheService], // sin CompetitionPhaseReportService
   exports: [HaymasterService, HaymasterCacheService],
 })
 export class HaymasterModule {}
