@@ -26,6 +26,7 @@ interface PhaseReportFilters {
   sportId?: number;
   eventCategoryId?: number;
   phaseId?: number;
+  source?: 'sismaster' | 'haymaster'; 
 }
 const ATHLETICS_PHASE_TYPES = [
   'combined_pista',
@@ -106,10 +107,14 @@ export class CompetitionPhaseReportService {
     }
 
     // 2. Categorías del evento
+    const isHaymaster = filters.source === 'haymaster';
     const eventCategories = await this.eventCategoryRepo.find({
-      where: { externalEventId: sismasterEventId },
+      where: isHaymaster
+        ? { haymasterEventId: sismasterEventId }
+        : { externalEventId: sismasterEventId },
       relations: ['category', 'category.sport'],
     });
+
 
     let filteredCategories = eventCategories;
     if (filters.eventCategoryId) {

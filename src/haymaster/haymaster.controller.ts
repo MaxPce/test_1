@@ -200,6 +200,7 @@ export class HaymasterController {
       sportId:         sportId         ? Number(sportId)         : undefined,
       eventCategoryId: eventCategoryId ? Number(eventCategoryId) : undefined,
       phaseId:         phaseId         ? Number(phaseId)         : undefined,
+      source: 'haymaster',  
     });
   }
 }
