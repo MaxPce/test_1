@@ -6,6 +6,7 @@ import { HaymasterController } from './haymaster.controller';
 import { HaymasterCacheService } from './haymaster-cache.service';
 import { HaymasterEvent } from './entities/haymaster-event.entity';
 import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
+import { SismasterModule } from '../sismaster/sismaster.module';
 
 import {
   SismasterPerson,          // ← SismasterEvent removido de aquí
@@ -38,9 +39,12 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
 
 @Module({
   imports: [
+    SismasterModule,   // ← AQUÍ, fuera del TypeOrmModule.forFeature
+
     TypeOrmModule.forFeature(
       [
-        HaymasterEvent,        // ← solo HaymasterEvent, sin SismasterEvent
+        
+        HaymasterEvent,
         SismasterPerson,
         SismasterInstitution,
         SismasterSport,
@@ -71,7 +75,7 @@ import { HaymasterSportParam } from './entities/haymaster-sport-param.entity';
     CacheModule.register({ ttl: 600, max: 1000 }),
   ],
   controllers: [HaymasterController],
-  providers: [HaymasterService, HaymasterCacheService,CompetitionPhaseReportService,],
+  providers: [HaymasterService, HaymasterCacheService, CompetitionPhaseReportService],
   exports: [HaymasterService, HaymasterCacheService],
 })
 export class HaymasterModule {}
