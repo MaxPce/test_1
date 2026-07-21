@@ -389,6 +389,18 @@ export class EventsService {
       );
     }
 
+    if (eventCategory.category?.type === 'individual' && !createDto.athleteId) {
+        throw new BadRequestException(
+          'Esta categoría es individual, debe registrar un atleta',
+        );
+      }
+
+      if (eventCategory.category?.type === 'equipo' && !createDto.teamId) {
+        throw new BadRequestException(
+          'Esta categoría es por equipos, debe registrar un equipo',
+        );
+      }
+
     const registration = this.registrationRepository.create(createDto);
     return this.registrationRepository.save(registration);
   }
@@ -1375,6 +1387,115 @@ export class EventsService {
     };
   }
 
+  async createAndRegisterLocalAthlete(dto: {
+    eventCategoryId: number;
+    name: string;
+    docNumber?: string;
+    gender?: Gender;
+    dateBirth?: string;
+    nationality?: string;
+    photoUrl?: string;
+    institutionId?: number;
+    seedNumber?: number;
+  }): Promise<Registration> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const eventCategory = await this.eventCategoryRepository.findOne({
+        where: { eventCategoryId: dto.eventCategoryId },
+        relations: ['category'],
+      });
+
+      if (!eventCategory) {
+        throw new NotFoundException(
+          `EventCategory ${dto.eventCategoryId} no encontrada`,
+        );
+      }
+
+      if (eventCategory.category?.type === 'equipo') {
+        throw new BadRequestException(
+          'Esta categoría es por equipos, no se puede inscribir un atleta individual',
+        );
+      }
+
+      // Crear atleta local (sin institución si no se provee)
+      const athlete = new Athlete();
+        athlete.name = dto.name;
+
+        if (dto.docNumber !== undefined) {
+          athlete.docNumber = dto.docNumber;
+        }
+
+        if (dto.gender !== undefined) {
+          athlete.gender = dto.gender;
+        }
+
+        if (dto.dateBirth !== undefined) {
+          athlete.dateBirth = new Date(dto.dateBirth);
+        }
+
+        if (dto.nationality !== undefined) {
+          athlete.nationality = dto.nationality;
+        }
+
+        if (dto.photoUrl !== undefined) {
+          athlete.photoUrl = dto.photoUrl;
+        }
+
+        athlete.institutionId = dto.institutionId ?? null;
+
+        const savedAthlete = await queryRunner.manager.save(Athlete, athlete);
+
+      // Verificar si ya hay una inscripción activa
+      const existing = await this.registrationRepository.findOne({
+        where: {
+          eventCategoryId: dto.eventCategoryId,
+          athleteId: savedAthlete.athleteId,
+        },
+      });
+
+      if (existing) {
+        throw new BadRequestException(
+          'El atleta ya está registrado en esta categoría',
+        );
+      }
+
+      const registration = queryRunner.manager.create(Registration, {
+        eventCategoryId: dto.eventCategoryId,
+        athleteId: savedAthlete.athleteId,
+        seedNumber: dto.seedNumber ?? null,
+      });
+      const savedRegistration = await queryRunner.manager.save(registration);
+
+      await queryRunner.commitTransaction();
+
+      // Retornar con relaciones completas
+      const fullRegistration = await this.registrationRepository.findOne({
+        where: { registrationId: savedRegistration.registrationId },
+        relations: [
+          'athlete',
+          'athlete.institution',
+          'eventCategory',
+          'eventCategory.category',
+        ],
+      });
+
+      if (!fullRegistration) {
+        throw new NotFoundException(
+          `Registro ${savedRegistration.registrationId} no encontrado`,
+        );
+      }
+
+      return fullRegistration;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
 
 
 

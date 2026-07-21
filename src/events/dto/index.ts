@@ -9,3 +9,4 @@ export * from './register-event-categories.dto';
 export * from './create-featured-athlete.dto';
 export * from './update-featured-athlete.dto';
 export * from './upsert-featured-athlete-by-phase.dto';
+export * from './create-local-athlete-registration.dto';

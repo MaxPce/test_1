@@ -38,6 +38,7 @@ import { UploadService, multerConfig } from '../common/services/upload.service';
 import { RegistrationEnrichmentService } from './services/registration-enrichment.service';
 import { RegistrationWithSismasterDto } from './dto/registration-with-sismaster.dto';
 import { BulkRegisterSismasterDto } from './dto/bulk-register-sismaster.dto';
+import { CreateLocalAthleteRegistrationDto } from './dto/create-local-athlete-registration.dto';
 
 @Controller('events')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -116,6 +117,14 @@ export class EventsController {
   @Roles(UserRole.ADMIN, UserRole.MODERATOR)
   bulkRegister(@Body() bulkDto: BulkRegisterDto) {
     return this.eventsService.bulkRegister(bulkDto);
+  }
+  
+  @Post('registrations/local-athlete')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  createAndRegisterLocalAthlete(
+    @Body() dto: CreateLocalAthleteRegistrationDto,
+  ) {
+    return this.eventsService.createAndRegisterLocalAthlete(dto);
   }
 
   @Get('registrations')
