@@ -5,4 +5,5 @@ export interface AccreditationFilters {
   gender?: 'M' | 'F';
   idinstitution?: number;
   localSportId?: number;
+  limit?: number;
 }
