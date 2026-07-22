@@ -5,9 +5,10 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, IsNull } from 'typeorm';
+import { Repository, IsNull, DataSource } from 'typeorm';
 import { Institution, Athlete, Team, TeamMember } from './entities';
 import { SismasterService } from '../sismaster/sismaster.service';
+import { CreateLocalTeamDto } from './dto/create-local-team.dto'; 
 import { Gender } from '../common/enums';
 import {
   CreateInstitutionDto,
@@ -32,6 +33,7 @@ export class InstitutionsService {
     @InjectRepository(TeamMember)
     private teamMemberRepository: Repository<TeamMember>,
     private sismasterService: SismasterService,
+    private dataSource: DataSource,
   ) {}
 
   // ==================== INSTITUTIONS ====================
@@ -420,6 +422,79 @@ export class InstitutionsService {
 
     await this.teamRepository.remove(team);
   }
+
+  async createLocalTeam(dto: CreateLocalTeamDto): Promise<Team> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // 1. Validar institución si se proporcionó
+      if (dto.institutionId) {
+        const institution = await this.institutionRepository.findOne({
+          where: { institutionId: dto.institutionId },
+        });
+        if (!institution) {
+          throw new NotFoundException(
+            `Institución con ID ${dto.institutionId} no encontrada`,
+          );
+        }
+      }
+
+      // 2. Crear el equipo directamente (sin Sismaster)
+      const teamRepo = queryRunner.manager.getRepository(Team);
+      const athleteRepo = queryRunner.manager.getRepository(Athlete);
+      const teamMemberRepo = queryRunner.manager.getRepository(TeamMember);
+
+      const teamEntity = teamRepo.create({
+        name: dto.teamName,
+        categoryId: dto.categoryId,
+        institutionId: dto.institutionId ?? undefined,
+      });
+      const savedTeam = await teamRepo.save(teamEntity);
+
+      // 3. Crear cada atleta local y agregarlo al equipo
+      for (const member of dto.members) {
+        const athleteEntity = athleteRepo.create({
+          name: member.name,
+          docNumber: member.docNumber ?? undefined,
+          institutionId: dto.institutionId ?? undefined,
+        });
+        const savedAthlete = await athleteRepo.save(athleteEntity);
+
+        const teamMemberEntity = teamMemberRepo.create({
+          teamId: savedTeam.teamId,
+          athleteId: savedAthlete.athleteId,
+          rol: member.rol ?? 'titular',
+        });
+        await teamMemberRepo.save(teamMemberEntity);
+      }
+
+      await queryRunner.commitTransaction();
+
+      // 4. Retornar equipo completo con relaciones
+      const result = await this.teamRepository.findOne({
+        where: { teamId: savedTeam.teamId },
+        relations: ['institution', 'category', 'members', 'members.athlete'],
+      });
+
+      if (!result) {
+        throw new NotFoundException(
+          `Equipo recién creado con ID ${savedTeam.teamId} no encontrado`,
+        );
+      }
+
+      return result;
+
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error('Error al crear equipo local:', error.message);
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
 
   // ==================== TEAM MEMBERS ====================
 

@@ -12,9 +12,13 @@ import {
   UseInterceptors,
   UploadedFile,
   BadRequestException,
+  HttpCode,
+  HttpStatus
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { InstitutionsService } from './institutions.service';
+import { CreateLocalTeamDto } from './dto/create-local-team.dto';
+
 import {
   CreateInstitutionDto,
   UpdateInstitutionDto,
@@ -210,6 +214,16 @@ export class InstitutionsController {
   async hardDeleteTeam(@Param('id', ParseIntPipe) id: number) {
     await this.institutionsService.hardDeleteTeam(id);
     return { message: 'Equipo eliminado permanentemente' };
+
+
+
+  }
+
+
+  @Post('teams/local')
+  @HttpCode(HttpStatus.CREATED)
+  createLocalTeam(@Body() dto: CreateLocalTeamDto) {
+    return this.institutionsService.createLocalTeam(dto);
   }
 
   // ==================== TEAM MEMBERS ====================
