@@ -14,6 +14,10 @@ export class CreateEventCategoryDto {
 
   @IsOptional()
   @IsInt()
+  haymasterEventId?: number;   // ← agregar esto
+
+  @IsOptional()
+  @IsInt()
   externalSportId?: number;
 
   @IsOptional()

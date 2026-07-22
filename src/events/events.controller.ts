@@ -347,6 +347,23 @@ export class EventsController {
   }
 
   /**
+   * POST /events/haymaster/:haymasterEventId/categories
+   * Agregar una categoría individual a un evento de Haymaster
+   */
+  @Post('haymaster/:haymasterEventId/categories')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async addCategoryToHaymasterEvent(
+    @Param('haymasterEventId', ParseIntPipe) haymasterEventId: number,
+    @Body('categoryId', ParseIntPipe) categoryId: number,
+  ) {
+    return this.eventsService.createEventCategory({
+      haymasterEventId,
+      categoryId,
+      status: 'pendiente',
+    });
+  }
+
+  /**
    * POST /events/haymaster/:haymasterEventId/register-categories
    */
   @Post('haymaster/:haymasterEventId/register-categories')

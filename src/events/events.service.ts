@@ -215,22 +215,27 @@ export class EventsService {
   async createEventCategory(
     createDto: CreateEventCategoryDto,
   ): Promise<EventCategory> {
-    if (!createDto.eventId && !createDto.externalEventId) {
+    // ← Ahora acepta los 3 tipos de evento
+    if (!createDto.eventId && !createDto.externalEventId && !createDto.haymasterEventId) {
       throw new BadRequestException(
-        'Debe proporcionar eventId (evento local) o externalEventId (evento Sismaster)',
+        'Debe proporcionar eventId (evento local), externalEventId (evento Sismaster) o haymasterEventId (evento Haymaster)',
       );
     }
 
+    // Solo valida existencia local si es evento local
     if (createDto.eventId) {
       await this.findOneEvent(createDto.eventId);
     }
 
+    // ← Condición de duplicado extendida para Haymaster
     const whereCondition: any = {
       categoryId: createDto.categoryId,
     };
 
     if (createDto.eventId) {
       whereCondition.eventId = createDto.eventId;
+    } else if (createDto.haymasterEventId) {
+      whereCondition.haymasterEventId = createDto.haymasterEventId;
     } else {
       whereCondition.externalEventId = createDto.externalEventId;
     }
@@ -245,9 +250,11 @@ export class EventsService {
       );
     }
 
+    // ← Se agrega haymasterEventId al crear la entidad
     const eventCategory = this.eventCategoryRepository.create({
       eventId: createDto.eventId ?? null,
       externalEventId: createDto.externalEventId ?? null,
+      haymasterEventId: createDto.haymasterEventId ?? null,
       categoryId: createDto.categoryId,
       externalSportId: createDto.externalSportId ?? null,
       status: createDto.status ?? 'pendiente',
