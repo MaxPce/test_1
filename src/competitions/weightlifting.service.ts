@@ -57,16 +57,38 @@ export class WeightliftingService {
 
   async setManualRanks(
     phaseId: number,
-    ranks: { registrationId: number; snatchRank?: number | null; cleanAndJerkRank?: number | null; totalRank?: number | null }[],
+    ranks: {
+      registrationId: number;
+      snatchRank?: number | null;
+      cleanAndJerkRank?: number | null;
+      totalRank?: number | null;
+    }[],
   ): Promise<{ updated: number }> {
     let updated = 0;
+
     for (const item of ranks) {
-      await this.manualRankRepo.upsert(
-        { phaseId, registrationId: item.registrationId, snatchRank: item.snatchRank ?? null, cleanAndJerkRank: item.cleanAndJerkRank ?? null, totalRank: item.totalRank ?? null },
-        ['phaseId', 'registrationId'],
-      );
+      let entity = await this.manualRankRepo.findOne({
+        where: { phaseId, registrationId: item.registrationId },
+      });
+
+      if (entity) {
+        entity.snatchRank       = item.snatchRank       ?? null;
+        entity.cleanAndJerkRank = item.cleanAndJerkRank ?? null;
+        entity.totalRank        = item.totalRank        ?? null;
+      } else {
+        entity = this.manualRankRepo.create({
+          phaseId,
+          registrationId:  item.registrationId,
+          snatchRank:      item.snatchRank       ?? null,
+          cleanAndJerkRank: item.cleanAndJerkRank ?? null,
+          totalRank:       item.totalRank        ?? null,
+        });
+      }
+
+      await this.manualRankRepo.save(entity);
       updated++;
     }
+
     return { updated };
   }
 

@@ -21,6 +21,7 @@ import { Result }        from '../results/entities/result.entity';
 import { Participation } from '../competitions/entities/participation.entity';
 import { toSismasterUrl } from './constants/sismaster.constants';
 import { WeightliftingAttempt } from '../competitions/entities/weightlifting-attempt.entity';
+import { WeightliftingManualRank } from '../competitions/entities/weightlifting-manual-rank.entity';
 import { Athlete } from '../institutions/entities/athlete.entity';
 import { Event } from '../events/entities/event.entity';
 import { HaymasterService } from '../haymaster/haymaster.service';
@@ -90,6 +91,9 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(WeightliftingAttempt)
     private readonly weightliftingAttemptRepo: Repository<WeightliftingAttempt>,
+
+    @InjectRepository(WeightliftingManualRank)
+    private readonly weightliftingManualRankRepo: Repository<WeightliftingManualRank>,
 
     @InjectRepository(Event)
     private readonly eventRepo: Repository<Event>,
@@ -441,6 +445,22 @@ export class CompetitionPhaseReportService {
     'participationId',
   );
 
+  const weightliftingPhaseIds = phases
+    .filter((p) => weightliftingEcIds.has(p.eventCategoryId))
+    .map((p) => p.phaseId);
+
+  const weightliftingManualRanks = weightliftingPhaseIds.length
+    ? await this.weightliftingManualRankRepo.find({
+        where: weightliftingPhaseIds.map((id) => ({ phaseId: id })),
+      })
+    : [];
+
+  const weightliftingManualRanksByPhaseId = this.groupBy(
+    weightliftingManualRanks,
+    'phaseId',
+  );
+
+
 
    const swimmingResultsByPhaseId = this.groupBy(swimmingResults, 'phaseId');
 
@@ -471,6 +491,7 @@ export class CompetitionPhaseReportService {
         swimmingResultsByPhaseId,
         swimmingParticipationToRegId,
         weightliftingAttemptsByParticipationId,
+        weightliftingManualRanksByPhaseId, 
         detailLevel,             
       ),
     };
@@ -529,6 +550,7 @@ export class CompetitionPhaseReportService {
     swimmingResultsByPhaseId:       Record<number, Result[]>,        
     swimmingParticipationToRegId:   Map<number, number>,
     weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
+    weightliftingManualRanksByPhaseId: Record<number, WeightliftingManualRank[]>,
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const sportMap: Record<string, any> = {};
@@ -673,6 +695,7 @@ export class CompetitionPhaseReportService {
               phaseRegsByPhaseId[phase.phaseId] ?? [],
               isWeightlifting,                                      
               weightliftingAttemptsByParticipationId,
+              weightliftingManualRanksByPhaseId[phase.phaseId] ?? [],
               detailLevel,              
             ),
           ),
@@ -708,6 +731,7 @@ export class CompetitionPhaseReportService {
     phaseRegsForAthletics: PhaseRegistration[],
     isWeightlifting: boolean,
     weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
+    weightliftingManualRanksForPhase: WeightliftingManualRank[],
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const phaseMatches = matchesByPhaseId[phase.phaseId] ?? [];
@@ -765,6 +789,7 @@ export class CompetitionPhaseReportService {
         phaseMatches,
         regMap,
         weightliftingAttemptsByParticipationId,
+        weightliftingManualRanksForPhase,
       );
     }
 
@@ -1926,7 +1951,13 @@ export class CompetitionPhaseReportService {
     phaseMatches: Match[],
     regMap: Record<number, any>,
     attemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
+    manualRanks: WeightliftingManualRank[],
   ) {
+    // Mapa rápido: registrationId → rank manual
+    const mrByRegId = new Map<number, WeightliftingManualRank>(
+      manualRanks.map((mr) => [mr.registrationId, mr]),
+    );
+
     const rows: any[] = [];
 
     for (const match of phaseMatches) {
@@ -1957,40 +1988,56 @@ export class CompetitionPhaseReportService {
 
         const status =
           allRetiredSnatch || allRetiredCJ ? 'DNF' :
-          attempts.length === 0 ? 'DNS' :
+          attempts.length === 0            ? 'DNS' :
           null;
+
+        const regId = participation.registrationId ?? null;
+        const mr    = regId != null ? (mrByRegId.get(regId) ?? null) : null;
 
         rows.push({
           participationId: participation.participationId,
-          registrationId:  participation.registrationId ?? null,
+          registrationId:  regId,
           athlete:
-            participation.registrationId != null
-              ? (regMap[participation.registrationId] ?? { registrationId: participation.registrationId })
+            regId != null
+              ? (regMap[regId] ?? { registrationId: regId })
               : null,
-          weightClass: regMap[participation.registrationId ?? -1]?.weightClass ?? null,
+          weightClass: regMap[regId ?? -1]?.weightClass ?? null,
           snatch: {
-            best: bestSnatch,
+            best:       bestSnatch,
+            snatchRank: mr?.snatchRank ?? null,   // lugar en arranque
             attempts: snatchAttempts.map((a) => ({
               attemptNumber: a.attemptNumber,
-              weight: a.weightKg != null ? Number(a.weightKg) : null,
-              result: a.result,
+              weight:        a.weightKg != null ? Number(a.weightKg) : null,
+              result:        a.result,
             })),
           },
           cleanAndJerk: {
-            best: bestCJ,
+            best:              bestCJ,
+            cleanAndJerkRank:  mr?.cleanAndJerkRank ?? null,   // lugar en envión
             attempts: cjAttempts.map((a) => ({
               attemptNumber: a.attemptNumber,
-              weight: a.weightKg != null ? Number(a.weightKg) : null,
-              result: a.result,
+              weight:        a.weightKg != null ? Number(a.weightKg) : null,
+              result:        a.result,
             })),
           },
           total,
+          totalRank: mr?.totalRank ?? null,   // lugar en total
           status,
         });
       }
     }
 
+    // Ordenar: si hay ranks manuales usar totalRank; si no, calcular
+    const hasManualRanks = manualRanks.length > 0;
+
     const sorted = [...rows].sort((a, b) => {
+      if (hasManualRanks) {
+        if (a.totalRank == null && b.totalRank == null) return 0;
+        if (a.totalRank == null) return 1;
+        if (b.totalRank == null) return -1;
+        return a.totalRank - b.totalRank;
+      }
+      // fallback sin ranks manuales
       if (a.status && !b.status) return 1;
       if (!a.status && b.status) return -1;
       if (a.total !== null && b.total !== null) return b.total - a.total;
@@ -2001,9 +2048,12 @@ export class CompetitionPhaseReportService {
 
     let posCounter = 0;
     const athletes = sorted.map((row) => {
-      if (row.total !== null && !row.status) posCounter++;
+      const eligible = row.total !== null && !row.status;
+      if (eligible) posCounter++;
       return {
-        pos: row.total !== null && !row.status ? posCounter : null,
+        pos: hasManualRanks
+          ? (row.totalRank ?? null)
+          : (eligible ? posCounter : null),
         ...row,
       };
     });
@@ -2014,6 +2064,7 @@ export class CompetitionPhaseReportService {
       phaseType:         phase.type         ?? null,
       displayOrder:      phase.displayOrder ?? null,
       isWeightlifting:   true,
+      hasManualRanks,
       totalParticipants: athletes.length,
       athletes,
     };

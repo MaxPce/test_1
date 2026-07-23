@@ -37,6 +37,7 @@ import {
 } from 'src/competitions/entities';
 import { AthleticsSection } from 'src/competitions/entities/athletics-section.entity';
 import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-section-entry.entity';
+import { WeightliftingManualRank } from '../competitions/entities/weightlifting-manual-rank.entity';
 
 @Module({
   imports: [
@@ -70,6 +71,7 @@ import { AthleticsSectionEntry } from 'src/competitions/entities/athletics-secti
       AthleticsResult,
       Result,
       WeightliftingAttempt,
+      WeightliftingManualRank,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
     forwardRef(() => HaymasterModule),  
