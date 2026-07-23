@@ -20,6 +20,7 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
 import { UserRole } from '../common/enums/user-role.enum';
 import { GenerateWeightliftingPhasesDto } from './dto/generate-weightlifting-phases.dto';
+import { UpdateWeightliftingPositionsDto } from './dto/update-weightlifting-positions.dto';
 
 
 @Controller('competitions/weightlifting')
@@ -61,6 +62,8 @@ export class WeightliftingController {
   async getPhaseResults(@Param('phaseId', ParseIntPipe) phaseId: number) {
     return this.weightliftingService.getPhaseResults(phaseId);
   }
+
+  
 
 
   // GET /competitions/weightlifting/participations/:participationId/attempts
@@ -109,4 +112,6 @@ export class WeightliftingController {
   ) {
     return this.weightliftingService.removeAthleteFromPhase(phaseId, registrationId);
   }
+
+  
 }

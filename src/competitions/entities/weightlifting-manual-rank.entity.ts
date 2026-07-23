@@ -1,10 +1,6 @@
-// src/competitions/entities/weightlifting-manual-rank.entity.ts
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
-import { Phase } from './phase.entity';
-import { Registration } from '../../events/entities/registration.entity';
+import { Entity, PrimaryGeneratedColumn, Column, UpdateDateColumn } from 'typeorm';
 
-@Entity('weightlifting_manual_ranks')
-@Unique(['phaseId', 'registrationId'])
+@Entity('weightlifting_phase_manual_ranks')
 export class WeightliftingManualRank {
   @PrimaryGeneratedColumn()
   id: number;
@@ -24,11 +20,6 @@ export class WeightliftingManualRank {
   @Column({ name: 'total_rank', nullable: true, type: 'int' })
   totalRank: number | null;
 
-  @ManyToOne(() => Phase)
-  @JoinColumn({ name: 'phase_id' })
-  phase: Phase;
-
-  @ManyToOne(() => Registration)
-  @JoinColumn({ name: 'registration_id' })
-  registration: Registration;
+  @UpdateDateColumn({ name: 'updated_at' })
+  updatedAt: Date;
 }
