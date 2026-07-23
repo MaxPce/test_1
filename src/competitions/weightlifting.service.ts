@@ -23,6 +23,9 @@ export interface WeightliftingAthleteResult {
   total: number | null;
   totalAchievedAtAttempt: number | null;
   rank: number | null;
+  manualSnatchRank: number | null;
+  manualCleanAndJerkRank: number | null;
+  manualTotalRank: number | null;
 }
 
 @Injectable()
@@ -83,8 +86,8 @@ export class WeightliftingService {
       .leftJoinAndSelect('athlete.institution', 'institution')
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
-      .where('match.phaseId = :phaseId', { phaseId })   // ← camelCase, no snake_case
-      .andWhere('match.deletedAt IS NULL')               // ← guard para soft-delete
+      .where('match.phaseId = :phaseId', { phaseId })
+      .andWhere('match.deletedAt IS NULL')
       .getMany();
 
     if (participations.length === 0) return [];
@@ -117,7 +120,6 @@ export class WeightliftingService {
       const total =
         bestSnatch !== null && bestCnj !== null ? bestSnatch + bestCnj : null;
 
-      // Desempate IWF W3: intento global en que se completó el total
       const totalAchievedAtAttempt =
         total !== null ? this.getTotalAchievedAttempt(snatch, cnj) : null;
 
@@ -130,12 +132,13 @@ export class WeightliftingService {
         total,
         totalAchievedAtAttempt,
         rank: null,
+        manualSnatchRank: null,
+        manualCleanAndJerkRank: null,
+        manualTotalRank: null,
       };
     });
 
-    // 4. Ordenar y asignar rank IWF:
-    //    - Con total primero, sin total al final (W2)
-    //    - Desempate: total DESC → totalAchievedAtAttempt ASC → bodyWeight ASC (si existe)
+    // 4. Ordenar y asignar rank IWF
     results.sort((a, b) => {
       const aHas = a.total !== null;
       const bHas = b.total !== null;
@@ -145,7 +148,6 @@ export class WeightliftingService {
 
       if (b.total! !== a.total!) return b.total! - a.total!;
 
-      // Desempate W3: menor intento acumulado gana
       const aAttempt = a.totalAchievedAtAttempt ?? 99;
       const bAttempt = b.totalAchievedAtAttempt ?? 99;
       return aAttempt - bAttempt;
@@ -162,6 +164,23 @@ export class WeightliftingService {
         if (!tied) currentRank = i + 1;
       }
       results[i].rank = results[i].total !== null ? currentRank : null;
+    }
+
+    // 6. Cargar manualRanks y mergearlos en los resultados
+    const manualRanks = await this.manualRankRepo.find({ where: { phaseId } });
+    const manualRankMap = new Map(
+      manualRanks.map((r) => [r.registrationId, r]),
+    );
+
+    for (const result of results) {
+      const regId =
+        result.participation.registrationId ??
+        result.participation.registration?.registrationId ??
+        null;
+      const mr = regId != null ? manualRankMap.get(regId) : undefined;
+      result.manualSnatchRank       = mr?.snatchRank       ?? null;
+      result.manualCleanAndJerkRank = mr?.cleanAndJerkRank ?? null;
+      result.manualTotalRank        = mr?.totalRank        ?? null;
     }
 
     return results;
