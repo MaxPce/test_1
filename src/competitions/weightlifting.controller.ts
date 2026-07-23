@@ -8,10 +8,12 @@ import {
   Body,
   ParseIntPipe,
   UseGuards,
+  Patch
 } from '@nestjs/common';
 import { WeightliftingService } from './weightlifting.service';
 import { UpsertWeightliftingAttemptDto } from './dto/create-weightlifting-attempt.dto';
 import { InitializeWeightliftingPhaseDto } from './dto/initialize-weightlifting-phase.dto';
+import { SetWeightliftingManualRanksDto } from './dto/set-weightlifting-manual-ranks.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -26,6 +28,33 @@ export class WeightliftingController {
   constructor(private readonly weightliftingService: WeightliftingService) {}
 
 
+
+  @Get('phases/:phaseId/manual-ranks')
+  @Public()
+  async getManualRanks(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.weightliftingService.getManualRanks(phaseId);
+  }
+
+  @Patch('phases/:phaseId/manual-ranks')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async setManualRanks(
+    @Param('phaseId', ParseIntPipe) phaseId: number,
+    @Body() dto: SetWeightliftingManualRanksDto,
+  ) {
+    return this.weightliftingService.setManualRanks(phaseId, dto.ranks);
+  }
+
+  @Delete('phases/:phaseId/manual-ranks')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async clearManualRanks(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.weightliftingService.clearManualRanks(phaseId);
+  }
+
+  @Post('phases/:phaseId/finalize')
+  @Roles(UserRole.ADMIN, UserRole.MODERATOR)
+  async finalizePhase(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.weightliftingService.finalizePhase(phaseId);
+  }
   // GET /competitions/weightlifting/phases/:phaseId/results
   @Get('phases/:phaseId/results')
   @Public()

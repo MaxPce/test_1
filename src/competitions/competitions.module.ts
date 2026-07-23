@@ -51,6 +51,7 @@ import { AthleticsSectionEntry } from './entities/athletics-section-entry.entity
 import { AthleticsPhaseClassification } from './entities/athletics-phase-classification.entity';
 import { AthleticsClassificationService } from './athletics-classification.service';
 import { GroupStanding } from './entities/group-standing.entity';
+import { WeightliftingManualRank } from './entities/weightlifting-manual-rank.entity';
 
 @Module({
   imports: [
@@ -67,6 +68,7 @@ import { GroupStanding } from './entities/group-standing.entity';
       PhaseRegistration,
       ShootingScore,
       WeightliftingAttempt,
+      WeightliftingManualRank,
       AthleticsResult,
       AthleticsSection,
       AthleticsSectionEntry,
