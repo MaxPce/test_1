@@ -169,8 +169,10 @@ export class CompetitionsService {
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution')
       .leftJoinAndSelect('registration.team', 'team')
       .leftJoinAndSelect('team.institution', 'teamInstitution')
+      .leftJoinAndSelect('team.members', 'teamMembers')
+      .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .leftJoinAndSelect('matches.winner', 'winner')
-      .leftJoinAndSelect('phase.standings', 'standings')
+      .leftJoinAndSelect('phase.standings', 'stsandings')
       .leftJoinAndSelect('standings.registration', 'standingRegistration')
       .leftJoinAndSelect('standingRegistration.athlete', 'standingAthlete')
       .leftJoinAndSelect('standingAthlete.institution', 'standingAthleteInstitution')
@@ -534,6 +536,8 @@ export class CompetitionsService {
         'registration.athlete.institution',
         'registration.team',
         'registration.team.institution',
+        'registration.team.members',          
+        'registration.team.members.athlete',
       ],
     });
   }

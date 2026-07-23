@@ -12,6 +12,7 @@ import { Match } from './entities/match.entity';
 import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 import { BracketService } from './bracket.service';
 import { MatchStatus, PhaseType } from '../common/enums';
+import { TeamMember } from '../institutions/entities/team-member.entity';
 
 @Injectable()
 export class TaekwondoPoomsaeService {
@@ -363,6 +364,8 @@ export class TaekwondoPoomsaeService {
         'matches.participations.registration.athlete.institution',
         'matches.participations.registration.team',
         'matches.participations.registration.team.institution',
+        'matches.participations.registration.team.members',        
+        'matches.participations.registration.team.members.athlete',
       ],
     });
 
@@ -414,14 +417,19 @@ export class TaekwondoPoomsaeService {
       const isTeam = !!reg?.team;
 
       const name = isTeam ? reg.team.name : reg?.athlete?.name || 'Sin nombre';
-
       const photoUrl = isTeam ? null : reg?.athlete?.photoUrl || null;
-
-      const institution = isTeam
-        ? reg.team.institution
-        : reg?.athlete?.institution;
-
+      const institution = isTeam ? reg.team.institution : reg?.athlete?.institution;
       const gender = isTeam ? 'Equipo' : reg?.athlete?.gender || '-';
+
+      // ✅ NUEVO
+      const members = isTeam
+        ? (reg.team.members ?? []).map((tm: TeamMember) => ({
+            athleteId: tm.athlete?.athleteId ?? tm.athleteId,
+            name: tm.athlete?.name || 'Sin nombre',
+            photo: tm.athlete?.photoUrl ?? null,
+            rol: tm.rol ?? null,
+          }))
+        : undefined;
 
       return {
         participationId: participation.participationId,
@@ -435,6 +443,7 @@ export class TaekwondoPoomsaeService {
         presentation: score?.presentation || null,
         total: score?.total || null,
         rank: score?.rank || null,
+        members, // ✅ NUEVO
       };
     });
 
