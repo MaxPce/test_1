@@ -26,4 +26,14 @@ export class SwimmingMedalTableController {
   ) {
     return this.service.getFullResults(externalEventId, localSportId);
   }
+
+  // GET /swimming-medal-table/external/:externalEventId/local-sport/:localSportId/podium
+  @Get('external/:externalEventId/local-sport/:localSportId/podium')
+  @Public()
+  getPhasePodium(
+    @Param('externalEventId', ParseIntPipe) externalEventId: number,
+    @Param('localSportId',    ParseIntPipe) localSportId:    number,
+  ) {
+    return this.service.getPhasePodium(externalEventId, localSportId);
+  }
 }

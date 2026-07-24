@@ -6,6 +6,12 @@ import {
   SwimmingMedalSummaryResponse,
 } from './dto/swimming-medal-summary.dto';
 
+import {
+  PodiumEntry,
+  PhasePodium,
+  SwimmingPhasePodiumResponse,
+} from './dto/swimming-phase-podium.dto';
+
 // Regla 3.5.6 – Puntaje pruebas individuales (FEDUP)
 const INDIVIDUAL_POINTS: Record<number, number> = {
   1: 9, 2: 7, 3: 6, 4: 5, 5: 4, 6: 3, 7: 2, 8: 1,
@@ -414,4 +420,128 @@ export class SwimmingMedalTableService {
 
     return { events };
     }
+
+  async getPhasePodium(
+    externalEventId: number,
+    localSportId: number,
+  ): Promise<SwimmingPhasePodiumResponse> {
+    // Misma query base que getFullResults, filtrado a rank_position <= 3
+    const rows: Array<{
+      eventCategoryId: number;
+      eventName: string;
+      categoryName: string;
+      gender: string;
+      isRelay: number;
+      rankPosition: number | null;
+      athleteLastName: string | null;
+      athleteFirstName: string | null;
+      teamName: string | null;
+      institutionName: string;
+      institutionAbbrev: string | null;
+      institutionLogoUrl: string | null;
+      finalTime: string | null;
+      notes: string | null;
+    }> = await this.dataSource.query(
+      `
+      SELECT
+        ec.event_category_id AS eventCategoryId,
+        CONCAT(
+          CASE cat.gender WHEN 'F' THEN 'Girls' WHEN 'M' THEN 'Boys' ELSE 'Mixed' END,
+          ' ', ph.name
+        ) AS eventName,
+        cat.name AS categoryName,
+        CASE cat.gender WHEN 'F' THEN 'Damas' WHEN 'M' THEN 'Varones' ELSE 'Mixto' END AS gender,
+        ph.is_relay AS isRelay,
+        r.rank_position AS rankPosition,
+        NULL AS athleteLastName,
+        a.name AS athleteFirstName,
+        tm.name AS teamName,
+        COALESCE(inst.name, t_inst.name, 'N/A') AS institutionName,
+        COALESCE(inst.abrev, t_inst.abrev, NULL) AS institutionAbbrev,
+        COALESCE(inst.logo_url, t_inst.logo_url, NULL) AS institutionLogoUrl,
+        r.time_value AS finalTime,
+        r.notes AS notes
+      FROM results r
+      INNER JOIN phases ph ON ph.phase_id = r.phase_id AND ph.deleted_at IS NULL
+      INNER JOIN event_categories ec
+        ON ec.event_category_id = ph.event_category_id
+        AND ec.external_event_id = ?
+      INNER JOIN categories cat ON cat.category_id = ec.category_id
+      INNER JOIN sports s ON s.sport_id = cat.sport_id AND s.sport_id = ?
+      INNER JOIN participations p ON p.participation_id = r.participation_id
+      INNER JOIN registrations reg
+        ON reg.registration_id = p.registration_id AND reg.deleted_at IS NULL
+      LEFT JOIN athletes a ON a.athlete_id = reg.athlete_id AND a.deleted_at IS NULL
+      LEFT JOIN institutions inst ON inst.institution_id = a.institution_id
+      LEFT JOIN teams tm ON tm.team_id = reg.team_id
+      LEFT JOIN institutions t_inst ON t_inst.institution_id = tm.institution_id
+      WHERE r.rank_position IS NOT NULL
+        AND r.rank_position <= 3          -- ← solo podio
+        AND (
+          r.notes IS NULL OR (
+            r.notes NOT LIKE '%DQ%' AND
+            r.notes NOT LIKE '%DNS%' AND
+            r.notes NOT LIKE '%DNF%'
+          )
+        )
+      ORDER BY ec.event_category_id ASC, r.rank_position ASC
+      `,
+      [externalEventId, localSportId],
+    );
+
+    // Agrupar por event_category_id
+    const byCategory = new Map<number, typeof rows>();
+    for (const row of rows) {
+      const id = Number(row.eventCategoryId);
+      if (!byCategory.has(id)) byCategory.set(id, []);
+      byCategory.get(id)!.push(row);
+    }
+
+    // Detectar empates por posición (mismo rank_position = isTied)
+    let eventNumber = 1;
+    const phases: PhasePodium[] = [];
+
+    for (const [ecId, catRows] of byCategory.entries()) {
+      const first = catRows[0];
+      const isRelay = Number(first.isRelay ?? 0) === 1;
+
+      // Contar cuántos atletas comparten cada posición
+      const posCount = new Map<number, number>();
+      for (const r of catRows) {
+        if (r.rankPosition == null) continue;
+        const pos = Number(r.rankPosition);
+        posCount.set(pos, (posCount.get(pos) ?? 0) + 1);
+      }
+
+      const podium: PodiumEntry[] = catRows.map((r) => {
+        const pos = r.rankPosition != null ? Number(r.rankPosition) : 0;
+        const athleteName = isRelay
+          ? (r.teamName ?? r.institutionName)
+          : [r.athleteLastName, r.athleteFirstName].filter(Boolean).join(', ') || r.athleteFirstName || 'N/A';
+
+        return {
+          rank: pos,
+          athleteName,
+          institutionName: r.institutionName,
+          institutionAbbrev: r.institutionAbbrev,
+          institutionLogoUrl: r.institutionLogoUrl,
+          finalTime: r.finalTime,
+          notes: r.notes,
+          isTied: (posCount.get(pos) ?? 1) > 1,
+        };
+      });
+
+      phases.push({
+        eventCategoryId: ecId,
+        eventNumber: eventNumber++,
+        eventName: first.eventName,
+        categoryName: first.categoryName,
+        gender: first.gender,
+        isRelay,
+        podium,
+      });
+    }
+
+    return { phases };
+  }
 }

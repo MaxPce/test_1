@@ -1809,42 +1809,45 @@ export class CompetitionPhaseReportService {
     participationToRegId: Map<number, number>,
     regMap: Record<number, any>,
   ) {
-    const isDQ = (r: Result) =>
-      !!(r.notes && r.notes.toUpperCase().includes('DQ'));
- 
-    const athletes = results.map((r, idx) => {
-      const registrationId =
-        r.participationId != null
-          ? (participationToRegId.get(r.participationId) ?? null)
-          : null;
+    const mapped = results.map((r) => {
+      const regId = participationToRegId.get(r.participationId) ?? null;
+      const athlete = regId ? (regMap[regId] ?? { registrationId: regId }) : null;
 
-    const isDNS = !!(r.notes && r.notes.toUpperCase().includes('DNS'));
- 
       return {
-        pos:            (isDQ(r) || isDNS) ? null : (r.rankPosition ?? idx + 1),
-        registrationId,
-        athlete:
-          registrationId != null
-            ? (regMap[registrationId] ?? { registrationId })
-            : null,
-        time:           r.timeValue   ?? null,
-        rankPosition:   r.rankPosition ?? null,
-        isDQ:           isDQ(r),
-        isDNS,
-        notes:          r.notes        ?? null,
+        rank: r.rankPosition ?? null,
+        athlete,
+        finalTime: r.timeValue ?? null,
+        notes: r.notes ?? null,
+        isTied: false, // se calcula abajo
       };
     });
- 
+
+    // Detectar empates (mismo rank)
+    const rankCount = new Map<number, number>();
+    for (const row of mapped) {
+      if (row.rank != null) rankCount.set(row.rank, (rankCount.get(row.rank) ?? 0) + 1);
+    }
+    for (const row of mapped) {
+      if (row.rank != null) row.isTied = (rankCount.get(row.rank) ?? 1) > 1;
+    }
+
+    // ← PODIO: top-3 incluyendo empates
+    const podium = mapped.filter(
+      (r) => r.rank != null && r.rank <= 3
+    );
+
     return {
-      phaseId:           phase.phaseId,
-      phaseName:         phase.name         ?? null,
-      phaseType:         phase.type         ?? null,
-      displayOrder:      phase.displayOrder ?? null,
-      isSwimming:        true,
-      totalParticipants: athletes.length,
-      athletes,
+      phaseId: phase.phaseId,
+      phaseName: phase.name ?? null,
+      phaseType: phase.type ?? null,
+      displayOrder: phase.displayOrder ?? null,
+      isTimedSport: true,
+      totalParticipants: mapped.length,
+      podium,        // ← campo explícito de podio
+      results: mapped, // tabla completa de resultados
     };
   }
+
 
   private buildWrestlingPhase(
     phase: Phase,
