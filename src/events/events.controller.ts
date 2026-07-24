@@ -14,6 +14,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { EventsService } from './events.service';
+import { WeightliftingMedalTableService } from '../weightlifting-medal-table/weightlifting-medal-table.service';
 import {
   CreateEventDto,
   UpdateEventDto,
@@ -47,6 +48,7 @@ export class EventsController {
     private readonly eventsService: EventsService,
     private readonly uploadService: UploadService,
     private readonly registrationEnrichmentService: RegistrationEnrichmentService,
+    private readonly wlMedalTableService: WeightliftingMedalTableService,
   ) {}
 
   // ==================== EVENTS ====================
@@ -193,6 +195,19 @@ export class EventsController {
   }
 
   // ==================== EVENTS BY ID ====================
+
+  @Get(':eventId/sports/:sportId/weightlifting-podium')
+  @Public()
+  getWeightliftingPodium(
+    @Param('eventId', ParseIntPipe) eventId: number,
+    @Param('sportId', ParseIntPipe) sportId: number,
+  ) {
+    return this.wlMedalTableService.getWeightliftingPodiumByEventAndSport(
+      eventId,
+      sportId,
+    );
+  }
+
 
   @Get(':id')
   @Public()

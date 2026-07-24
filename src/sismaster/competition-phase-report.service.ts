@@ -741,12 +741,34 @@ export class CompetitionPhaseReportService {
 
 
     if (detailLevel === 'category') {
+      // Calcular podio: primero manual ranks, luego standings
+      let podium: any[] = [];
+
+      if (phaseManualRanks.length > 0) {
+        podium = phaseManualRanks
+          .slice(0, 3)
+          .map((mr) => ({
+            rank: mr.manualRankPosition,
+            athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
+          }));
+      } else if (phaseStandings.length > 0) {
+        podium = phaseStandings
+          .map((s) => ({
+            rank: s.manualRankPosition ?? s.rankPosition ?? null,
+            athlete: regMap[s.registrationId] ?? { registrationId: s.registrationId },
+          }))
+          .filter((s) => s.rank != null)
+          .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
+          .slice(0, 3);
+      }
+
       return {
         phaseId: phase.phaseId,
         phaseName: phase.name ?? null,
         phaseType: phase.type ?? null,
         displayOrder: phase.displayOrder ?? null,
         totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
+        podium,
       };
     }
 

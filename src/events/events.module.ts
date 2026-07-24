@@ -13,6 +13,8 @@ import { Company } from '../companies/entities/company.entity';
 import { FeaturedAthlete } from './entities/featured-athlete.entity';
 import { Sport } from '../sports/entities/sport.entity';
 import { Category } from '../sports/entities/category.entity';
+import { WeightliftingMedalTableModule } from '../weightlifting-medal-table/weightlifting-medal-table.module';
+
 @Module({
   imports: [
     TypeOrmModule.forFeature([
@@ -28,6 +30,7 @@ import { Category } from '../sports/entities/category.entity';
     ]),
     SismasterModule,
     HaymasterModule,
+    WeightliftingMedalTableModule,
   ],
   controllers: [EventsController],
   providers: [EventsService, UploadService, RegistrationEnrichmentService],

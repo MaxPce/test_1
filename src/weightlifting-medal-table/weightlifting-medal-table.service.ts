@@ -21,6 +21,28 @@ interface AthleteResult {
   totalAchievedAtAttempt: number | null;
 }
 
+type WLPhasePodiumResult = {
+  phaseId: number;
+  phaseName: string;
+  weightClasses: {
+    weightClass: string;
+    podium: {
+      position: number;
+      medal: 'gold' | 'silver' | 'bronze';
+      registrationId: number;
+      athleteName: string;
+      institutionName: string | null;
+      institutionAbrev: string | null;
+      logoUrl: string | null;
+      photoUrl: string | null;
+      bestSnatch: number | null;
+      bestCleanAndJerk: number | null;
+      total: number | null;
+    }[];
+  }[];
+};
+
+
 @Injectable()
 export class WeightliftingMedalTableService {
   constructor(private readonly dataSource: DataSource) {}
@@ -566,5 +588,49 @@ export class WeightliftingMedalTableService {
 
     return { phaseId, phaseName, weightClasses };
   }
+
+  async getWeightliftingPodiumByEventAndSport(
+    externalEventId: number,
+    localSportId: number,
+  ): Promise<{
+    sportId: number;
+    sportName: string;
+    phases: WLPhasePodiumResult[];
+  }> {
+    // Igual que getMedalSummary: busca fases del evento+deporte
+    // via event_categories.external_event_id y categories.sport_id
+    const phaseRows: Array<{ phaseId: number }> = await this.dataSource.query(
+      `SELECT DISTINCT ph.phase_id AS phaseId
+      FROM phases ph
+      INNER JOIN event_categories ec
+        ON ec.event_category_id = ph.event_category_id
+        AND ec.external_event_id = ?
+        AND ph.deleted_at IS NULL
+      INNER JOIN categories cat
+        ON cat.category_id = ec.category_id
+        AND cat.deleted_at IS NULL
+      INNER JOIN sports s
+        ON s.sport_id = cat.sport_id
+        AND s.sport_id = ?
+      ORDER BY ph.phase_id ASC`,
+      [externalEventId, localSportId],
+    );
+
+    const phases = await Promise.all(
+      phaseRows.map((r) => this.getWeightliftingPhasePodium(r.phaseId)),
+    );
+
+    const sportRow: Array<{ sportName: string }> = await this.dataSource.query(
+      `SELECT name AS sportName FROM sports WHERE sport_id = ? LIMIT 1`,
+      [localSportId],
+    );
+
+    return {
+      sportId:   localSportId,
+      sportName: sportRow[0]?.sportName ?? 'Halterofilia',
+      phases,
+    };
+  }
+
 
 }
