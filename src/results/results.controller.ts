@@ -186,4 +186,6 @@ export class ResultsController {
   ) {
     return this.resultsService.createDNSResult(registrationId, phaseId, user.userId);
   }
+
+  
 }

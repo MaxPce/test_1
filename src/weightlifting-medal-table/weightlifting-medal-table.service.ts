@@ -604,7 +604,7 @@ export class WeightliftingMedalTableService {
       FROM phases ph
       INNER JOIN event_categories ec
         ON ec.event_category_id = ph.event_category_id
-        AND ec.external_event_id = ?
+        AND ec.haymaster_event_id = ?        
         AND ph.deleted_at IS NULL
       INNER JOIN categories cat
         ON cat.category_id = ec.category_id
