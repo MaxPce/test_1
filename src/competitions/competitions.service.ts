@@ -172,7 +172,7 @@ export class CompetitionsService {
       .leftJoinAndSelect('team.members', 'teamMembers')
       .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .leftJoinAndSelect('matches.winner', 'winner')
-      .leftJoinAndSelect('phase.standings', 'stsandings')
+      .leftJoinAndSelect('phase.standings', 'standings')
       .leftJoinAndSelect('standings.registration', 'standingRegistration')
       .leftJoinAndSelect('standingRegistration.athlete', 'standingAthlete')
       .leftJoinAndSelect('standingAthlete.institution', 'standingAthleteInstitution')
