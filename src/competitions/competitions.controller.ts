@@ -612,5 +612,11 @@ export class CompetitionsController {
     );
   }
 
+  // GET /competitions/phases/:phaseId/podium
+  @Get('phases/:phaseId/podium')
+  async getPhasePodium(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.competitionsService.getPhasePodium(phaseId);
+  }
+
 
 }

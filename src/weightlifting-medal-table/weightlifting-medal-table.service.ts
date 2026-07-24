@@ -456,4 +456,115 @@ export class WeightliftingMedalTableService {
     };
   }
 
+
+  async getWeightliftingPhasePodium(phaseId: number): Promise<{
+    phaseId: number;
+    phaseName: string;
+    weightClasses: {
+      weightClass: string;
+      podium: {
+        position: number;
+        medal: 'gold' | 'silver' | 'bronze';
+        registrationId: number;
+        athleteName: string;
+        institutionName: string | null;
+        institutionAbrev: string | null;
+        logoUrl: string | null;
+        photoUrl: string | null;
+        bestSnatch: number | null;
+        bestCleanAndJerk: number | null;
+        total: number | null;
+      }[];
+    }[];
+  }> {
+    const rows: any[] = await this.dataSource.query(
+      `SELECT
+        wmr.registration_id         AS registrationId,
+        wmr.manual_rank_position    AS position,
+        wmr.weight_class            AS weightClass,
+        ph.name                     AS phaseName,
+        COALESCE(a.name, tm.name)   AS athleteName,
+        COALESCE(a.photo_url, NULL) AS photoUrl,
+        COALESCE(inst.name, t_inst.name)           AS institutionName,
+        COALESCE(inst.abrev, t_inst.abrev)         AS institutionAbrev,
+        COALESCE(inst.logo_url, t_inst.logo_url)   AS logoUrl,
+        -- totales calculados desde los intentos reales
+        SUM(CASE WHEN wa.lift_type = 'snatch'        AND wa.result = 'valid' THEN wa.weight_kg END) AS rawBestSnatch,
+        SUM(CASE WHEN wa.lift_type = 'clean_and_jerk' AND wa.result = 'valid' THEN wa.weight_kg END) AS rawBestCnj
+      FROM weightlifting_phase_manual_ranks wmr
+      INNER JOIN phases ph
+        ON ph.phase_id = wmr.phase_id
+      INNER JOIN registrations reg
+        ON reg.registration_id = wmr.registration_id
+        AND reg.deleted_at IS NULL
+      LEFT JOIN athletes a
+        ON a.athlete_id = reg.athlete_id
+        AND a.deleted_at IS NULL
+      LEFT JOIN institutions inst
+        ON inst.institution_id = a.institution_id
+      LEFT JOIN teams tm
+        ON tm.team_id = reg.team_id
+      LEFT JOIN institutions t_inst
+        ON t_inst.institution_id = tm.institution_id
+      -- intentos para mostrar bestSnatch / bestCnj / total en el podio
+      LEFT JOIN participations p
+        ON p.registration_id = reg.registration_id
+      LEFT JOIN matches mx
+        ON mx.match_id = p.match_id
+        AND mx.phase_id = wmr.phase_id
+        AND mx.deleted_at IS NULL
+      LEFT JOIN weightlifting_attempts wa
+        ON wa.participation_id = p.participation_id
+      WHERE wmr.phase_id = ?
+        AND wmr.manual_rank_position IN (1, 2, 3)
+      GROUP BY
+        wmr.registration_id, wmr.manual_rank_position, wmr.weight_class,
+        ph.name, athleteName, photoUrl,
+        institutionName, institutionAbrev, logoUrl
+      ORDER BY wmr.weight_class ASC, wmr.manual_rank_position ASC`,
+      [phaseId],
+    );
+
+    if (rows.length === 0) {
+      return { phaseId, phaseName: '', weightClasses: [] };
+    }
+
+    const MEDAL_MAP: Record<number, 'gold' | 'silver' | 'bronze'> = {
+      1: 'gold', 2: 'silver', 3: 'bronze',
+    };
+
+    // Agrupar por weightClass
+    const classMap = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const wc = row.weightClass ?? 'Abierto';
+      if (!classMap.has(wc)) classMap.set(wc, []);
+      classMap.get(wc)!.push(row);
+    }
+
+    const phaseName: string = rows[0].phaseName ?? '';
+
+    const weightClasses = [...classMap.entries()].map(([weightClass, entries]) => ({
+      weightClass,
+      podium: entries.map((r) => {
+        const bestSnatch = r.rawBestSnatch !== null ? Number(r.rawBestSnatch) : null;
+        const bestCnj    = r.rawBestCnj    !== null ? Number(r.rawBestCnj)    : null;
+        return {
+          position:         r.position,
+          medal:            MEDAL_MAP[r.position],
+          registrationId:   r.registrationId,
+          athleteName:      r.athleteName ?? 'Sin nombre',
+          institutionName:  r.institutionName ?? null,
+          institutionAbrev: r.institutionAbrev ?? null,
+          logoUrl:          r.logoUrl ?? null,
+          photoUrl:         r.photoUrl ?? null,
+          bestSnatch,
+          bestCleanAndJerk: bestCnj,
+          total: bestSnatch !== null && bestCnj !== null ? bestSnatch + bestCnj : null,
+        };
+      }),
+    }));
+
+    return { phaseId, phaseName, weightClasses };
+  }
+
 }

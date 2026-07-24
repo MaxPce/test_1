@@ -1670,4 +1670,79 @@ export class CompetitionsService {
       `Creadas ${registrations.length} participaciones para tabla de puntajes en fase ${phase.phaseId}`,
     );
   }
+
+  async getPhasePodium(phaseId: number): Promise<{
+    phaseId: number;
+    phaseName: string;
+    sportName: string;
+    podium: {
+      position: number;      // 1, 2, 3
+      medal: 'gold' | 'silver' | 'bronze';
+      registrationId: number;
+      participantName: string;
+      institutionName: string | null;
+      institutionAbrev: string | null;
+      logoUrl: string | null;
+      photoUrl: string | null;
+    }[];
+  }> {
+    // 1. Cargar la fase con sus relaciones de deporte
+    const phase = await this.phaseRepository.findOne({
+      where: { phaseId },
+      relations: [
+        'eventCategory',
+        'eventCategory.category',
+        'eventCategory.category.sport',
+      ],
+    });
+    if (!phase) throw new NotFoundException(`Fase ${phaseId} no encontrada`);
+
+    const sportName =
+      phase.eventCategory?.category?.sport?.name ?? 'Deporte';
+    const phaseName = phase.name ?? `Fase ${phaseId}`;
+
+    // 2. Obtener los manual ranks (ya ordenados ASC por manualRankPosition)
+    const rows: any[] = await this.dataSource.query(
+      `SELECT
+        pmr.registration_id       AS registrationId,
+        pmr.manual_rank_position  AS position,
+        COALESCE(a.name, t.name)          AS participantName,
+        COALESCE(a.photo_url, NULL)       AS photoUrl,
+        COALESCE(ai.name, ti.name)        AS institutionName,
+        COALESCE(ai.abrev, ti.abrev)      AS institutionAbrev,
+        COALESCE(ai.logo_url, ti.logo_url) AS logoUrl
+      FROM phase_manual_ranks pmr
+      LEFT JOIN registrations r   ON r.registration_id = pmr.registration_id
+      LEFT JOIN athletes a        ON a.athlete_id = r.athlete_id
+      LEFT JOIN institutions ai   ON ai.institution_id = a.institution_id
+      LEFT JOIN teams t           ON t.team_id = r.team_id
+      LEFT JOIN institutions ti   ON ti.institution_id = t.institution_id
+      WHERE pmr.phase_id = ?
+        AND pmr.manual_rank_position IN (1, 2, 3)
+      ORDER BY pmr.manual_rank_position ASC`,
+      [phaseId],
+    );
+
+    const MEDAL_MAP: Record<number, 'gold' | 'silver' | 'bronze'> = {
+      1: 'gold',
+      2: 'silver',
+      3: 'bronze',
+    };
+
+    return {
+      phaseId,
+      phaseName,
+      sportName,
+      podium: rows.map((r) => ({
+        position: r.position,
+        medal: MEDAL_MAP[r.position],
+        registrationId: r.registrationId,
+        participantName: r.participantName ?? 'Sin nombre',
+        institutionName: r.institutionName ?? null,
+        institutionAbrev: r.institutionAbrev ?? null,
+        logoUrl: r.logoUrl ?? null,
+        photoUrl: r.photoUrl ?? null,
+      })),
+    };
+  }
 }

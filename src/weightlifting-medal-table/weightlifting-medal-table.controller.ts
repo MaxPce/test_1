@@ -29,4 +29,10 @@ export class WeightliftingMedalTableController {
       institutionId,
     );
   }
+  // GET /weightlifting-medal-table/phases/:phaseId/podium
+  @Get('phases/:phaseId/podium')
+  async getPhasePodium(@Param('phaseId', ParseIntPipe) phaseId: number) {
+    return this.service.getWeightliftingPhasePodium(phaseId);
+  }
 }
+
