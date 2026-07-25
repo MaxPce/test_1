@@ -547,8 +547,8 @@ export class CompetitionPhaseReportService {
     athleticsSectionsByPhaseId: Record<number, AthleticsSection[]>,
     athleticsEntriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     athleticsResultsByPrId: Record<number, AthleticsResult[]>,
-    swimmingResultsByPhaseId:       Record<number, Result[]>,        
-    swimmingParticipationToRegId:   Map<number, number>,
+    swimmingResultsByPhaseId: Record<number, Result[]>,
+    swimmingParticipationToRegId: Map<number, number>,
     weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
     weightliftingManualRanksByPhaseId: Record<number, WeightliftingManualRank[]>,
     detailLevel: 'sport' | 'category' | 'phase',
@@ -558,8 +558,6 @@ export class CompetitionPhaseReportService {
     for (const ec of eventCategories) {
       const sport = (ec.category as any)?.sport;
       const sportKey = String(sport?.sportId ?? 'sin_deporte');
-
-      
 
       if (!sportMap[sportKey]) {
         sportMap[sportKey] = {
@@ -580,6 +578,7 @@ export class CompetitionPhaseReportService {
       const seenRegIds = new Set<number>(
         sportMap[sportKey].participants.map((p: any) => p.registrationId),
       );
+
       for (const reg of regsForCategory) {
         if (!seenRegIds.has(reg.registrationId)) {
           const mapped = regMap[reg.registrationId];
@@ -589,6 +588,7 @@ export class CompetitionPhaseReportService {
           }
         }
       }
+
       sportMap[sportKey].totalParticipants =
         sportMap[sportKey].participants.length;
 
@@ -623,7 +623,6 @@ export class CompetitionPhaseReportService {
         categoryName.includes('formas') ||
         categoryName.includes('forma');
 
-
       const isClimbing =
         sportName.includes('escalada') ||
         sportName.includes('climbing') ||
@@ -638,7 +637,6 @@ export class CompetitionPhaseReportService {
         sportName.includes('natación') ||
         sportName.includes('natacion') ||
         sportName.includes('ciclismo');
-
 
       const isWrestling =
         sportName.includes('lucha olímpica') ||
@@ -661,7 +659,11 @@ export class CompetitionPhaseReportService {
         status: ec.status,
         totalParticipants: regsForCategory.length,
 
-        // Con sportId solo → no incluir participants ni phases
+        // ✅ Resumen de fases siempre disponible, incluso en detailLevel === 'sport'
+        phasesCount: phasesForCategory.length,
+        firstPhaseId: phasesForCategory[0]?.phaseId ?? null,
+
+        // Con sportId solo → no incluir participants ni phases completos
         ...(detailLevel !== 'sport' && {
           participants: regsForCategory
             .map((r) => regMap[r.registrationId])
@@ -693,10 +695,10 @@ export class CompetitionPhaseReportService {
               athleticsEntriesBySectionId,
               athleticsResultsByPrId,
               phaseRegsByPhaseId[phase.phaseId] ?? [],
-              isWeightlifting,                                      
+              isWeightlifting,
               weightliftingAttemptsByParticipationId,
               weightliftingManualRanksByPhaseId[phase.phaseId] ?? [],
-              detailLevel,              
+              detailLevel,
             ),
           ),
         }),
