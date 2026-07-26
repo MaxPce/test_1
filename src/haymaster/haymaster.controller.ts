@@ -50,12 +50,14 @@ export class HaymasterController {
     @Query('gender') gender?: 'M' | 'F',
     @Query('idinstitution') idinstitution?: number,
     @Query('localSportId') localSportId?: number,
+    @Query('limit') limit?: string,           // ← NUEVO
   ) {
     return this.haymasterService.getAccreditedAthletes({
       idevent,
       gender,
       idinstitution: idinstitution ? Number(idinstitution) : undefined,
       localSportId: localSportId ? Number(localSportId) : undefined,
+      limit: limit ? Number(limit) : 100,     // ← NUEVO, default 100
     });
   }
 
