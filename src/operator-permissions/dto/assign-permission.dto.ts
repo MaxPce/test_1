@@ -13,6 +13,6 @@ export class AssignPermissionDto {
   eventId?: number;
 
   @IsOptional()
-  @IsEnum(['local', 'sismaster'])
-  eventSource?: 'local' | 'sismaster';
+  @IsEnum(['local', 'sismaster', 'haymaster'])   
+  eventSource?: 'local' | 'sismaster' | 'haymaster';
 }
