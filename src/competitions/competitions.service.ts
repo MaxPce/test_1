@@ -1272,21 +1272,29 @@ export class CompetitionsService {
   // ==================== MANUAL RANKS ====================
 
   async getManualRanks(phaseId: number) {
+    // ← ANTES: SELECT * FROM phase_manual_ranks WHERE phase_id = ?
+    // ← AHORA: todos los registrados en la fase + su rank si existe
     const rows: any[] = await this.dataSource.query(
-      `SELECT pmr.id, pmr.phase_id AS phaseId, pmr.registration_id AS registrationId,
-              pmr.manual_rank_position AS manualRankPosition, pmr.updated_at AS updatedAt,
-              a.name AS athleteName, a.photo_url AS photoUrl,
-              ai.name AS institutionName, ai.abrev AS institutionAbrev, ai.logo_url AS logoUrl,
-              t.name AS teamName,
-              ti.name AS teamInstitutionName, ti.abrev AS teamInstitutionAbrev, ti.logo_url AS teamLogoUrl
-      FROM phase_manual_ranks pmr
-      LEFT JOIN registrations r  ON r.registration_id = pmr.registration_id
+      `SELECT
+        pmr.id,
+        pr.phase_id AS phaseId,
+        pr.registration_id AS registrationId,
+        pmr.manual_rank_position AS manualRankPosition,
+        pmr.updated_at AS updatedAt,
+        a.name AS athleteName, a.photo_url AS photoUrl,
+        ai.name AS institutionName, ai.abrev AS institutionAbrev, ai.logo_url AS logoUrl,
+        t.name AS teamName,
+        ti.name AS teamInstitutionName, ti.abrev AS teamInstitutionAbrev, ti.logo_url AS teamLogoUrl
+      FROM phase_registrations pr
+      LEFT JOIN phase_manual_ranks pmr
+        ON pmr.phase_id = pr.phase_id AND pmr.registration_id = pr.registration_id
+      LEFT JOIN registrations r  ON r.registration_id = pr.registration_id
       LEFT JOIN athletes a        ON a.athlete_id = r.athlete_id
       LEFT JOIN institutions ai   ON ai.institution_id = a.institution_id
       LEFT JOIN teams t           ON t.team_id = r.team_id
       LEFT JOIN institutions ti   ON ti.institution_id = t.institution_id
-      WHERE pmr.phase_id = ?
-      ORDER BY pmr.manual_rank_position ASC`,
+      WHERE pr.phase_id = ?
+      ORDER BY pmr.manual_rank_position ASC, pr.phase_registration_id ASC`,
       [phaseId],
     );
 
@@ -1294,7 +1302,7 @@ export class CompetitionsService {
       id: row.id,
       phaseId: row.phaseId,
       registrationId: row.registrationId,
-      manualRankPosition: row.manualRankPosition,
+      manualRankPosition: row.manualRankPosition ?? null,
       updatedAt: row.updatedAt,
       registration: {
         athlete: row.athleteName
