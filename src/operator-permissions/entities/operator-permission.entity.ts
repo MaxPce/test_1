@@ -26,10 +26,11 @@ export class OperatorPermission {
   @Column({
     name: 'event_source',
     type: 'enum',
-    enum: ['local', 'sismaster'],
+    enum: ['local', 'sismaster', 'haymaster'],
     nullable: true,
   })
-  eventSource: 'local' | 'sismaster' | null;
+  eventSource: 'local' | 'sismaster' | 'haymaster' | null;
+
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
