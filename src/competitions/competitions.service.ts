@@ -1656,6 +1656,25 @@ export class CompetitionsService {
       return;
     }
 
+    // ── NUEVO: registrar cada atleta en phase_registrations ──────────────────
+    for (const registration of registrations) {
+      const existingPR = await queryRunner.manager.findOne(PhaseRegistration, {
+        where: {
+          phaseId: phase.phaseId,
+          registrationId: registration.registrationId,
+        },
+      });
+      if (!existingPR) {
+        await queryRunner.manager.save(
+          queryRunner.manager.create(PhaseRegistration, {
+            phaseId: phase.phaseId,
+            registrationId: registration.registrationId,
+          }),
+        );
+      }
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     const match = queryRunner.manager.create(Match, {
       phaseId: phase.phaseId,
       matchNumber: 1,
