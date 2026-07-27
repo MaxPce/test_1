@@ -67,6 +67,27 @@ export class SismasterController {
   }
 
   /**
+   * GET /sismaster/weightlifting-podium/:eventId
+   *
+   * Podio de halterofilia agrupado por fase y clase de peso.
+   * Usa weightlifting_phase_manual_ranks como fuente de posiciones.
+   *
+   * GET /sismaster/weightlifting-podium/200
+   */
+  @Get('weightlifting-podium/:eventId')
+  @Public()
+  async getWeightliftingPodium(
+    @Param('eventId', ParseIntPipe) eventId: number,
+  ) {
+    return this.competitionPhaseReportService.getWeightliftingPodium(
+      eventId,
+      { source: 'sismaster' },
+    );
+  }
+
+  
+
+  /**
    * GET /sismaster/competition-snapshot/:eventId
    *
    * JSON completo de la competencia para consumo externo (sismaster).

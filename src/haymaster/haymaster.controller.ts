@@ -100,15 +100,16 @@ export class HaymasterController {
   @Get('athletes/niv-cat-options')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getNivCatOptions(
-    @Query('sismasterEventId', ParseIntPipe) sismasterEventId: number,
+    @Query('haymasterEventId', ParseIntPipe) haymasterEventId: number,
     @Query('sismasterSportId', ParseIntPipe) sismasterSportId: number,
     @Query('eventCategoryId') eventCategoryIdRaw?: string,
   ) {
     return this.haymasterService.getNivCatOptions(
-      sismasterEventId, sismasterSportId,
+      haymasterEventId, sismasterSportId,           
       eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
     );
   }
+
 
   @Get('athletes/by-niv-cat')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
@@ -124,14 +125,14 @@ export class HaymasterController {
   @Get('athletes/registrations-by-niv-cat')
   @Roles(UserRole.ADMIN, UserRole.MODERATOR, UserRole.OPERATOR)
   async getRegistrationIdsByNivCat(
-    @Query('sismasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterEventId: number,
+    @Query('haymasterEventId', new ParseIntPipe({ errorHttpStatusCode: 400 })) haymasterEventId: number,  // ← renombrado
     @Query('sismasterSportId', new ParseIntPipe({ errorHttpStatusCode: 400 })) sismasterSportId: number,
     @Query('idniv') idniv: string,
     @Query('idcat') idcat: string,
     @Query('eventCategoryId') eventCategoryIdRaw?: string,
   ) {
     return this.haymasterService.getRegistrationIdsByNivCat(
-      sismasterEventId, sismasterSportId, idniv, idcat,
+      haymasterEventId, sismasterSportId, idniv, idcat,   // ← actualizar llamada
       eventCategoryIdRaw ? Number(eventCategoryIdRaw) : undefined,
     );
   }
@@ -204,5 +205,24 @@ export class HaymasterController {
       phaseId:         phaseId         ? Number(phaseId)         : undefined,
       source: 'haymaster',  
     });
+  }
+
+  /**
+   * GET /haymaster/weightlifting-podium/:eventId
+   *
+   * Podio de halterofilia agrupado por fase y clase de peso.
+   * Usa weightlifting_phase_manual_ranks como fuente de posiciones.
+   *
+   * GET /haymaster/weightlifting-podium/9
+   */
+  @Get('weightlifting-podium/:eventId')
+  @Public()
+  async getWeightliftingPodium(
+    @Param('eventId', ParseIntPipe) eventId: number,
+  ) {
+    return this.competitionPhaseReportService.getWeightliftingPodium(
+      eventId,
+      { source: 'haymaster' },
+    );
   }
 }

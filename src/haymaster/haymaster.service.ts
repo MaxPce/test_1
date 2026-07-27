@@ -542,29 +542,34 @@ export class HaymasterService {
     sismasterEventId: number, sismasterSportId: number,
     idniv: string, idcat: string, eventCategoryId?: number,
   ): Promise<{ registrationIds: number[]; athletes: any[] }> {
-    const sismasterAthletes = await this.accreditationRepo
-      .createQueryBuilder('a')
-      .innerJoin('person', 'p', 'a.idperson = p.idperson')
-      .innerJoin('institution', 'i', 'a.idinstitution = i.idinstitution')
-      .innerJoin('accreditation_test', 'atest', 'atest.idacreditation = a.idacreditation AND atest.mstatus = 1')
-      .select([
-        'a.idacreditation AS idacreditation', 'p.idperson AS idperson', 'p.docnumber AS docnumber',
-        'p.firstname AS firstname', 'p.lastname AS lastname', 'p.surname AS surname',
-        'p.gender AS gender', 'i.name AS institutionName', 'i.abrev AS institutionAbrev',
-        'atest.idniv AS idniv', 'atest.idcat AS idcat',
-      ])
-      .where('a.idsport = :sport', { sport: sismasterSportId })
-      .andWhere('a.idevent = :event', { event: sismasterEventId })
-      .andWhere('a.tregister = :tr', { tr: 'D' })
-      .andWhere('a.mstatus = 1').andWhere('p.mstatus = 1')
-      .andWhere('atest.idniv = :idniv', { idniv })
-      .andWhere('atest.idcat = :idcat', { idcat })
-      .orderBy('p.lastname', 'ASC').addOrderBy('p.firstname', 'ASC')
-      .getRawMany();
+
+    const sismasterAthletes = await this.accreditationRepo.query(`
+      SELECT
+        a.idacreditation, p.idperson, p.docnumber,
+        p.firstname, p.lastname, p.surname, p.gender,
+        i.name AS institutionName, i.abrev AS institutionAbrev,
+        atest.idniv, atest.idcat
+      FROM accreditation a
+      INNER JOIN person p
+        ON p.idperson = a.idperson AND p.mstatus = 1
+      INNER JOIN institution i
+        ON i.idinstitution = a.idinstitution
+        AND i.idcompany = ${HAYMASTER_IDCOMPANY}
+      INNER JOIN accreditation_test atest
+        ON atest.idacreditation = a.idacreditation AND atest.mstatus = 1
+      WHERE a.idsport = ?
+        AND a.idevent = ?
+        AND a.tregister = 'D'
+        AND a.idcompany = ${HAYMASTER_IDCOMPANY}
+        AND a.mstatus = 1
+        AND atest.idniv = ?
+        AND atest.idcat = ?
+      ORDER BY p.lastname ASC, p.firstname ASC
+    `, [sismasterSportId, sismasterEventId, idniv, idcat]);
 
     if (!sismasterAthletes.length) return { registrationIds: [], athletes: [] };
 
-    const idpersons = sismasterAthletes.map((a) => a.idperson).filter(Boolean);
+    const idpersons = sismasterAthletes.map((a: any) => a.idperson).filter(Boolean);
     const placeholders = idpersons.map(() => '?').join(',');
     let sql = `SELECT r.registration_id, r.external_athlete_id, r.event_category_id
       FROM registrations r WHERE r.external_athlete_id IN (${placeholders}) AND r.deleted_at IS NULL`;
@@ -574,7 +579,7 @@ export class HaymasterService {
     const localRows = await this.localDataSource.query<{ registration_id: number; external_athlete_id: string }[]>(sql, params);
     const regMap = new Map(localRows.map((r) => [String(r.external_athlete_id), r.registration_id]));
 
-    const athletes = sismasterAthletes.map((a) => ({
+    const athletes = sismasterAthletes.map((a: any) => ({
       ...a,
       fullName: `${a.firstname} ${a.lastname ?? ''} ${a.surname ?? ''}`.trim(),
       photo: toSismasterUrl(a.photo),

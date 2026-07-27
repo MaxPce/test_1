@@ -2103,6 +2103,265 @@ export class CompetitionPhaseReportService {
       .map((a) => Number(a.weightKg));
     return valid.length > 0 ? Math.max(...valid) : null;
   }
-  
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PODIO HALTEROFILIA MANUAL (weightlifting_phase_manual_ranks)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async getWeightliftingPodium(
+    eventId: number,
+    filters: PhaseReportFilters = {},
+  ) {
+    const isHaymaster = filters.source === 'haymaster';
+
+    let eventInfo: any;
+    if (isHaymaster) {
+      eventInfo = await this.haymasterService.getEventById(eventId);
+    } else {
+      eventInfo = await this.sismasterService.getEventById(eventId);
+      if (!eventInfo)
+        throw new NotFoundException(`Evento #${eventId} no encontrado`);
+    }
+
+    // 1. Categorías del evento filtradas a halterofilia
+    const eventCategories = await this.eventCategoryRepo.find({
+      where: isHaymaster
+        ? { haymasterEventId: eventId }
+        : { externalEventId: eventId },
+      relations: ['category', 'category.sport'],
+    });
+
+    const wlCategories = eventCategories.filter((ec) => {
+      const sn = (ec.category as any)?.sport?.name?.toLowerCase() ?? '';
+      return (
+        sn.includes('halterofilia') ||
+        sn.includes('levantamiento de pesas') ||
+        sn.includes('weightlifting')
+      );
+    });
+
+    if (!wlCategories.length) return { phases: [] };
+
+    const wlEcIds = wlCategories.map((ec) => ec.eventCategoryId);
+
+    // 2. Fases de halterofilia
+    const phases = await this.phaseRepo
+      .createQueryBuilder('p')
+      .where('p.event_category_id IN (:...ids)', { ids: wlEcIds })
+      .andWhere('p.deleted_at IS NULL')
+      .orderBy('p.display_order', 'ASC')
+      .getMany();
+
+    if (!phases.length) return { phases: [] };
+    const phaseIds = phases.map((p) => p.phaseId);
+
+    // 3. Registraciones con atleta e institución local
+    const registrations = await this.registrationRepo
+      .createQueryBuilder('r')
+      .leftJoinAndSelect('r.athlete', 'athlete')
+      .leftJoinAndSelect('athlete.institution', 'inst')
+      .where('r.event_category_id IN (:...ids)', { ids: wlEcIds })
+      .andWhere('r.deleted_at IS NULL')
+      .getMany();
+
+    // 4. Datos externos (sismaster)
+    const externalIds = [
+      ...new Set(
+        registrations
+          .filter((r) => r.externalAthleteId)
+          .map((r) => r.externalAthleteId),
+      ),
+    ];
+    const institutionIds = [
+      ...new Set(
+        registrations
+          .filter((r) => r.externalInstitutionId)
+          .map((r) => r.externalInstitutionId),
+      ),
+    ];
+
+    const [settledPersons, institutions] = await Promise.all([
+      Promise.allSettled(
+        externalIds.map((id) => this.sismasterService.getAthleteById(id)),
+      ),
+      this.sismasterService.getInstitutionsByIds(institutionIds),
+    ]);
+
+    const personMap: Record<number, any> = {};
+    externalIds.forEach((id, i) => {
+      if (settledPersons[i].status === 'fulfilled')
+        personMap[id] = (settledPersons[i] as PromiseFulfilledResult<any>).value;
+    });
+
+    const institutionMap: Record<number, any> = {};
+    institutions.forEach((inst) => {
+      institutionMap[inst.idinstitution] = inst;
+    });
+
+    const regMap = this.buildRegistrationMap(
+      registrations,
+      personMap,
+      institutionMap,
+    );
+
+    // 5. WeightliftingManualRanks de las fases
+    const manualRanks = await this.weightliftingManualRankRepo.find({
+      where: phaseIds.map((id) => ({ phaseId: id })),
+    });
+
+    // 6. Matches + participaciones para calcular totales
+    const matches = await this.matchRepo
+      .createQueryBuilder('m')
+      .leftJoinAndSelect('m.participations', 'participation')
+      .where('m.phase_id IN (:...phaseIds)', { phaseIds })
+      .andWhere('m.deleted_at IS NULL')
+      .getMany();
+
+    const participationIds = matches.flatMap((m) =>
+      (m.participations ?? []).map((p) => p.participationId),
+    );
+
+    const attempts = participationIds.length
+      ? await this.weightliftingAttemptRepo.find({
+          where: participationIds.map((id) => ({ participationId: id })),
+          order: {
+            participationId: 'ASC',
+            liftType: 'ASC',
+            attemptNumber: 'ASC',
+          },
+        })
+      : [];
+
+    const attemptsByParticipationId = this.groupBy(attempts, 'participationId');
+
+    // Mapa participationId → registrationId
+    const participationToRegId = new Map<number, number>();
+    for (const match of matches) {
+      for (const p of match.participations ?? []) {
+        if (p.registrationId != null)
+          participationToRegId.set(p.participationId, p.registrationId);
+      }
+    }
+
+    // 7. Construir podio por fase → por clase de peso
+    const result = phases
+      .map((phase) => {
+        const phaseManualRanks = manualRanks.filter(
+          (mr) => mr.phaseId === phase.phaseId,
+        );
+        if (!phaseManualRanks.length) return null;
+
+        // Agrupar por clase de peso (viene de registration.weightClass)
+        const byWeightClass = new Map<string, any[]>();
+
+        for (const mr of phaseManualRanks) {
+          const rank = mr.totalRank ?? null;
+          // Solo posiciones de podio
+          if (rank == null || rank > 3) continue;
+
+          const reg = regMap[mr.registrationId];
+          const wc: string = reg?.weightClass ?? 'Sin categoría';
+
+          if (!byWeightClass.has(wc)) byWeightClass.set(wc, []);
+
+          // Calcular totales desde attempts
+          let bestSnatch: number | null = null;
+          let bestCJ: number | null = null;
+          let total: number | null = null;
+
+          const matchForReg = matches
+            .filter((m) => m.phaseId === phase.phaseId)
+            .find((m) =>
+              m.participations?.some(
+                (p) => p.registrationId === mr.registrationId,
+              ),
+            );
+
+          if (matchForReg) {
+            const part = matchForReg.participations?.find(
+              (p) => p.registrationId === mr.registrationId,
+            );
+            if (part) {
+              const att =
+                attemptsByParticipationId[part.participationId] ?? [];
+              const snatchAtt = att.filter((a) => a.liftType === 'snatch');
+              const cjAtt = att.filter(
+                (a) => a.liftType === 'clean_and_jerk',
+              );
+              bestSnatch = this._bestWeightlift(snatchAtt);
+              bestCJ = this._bestWeightlift(cjAtt);
+              total =
+                bestSnatch !== null && bestCJ !== null
+                  ? bestSnatch + bestCJ
+                  : null;
+            }
+          }
+
+          const medal =
+            rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze';
+
+          // Construir nombre y datos de institución
+          const athleteData = reg?.athlete ?? null;
+          const athleteName =
+            athleteData?.fullName ??
+            athleteData?.name ??
+            `Atleta #${mr.registrationId}`;
+
+          const instName =
+            athleteData?.institution?.name ?? null;
+          const instAbrev =
+            athleteData?.institution?.abrev ??
+            (instName ? instName.slice(0, 4).toUpperCase() : null);
+          const instLogoUrl =
+            athleteData?.institution?.logoUrl ?? null;
+          const photoUrl = athleteData?.photoUrl ?? null;
+
+          byWeightClass.get(wc)!.push({
+            registrationId: mr.registrationId,
+            position: rank,
+            medal,
+            athleteName,
+            institutionName: instName,
+            institutionAbrev: instAbrev,
+            photoUrl,
+            logoUrl: instLogoUrl,
+            bestSnatch,
+            bestCleanAndJerk: bestCJ,
+            total,
+          });
+        }
+
+        const weightClasses = Array.from(byWeightClass.entries())
+          .map(([weightClass, podium]) => ({
+            weightClass,
+            podium: podium.sort(
+              (a, b) => (a.position ?? 99) - (b.position ?? 99),
+            ),
+          }))
+          .filter((wc) => wc.podium.length > 0)
+          // Ordenar clases de peso numéricamente ("+73kg" al final)
+          .sort((a, b) => {
+            const numA = parseFloat(a.weightClass.replace(/[^0-9.]/g, ''));
+            const numB = parseFloat(b.weightClass.replace(/[^0-9.]/g, ''));
+            const isOpenA = a.weightClass.startsWith('+');
+            const isOpenB = b.weightClass.startsWith('+');
+            if (isOpenA && !isOpenB) return 1;
+            if (!isOpenA && isOpenB) return -1;
+            return (numA || 0) - (numB || 0);
+          });
+
+        if (!weightClasses.length) return null;
+
+        return {
+          phaseId: phase.phaseId,
+          phaseName: phase.name ?? null,
+          weightClasses,
+        };
+      })
+      .filter(Boolean);
+
+    return { phases: result };
+  }
+    
 }
 
