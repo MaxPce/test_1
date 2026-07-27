@@ -1332,17 +1332,15 @@ export class CompetitionsService {
   ): Promise<{ updated: number }> {
     const registrationIds = dto.ranks.map((r) => r.registrationId);
 
-    const participations = await this.participationRepository
-      .createQueryBuilder('p')
-      .innerJoin('p.match', 'm')
-      .where('m.phaseId = :phaseId', { phaseId })
-      .andWhere('m.deletedAt IS NULL')
-      .andWhere('p.registrationId IN (:...registrationIds)', {
-        registrationIds,
-      })
-      .getMany();
+    // ── Validar contra phase_registrations, no contra participations/matches ──
+    const phaseRegs = await this.phaseRegistrationRepository.find({
+      where: {
+        phaseId,
+        registrationId: In(registrationIds),
+      },
+    });
 
-    const foundIds = new Set(participations.map((p) => p.registrationId));
+    const foundIds = new Set(phaseRegs.map((pr) => pr.registrationId));
     const missing = registrationIds.filter((id) => !foundIds.has(id));
 
     if (missing.length > 0) {
@@ -1351,6 +1349,7 @@ export class CompetitionsService {
       );
     }
 
+    // ── Upsert manual ranks ──
     await Promise.all(
       dto.ranks.map((item) =>
         this.dataSource.query(

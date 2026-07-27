@@ -13,6 +13,7 @@ import { Match } from './match.entity';
 import { Standing } from './standing.entity';
 import { GroupStanding } from './group-standing.entity';
 import { PhaseType, PhaseGender, PhaseLevel } from '../../common/enums';
+import { PhaseRegistration } from './phase-registration.entity';
 
 @Entity('phases')
 @Index(['eventCategoryId'])
@@ -70,6 +71,9 @@ export class Phase {
 
   @OneToMany(() => Standing, (standing) => standing.phase)
   standings: Standing[];
+  
+  @OneToMany(() => PhaseRegistration, (pr) => pr.phase)
+  phaseRegistrations: PhaseRegistration[];
 
   // ── NUEVAS: árbol de sub-fases
   @ManyToOne(() => Phase, (phase) => phase.subPhases, { nullable: true })

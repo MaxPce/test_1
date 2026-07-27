@@ -3,6 +3,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,       
   JoinColumn,
   Index,
   Check,
@@ -11,6 +12,7 @@ import {
 import { EventCategory } from './event-category.entity';
 import { Athlete } from '../../institutions/entities/athlete.entity';
 import { Team } from '../../institutions/entities/team.entity';
+import { PhaseRegistration } from '../../competitions/entities/phase-registration.entity';
 
 @Entity('registrations')
 @Index(['eventCategoryId'])
@@ -90,6 +92,8 @@ export class Registration {
   @JoinColumn({ name: 'event_category_id' })
   eventCategory: EventCategory;
 
+  @OneToMany(() => PhaseRegistration, (pr) => pr.registration)
+  phaseRegistrations: PhaseRegistration[];
 
 
   @ManyToOne(() => Athlete)

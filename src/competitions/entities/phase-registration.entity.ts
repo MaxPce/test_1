@@ -13,6 +13,7 @@ import { Registration } from '../../events/entities/registration.entity';
 @Entity('phase_registrations')
 @Unique('unique_phase_registration', ['phaseId', 'registrationId'])
 @Index(['phaseId'])
+@Index(['registrationId'])   
 export class PhaseRegistration {
   @PrimaryGeneratedColumn({ name: 'phase_registration_id' })
   phaseRegistrationId: number;
