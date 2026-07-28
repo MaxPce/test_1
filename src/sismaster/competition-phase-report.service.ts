@@ -13,6 +13,7 @@ import { ShootingScore } from '../competitions/entities/shooting-score.entity';
 import { MatchGame } from '../competitions/entities/match-game.entity';
 import { AthleticsSection } from '../competitions/entities/athletics-section.entity';
 import { AthleticsSectionEntry } from '../competitions/entities/athletics-section-entry.entity';
+import { AthleticsPhaseClassification } from '../competitions/entities/athletics-phase-classification.entity';
 import { AthleticsResult } from '../competitions/entities/athletics-result.entity';
 import { SismasterService } from './sismaster.service';
 import { EventSismasterDto } from './dto/event-sismaster.dto';
@@ -97,6 +98,9 @@ export class CompetitionPhaseReportService {
 
     @InjectRepository(Event)
     private readonly eventRepo: Repository<Event>,
+
+    @InjectRepository(AthleticsPhaseClassification)
+    private readonly athleticsClassificationRepo: Repository<AthleticsPhaseClassification>,
 
     private readonly sismasterService: SismasterService,
      @Inject(forwardRef(() => HaymasterService))  // ← así
@@ -331,6 +335,18 @@ export class CompetitionPhaseReportService {
         ])
       : [[], []];
 
+    const athleticsClassifications = athleticsPhaseIds.length
+      ? await this.athleticsClassificationRepo.find({
+          where: athleticsPhaseIds.map((id) => ({ phaseId: id })),
+          order: { rankPosition: 'ASC' },
+        })
+      : [];
+
+    const athleticsClassificationsByPhaseId = this.groupBy(
+      athleticsClassifications,
+      'phaseId',
+    );
+
     const athleticsSectionIds = athleticsSections.map(
       (s) => s.athleticsSectionId,
     );
@@ -492,6 +508,7 @@ export class CompetitionPhaseReportService {
         swimmingParticipationToRegId,
         weightliftingAttemptsByParticipationId,
         weightliftingManualRanksByPhaseId, 
+        athleticsClassificationsByPhaseId,
         detailLevel,             
       ),
     };
@@ -551,6 +568,7 @@ export class CompetitionPhaseReportService {
     swimmingParticipationToRegId: Map<number, number>,
     weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
     weightliftingManualRanksByPhaseId: Record<number, WeightliftingManualRank[]>,
+    athleticsClassificationsByPhaseId: Record<number, AthleticsPhaseClassification[]>,
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const sportMap: Record<string, any> = {};
@@ -698,6 +716,7 @@ export class CompetitionPhaseReportService {
               isWeightlifting,
               weightliftingAttemptsByParticipationId,
               weightliftingManualRanksByPhaseId[phase.phaseId] ?? [],
+              athleticsClassificationsByPhaseId[phase.phaseId] ?? [],
               detailLevel,
             ),
           ),
@@ -734,6 +753,7 @@ export class CompetitionPhaseReportService {
     isWeightlifting: boolean,
     weightliftingAttemptsByParticipationId: Record<number, WeightliftingAttempt[]>,
     weightliftingManualRanksForPhase: WeightliftingManualRank[],
+    athleticsClassificationsForPhase: AthleticsPhaseClassification[],
     detailLevel: 'sport' | 'category' | 'phase',
   ) {
     const phaseMatches = matchesByPhaseId[phase.phaseId] ?? [];
@@ -780,6 +800,7 @@ export class CompetitionPhaseReportService {
         athleticsSectionsForPhase,
         athleticsEntriesBySectionId,
         athleticsResultsByPrId,
+        athleticsClassificationsForPhase,
       );
     }
 
@@ -1338,6 +1359,7 @@ export class CompetitionPhaseReportService {
     registrations: Registration[],
     personMap: Record<number, any>,
     institutionMap: Record<number, any> = {},
+    isHaymaster = false,
   ): Record<number, any> {
     const map: Record<number, any> = {};
 
@@ -1353,7 +1375,7 @@ export class CompetitionPhaseReportService {
 
       if (person) {
         athleteInfo = {
-          source: 'sismaster',
+          source: isHaymaster ? 'haymaster' : 'local',   
           personId: reg.externalAthleteId,
           fullName: [person.lastname, person.surname, person.firstname]
             .filter(Boolean)
@@ -1448,6 +1470,7 @@ export class CompetitionPhaseReportService {
     sections: AthleticsSection[],
     entriesBySectionId: Record<number, AthleticsSectionEntry[]>,
     resultsByPrId: Record<number, AthleticsResult[]>,
+    classifications: AthleticsPhaseClassification[],
   ) {
     const base = {
       phaseId: phase.phaseId,
@@ -1457,28 +1480,62 @@ export class CompetitionPhaseReportService {
       isAtletismo: true,
     };
 
+    // ── Construir el podio desde athletics_phase_classification ──────────
+    // El link es: classification.phaseRegistrationId → phaseReg.registrationId
+    const prIdToRegId = new Map<number, number>(
+      phaseRegs.map((pr) => [pr.phaseRegistrationId, pr.registrationId]),
+    );
+
+    const podium = classifications
+      .filter((c) => c.rankPosition != null && c.rankPosition <= 3 && c.isScoringEligible)
+      .sort((a, b) => (a.rankPosition ?? 99) - (b.rankPosition ?? 99))
+      .map((c) => {
+        const regId = prIdToRegId.get(c.phaseRegistrationId) ?? null;
+        const athlete = regId != null
+          ? (regMap[regId] ?? { registrationId: regId })
+          : { phaseRegistrationId: c.phaseRegistrationId };
+
+        // Determinar la marca final según el tipo de disciplina
+        const mark =
+          c.finalTime     != null ? { value: c.finalTime,                  unit: 's' } :
+          c.finalDistance != null ? { value: Number(c.finalDistance),       unit: 'm' } :
+          c.finalHeight   != null ? { value: Number(c.finalHeight),         unit: 'm' } :
+          c.finalIaafPoints != null ? { value: c.finalIaafPoints,           unit: 'pts' } :
+          null;
+
+        return {
+          rank:           c.rankPosition,
+          medal:          c.rankPosition === 1 ? 'gold' : c.rankPosition === 2 ? 'silver' : 'bronze',
+          athlete,
+          mark:           mark?.value  ?? null,
+          markUnit:       mark?.unit   ?? null,
+          resultSource:   c.resultSource ?? null,
+          pointsAwarded:  Number(c.pointsAwarded),
+          iaafPoints:     c.finalIaafPoints ?? null,
+          exclusionReason: c.exclusionReason ?? null,
+        };
+      });
+
     switch (phase.type as AthleticsPhaseType) {
       case 'combined_pista':
         return {
           ...base,
           athleticsType: 'pista',
-          ...this._buildTrackPhase(
-            phaseRegs,
-            regMap,
-            sections,
-            entriesBySectionId,
-          ),
+          podium,   // ← AÑADIDO
+          ...this._buildTrackPhase(phaseRegs, regMap, sections, entriesBySectionId),
         };
       case 'combined_distancia':
         return {
           ...base,
           athleticsType: 'distancia',
+          podium,   // ← AÑADIDO
           ...this._buildDistancePhase(phaseRegs, regMap, resultsByPrId),
         };
       case 'combined_altura':
         return {
           ...base,
           athleticsType: 'altura',
+          podium,   // ← AÑADIDO
           ...this._buildHeightPhase(phaseRegs, regMap, resultsByPrId),
         };
     }
@@ -2200,6 +2257,7 @@ export class CompetitionPhaseReportService {
       registrations,
       personMap,
       institutionMap,
+      isHaymaster,
     );
 
     // 5. WeightliftingManualRanks de las fases

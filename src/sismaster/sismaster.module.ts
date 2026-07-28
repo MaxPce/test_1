@@ -15,7 +15,7 @@ import {
   SismasterEventSport,
   SismasterSportParam,
 } from './entities';
-
+import { AthleticsPhaseClassification } from '../competitions/entities/athletics-phase-classification.entity';
 import { Event } from '../events/entities/event.entity';
 import { EventCategory } from '../events/entities/event-category.entity';
 import { Registration } from '../events/entities/registration.entity';
@@ -72,6 +72,7 @@ import { WeightliftingManualRank } from '../competitions/entities/weightlifting-
       Result,
       WeightliftingAttempt,
       WeightliftingManualRank,
+      AthleticsPhaseClassification,
     ]),
     CacheModule.register({ ttl: 600, max: 1000 }),
     forwardRef(() => HaymasterModule),  
