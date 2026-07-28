@@ -13,6 +13,7 @@ import { UpdatePoomsaeScoreDto } from './dto/update-poomsae-score.dto';
 import { BracketService } from './bracket.service';
 import { MatchStatus, PhaseType } from '../common/enums';
 import { TeamMember } from '../institutions/entities/team-member.entity';
+import { PhaseRegistration } from './entities/phase-registration.entity';
 
 @Injectable()
 export class TaekwondoPoomsaeService {
@@ -25,6 +26,8 @@ export class TaekwondoPoomsaeService {
     private readonly phaseRepository: Repository<Phase>,
     @InjectRepository(Match)
     private readonly matchRepository: Repository<Match>,
+    @InjectRepository(PhaseRegistration)                                           
+    private readonly phaseRegistrationRepository: Repository<PhaseRegistration>,
     private readonly bracketService: BracketService,
   ) {}
 
@@ -470,11 +473,9 @@ export class TaekwondoPoomsaeService {
     const phase = await this.phaseRepository.findOne({ where: { phaseId } });
     if (!phase) throw new NotFoundException(`Phase ${phaseId} no encontrada`);
 
-    // Verificar que no exista ya un match
     const existing = await this.matchRepository.findOne({ where: { phaseId } });
     if (existing) throw new BadRequestException('La fase ya fue inicializada');
 
-    // Crear el único match del grupo
     const match = this.matchRepository.create({
       phaseId,
       matchNumber: 1,
@@ -482,17 +483,25 @@ export class TaekwondoPoomsaeService {
     });
     await this.matchRepository.save(match);
 
-    // Crear una participación por cada inscrito
     for (const registrationId of registrationIds) {
-      const participation = this.participationRepository.create({
-        matchId: match.matchId,
-        registrationId,
+      await this.participationRepository.save(
+        this.participationRepository.create({ matchId: match.matchId, registrationId }),
+      );
+
+      // ✅ NUEVO: registrar en phase_registrations
+      const alreadyExists = await this.phaseRegistrationRepository.findOne({
+        where: { phaseId, registrationId },
       });
-      await this.participationRepository.save(participation);
+      if (!alreadyExists) {
+        await this.phaseRegistrationRepository.save(
+          this.phaseRegistrationRepository.create({ phaseId, registrationId }),
+        );
+      }
     }
 
     return { matchId: match.matchId, participationsCreated: registrationIds.length };
   }
+
 
   private async recalculateRankings(matchId: number): Promise<void> {
     const participation = await this.participationRepository.findOne({

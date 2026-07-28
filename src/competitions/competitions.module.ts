@@ -109,7 +109,7 @@ import { WeightliftingManualRank } from './entities/weightlifting-manual-rank.en
     AthleticsService,
     AthleticsClassificationService,
     ChessService,
-    PhaseRegistration,
+    
   ],
   exports: [
     CompetitionsService,

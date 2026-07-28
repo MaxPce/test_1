@@ -743,12 +743,11 @@ export class CompetitionPhaseReportService {
 
 
     if (detailLevel === 'category') {
-      // Calcular podio: primero manual ranks, luego standings
       let podium: any[] = [];
 
       if (phaseManualRanks.length > 0) {
         podium = phaseManualRanks
-          .slice(0, 3)
+          .filter((mr) => mr.manualRankPosition != null && mr.manualRankPosition <= 3)
           .map((mr) => ({
             rank: mr.manualRankPosition,
             athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
@@ -759,9 +758,8 @@ export class CompetitionPhaseReportService {
             rank: s.manualRankPosition ?? s.rankPosition ?? null,
             athlete: regMap[s.registrationId] ?? { registrationId: s.registrationId },
           }))
-          .filter((s) => s.rank != null)
-          .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999))
-          .slice(0, 3);
+          .filter((s) => s.rank != null && s.rank <= 3)
+          .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
       }
 
       return {
@@ -770,7 +768,7 @@ export class CompetitionPhaseReportService {
         phaseType: phase.type ?? null,
         displayOrder: phase.displayOrder ?? null,
         totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
-        podium,
+        podium,  // ✅ como propiedad, no spread
       };
     }
 
