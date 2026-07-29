@@ -765,7 +765,37 @@ export class CompetitionPhaseReportService {
     if (detailLevel === 'category') {
       let podium: any[] = [];
 
-      if (phaseManualRanks.length > 0) {
+      // ✅ NUEVO: natación/ciclismo — construir podio desde swimmingResultsForPhase
+      if (isTimedSport && swimmingResultsForPhase.length > 0) {
+        const mapped = swimmingResultsForPhase.map((r) => {
+          const regId = swimmingParticipationToRegId.get(r.participationId) ?? null;
+          return {
+            rank: r.rankPosition ?? null,
+            athlete: regId != null
+              ? (regMap[regId] ?? { registrationId: regId })
+              : null,
+            finalTime: r.timeValue ?? null,
+            notes: r.notes ?? null,
+            isTied: false,
+          };
+        });
+
+        // Detectar empates
+        const rankCount = new Map<number, number>();
+        for (const row of mapped) {
+          if (row.rank != null)
+            rankCount.set(row.rank, (rankCount.get(row.rank) ?? 0) + 1);
+        }
+        for (const row of mapped) {
+          if (row.rank != null)
+            row.isTied = (rankCount.get(row.rank) ?? 1) > 1;
+        }
+
+        podium = mapped
+          .filter((r) => r.rank != null && r.rank <= 3)
+          .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
+
+      } else if (phaseManualRanks.length > 0) {
         podium = phaseManualRanks
           .filter((mr) => mr.manualRankPosition != null && mr.manualRankPosition <= 3)
           .map((mr) => ({
@@ -787,8 +817,9 @@ export class CompetitionPhaseReportService {
         phaseName: phase.name ?? null,
         phaseType: phase.type ?? null,
         displayOrder: phase.displayOrder ?? null,
+        isTimedSport: isTimedSport || undefined,  // solo si aplica
         totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
-        podium,  // ✅ como propiedad, no spread
+        podium,
       };
     }
 
