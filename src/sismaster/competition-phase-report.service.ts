@@ -793,15 +793,51 @@ export class CompetitionPhaseReportService {
 
       // ✅ FIX 1: Levantamiento de pesas → weightlifting_phase_manual_ranks
       } else if (isWeightlifting && weightliftingManualRanksForPhase.length > 0) {
-        podium = weightliftingManualRanksForPhase
+        // ── Podio halterofilia: medallas separadas por movimiento ──
+        const medalLabel = (rank: number) =>
+          rank === 1 ? 'gold' : rank === 2 ? 'silver' : 'bronze';
+
+        const snatchPodium = weightliftingManualRanksForPhase
+          .filter((mr) => mr.snatchRank != null && mr.snatchRank <= 3)
+          .sort((a, b) => (a.snatchRank ?? 99) - (b.snatchRank ?? 99))
+          .map((mr) => ({
+            rank: mr.snatchRank,
+            medal: medalLabel(mr.snatchRank!),
+            athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
+          }));
+
+        const cleanAndJerkPodium = weightliftingManualRanksForPhase
+          .filter((mr) => mr.cleanAndJerkRank != null && mr.cleanAndJerkRank <= 3)
+          .sort((a, b) => (a.cleanAndJerkRank ?? 99) - (b.cleanAndJerkRank ?? 99))
+          .map((mr) => ({
+            rank: mr.cleanAndJerkRank,
+            medal: medalLabel(mr.cleanAndJerkRank!),
+            athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
+          }));
+
+        const totalPodium = weightliftingManualRanksForPhase
           .filter((mr) => mr.totalRank != null && mr.totalRank <= 3)
           .sort((a, b) => (a.totalRank ?? 99) - (b.totalRank ?? 99))
           .map((mr) => ({
             rank: mr.totalRank,
+            medal: medalLabel(mr.totalRank!),
             athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
-            snatchRank: mr.snatchRank ?? null,
-            cleanAndJerkRank: mr.cleanAndJerkRank ?? null,
           }));
+
+        // Reemplazar podium plano por objeto estructurado
+        return {
+          phaseId: phase.phaseId,
+          phaseName: phase.name ?? null,
+          phaseType: phase.type ?? null,
+          displayOrder: phase.displayOrder ?? null,
+          isWeightlifting: true,
+          totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
+          podium: {
+            snatch:       { label: 'Mejor Arranque',  positions: snatchPodium },
+            cleanAndJerk: { label: 'Mejor Envión',    positions: cleanAndJerkPodium },
+            total:        { label: 'Mejor Total',     positions: totalPodium },
+          },
+        };
 
       } else if (phaseManualRanks.length > 0) {
         podium = phaseManualRanks

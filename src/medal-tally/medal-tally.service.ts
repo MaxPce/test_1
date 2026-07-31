@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { CompetitionPhaseReportService } from '../sismaster/competition-phase-report.service';
 
 export type MedalType = 'gold' | 'silver' | 'bronze';
+export type WeightliftingDiscipline = 'total' | 'snatch' | 'cleanAndJerk';
 
 export interface MedalAthlete {
   sport: string;
@@ -10,13 +11,13 @@ export interface MedalAthlete {
   eventCategoryId: number;
   medal: MedalType;
   rank: number;
+  // 'total'|'snatch'|'cleanAndJerk' para pesas, 'open' para el resto
+  disciplineType: 'total' | 'snatch' | 'cleanAndJerk' | 'open';
   athleteName?: string;
   document?: string;
   teamName?: string;
   teamId?: number;
   members?: { name: string; rol: string }[];
-  snatchRank?: number | null;
-  cleanAndJerkRank?: number | null;
 }
 
 export interface InstitutionTally {
@@ -31,16 +32,6 @@ export interface InstitutionTally {
   medals: MedalAthlete[];
 }
 
-export interface SportMedalDetail {
-  sportId: number;
-  sportName: string;
-  categories: {
-    eventCategoryId: number;
-    categoryName: string;
-    podium: any[];
-  }[];
-}
-
 @Injectable()
 export class MedalTallyService {
   constructor(
@@ -51,11 +42,15 @@ export class MedalTallyService {
     eventId: number,
     source: 'haymaster' | 'sismaster' = 'haymaster',
   ): Promise<any> {
-    // ── PASO 1: reporte sin filtros solo para obtener eventCategoryIds ────
+    // ── PASO 1: reporte sin filtros para obtener eventCategoryIds ──────────
     const overview = await this.reportService.getPhaseReport(eventId, { source });
 
-    // Recolectar todos los eventCategoryId del evento
-    const categoryRefs: { sportId: number; sportName: string; eventCategoryId: number; categoryName: string }[] = [];
+    const categoryRefs: {
+      sportId: number;
+      sportName: string;
+      eventCategoryId: number;
+      categoryName: string;
+    }[] = [];
 
     for (const sport of overview.sports ?? []) {
       for (const cat of sport.categories ?? []) {
@@ -82,9 +77,8 @@ export class MedalTallyService {
       ),
     );
 
-    // ── PASO 3: procesar podios ───────────────────────────────────────────
+    // ── PASO 3: procesar podios ────────────────────────────────────────────
     const tallyMap = new Map<number, InstitutionTally>();
-    const bySportMap = new Map<number, SportMedalDetail>();
     const MEDAL_MAP: Record<number, MedalType> = { 1: 'gold', 2: 'silver', 3: 'bronze' };
 
     for (let i = 0; i < categoryRefs.length; i++) {
@@ -94,118 +88,99 @@ export class MedalTallyService {
 
       const catReport = settled.value;
 
-      // Buscar el sport y categoría en el reporte
       for (const sport of catReport.sports ?? []) {
         for (const category of sport.categories ?? []) {
           if (category.eventCategoryId !== ref.eventCategoryId) continue;
 
-          // Inicializar sport en bySportMap
-          if (!bySportMap.has(ref.sportId)) {
-            bySportMap.set(ref.sportId, {
-              sportId: ref.sportId,
-              sportName: ref.sportName,
-              categories: [],
-            });
-          }
-
-          const categoryPodium: any[] = [];
-
           for (const phase of category.phases ?? []) {
-            for (const entry of phase.podium ?? []) {
-              const rank: number = entry.rank;
-              if (!rank || rank > 3) continue;
+            const isWeightlifting = phase.isWeightlifting === true;
 
-              const medal = MEDAL_MAP[rank];
-              const athleteData = entry.athlete?.athlete;
-              if (!athleteData) continue;
+            if (isWeightlifting) {
+                // ── Nueva estructura: podium = { snatch, cleanAndJerk, total } ──────
+                const podiumObj = phase.podium as {
+                snatch?:       { positions?: any[] };
+                cleanAndJerk?: { positions?: any[] };
+                total?:        { positions?: any[] };
+                } | null;
 
-              const institution = athleteData.institution;
-              if (!institution?.id) continue;
+                if (!podiumObj) continue;
 
-              const instId: number = institution.id;
-              const entrySource: string = athleteData.source;
-              const isWeightlifting = phase.isWeightlifting === true;
+                const wlSections: { key: WeightliftingDiscipline; positions: any[] }[] = [
+                { key: 'snatch',       positions: podiumObj.snatch?.positions       ?? [] },
+                { key: 'cleanAndJerk', positions: podiumObj.cleanAndJerk?.positions ?? [] },
+                { key: 'total',        positions: podiumObj.total?.positions        ?? [] },
+                ];
 
-              // ── Tally por institución ─────────────────────────────────
-              if (!tallyMap.has(instId)) {
-                tallyMap.set(instId, {
-                  institutionId: instId,
-                  institutionName: institution.name,
-                  abrev: institution.abrev ?? null,
-                  logoUrl: institution.logoUrl ?? null,
-                  gold: 0, silver: 0, bronze: 0, total: 0,
-                  medals: [],
-                });
-              }
+                for (const { key, positions } of wlSections) {
+                for (const entry of positions) {
+                    const rank: number = entry.rank;
+                    if (!rank || rank > 3) continue;
 
-              const tally = tallyMap.get(instId)!;
-              tally[medal]++;
-              tally.total++;
+                    const athleteData = entry.athlete?.athlete;
+                    if (!athleteData) continue;
+                    const institution = athleteData.institution;
+                    if (!institution?.id) continue;
 
-              const medalEntry: MedalAthlete = {
-                sport: ref.sportName,
-                sportId: ref.sportId,
-                category: ref.categoryName,
-                eventCategoryId: ref.eventCategoryId,
-                medal,
-                rank,
-              };
-
-              if (entrySource === 'team') {
-                medalEntry.teamName = athleteData.teamName;
-                medalEntry.teamId = athleteData.teamId;
-                medalEntry.members = (athleteData.members ?? []).map((m: any) => ({
-                  name: m.name,
-                  rol: m.rol,
-                }));
-              } else {
-                medalEntry.athleteName = athleteData.fullName;
-                medalEntry.document = athleteData.document;
-                if (isWeightlifting) {
-                  medalEntry.snatchRank = entry.snatchRank ?? null;
-                  medalEntry.cleanAndJerkRank = entry.cleanAndJerkRank ?? null;
+                    const medal = MEDAL_MAP[rank];
+                    this.addMedal(tallyMap, institution, medal, rank, {
+                    sport: ref.sportName,
+                    sportId: ref.sportId,
+                    category: ref.categoryName,
+                    eventCategoryId: ref.eventCategoryId,
+                    disciplineType: key,
+                    athleteName: athleteData.fullName,
+                    document: athleteData.document,
+                    });
                 }
-              }
-
-              tally.medals.push(medalEntry);
-
-              // ── Detalle por deporte ───────────────────────────────────
-              const podiumEntry: any = {
-                rank,
-                medal,
-                institutionId: instId,
-                institutionName: institution.name,
-                abrev: institution.abrev ?? null,
-                source: entrySource,
-              };
-
-              if (entrySource === 'team') {
-                podiumEntry.teamName = athleteData.teamName;
-                podiumEntry.members = medalEntry.members;
-              } else {
-                podiumEntry.athleteName = athleteData.fullName;
-                if (isWeightlifting) {
-                  podiumEntry.snatchRank = entry.snatchRank ?? null;
-                  podiumEntry.cleanAndJerkRank = entry.cleanAndJerkRank ?? null;
                 }
-              }
 
-              categoryPodium.push(podiumEntry);
+            } else {
+                // ── Individual / Equipo: podium sigue siendo array ───────────────────
+                for (const entry of (phase.podium as any[]) ?? []) {
+                const rank: number = entry.rank;
+                if (!rank || rank > 3) continue;
+
+                const athleteData = entry.athlete?.athlete;
+                if (!athleteData) continue;
+                const institution = athleteData.institution;
+                if (!institution?.id) continue;
+
+                const medal = MEDAL_MAP[rank];
+                const entrySource: string = athleteData.source;
+
+                const base = {
+                    sport: ref.sportName,
+                    sportId: ref.sportId,
+                    category: ref.categoryName,
+                    eventCategoryId: ref.eventCategoryId,
+                    disciplineType: 'open' as const,
+                };
+
+                if (entrySource === 'team') {
+                    this.addMedal(tallyMap, institution, medal, rank, {
+                    ...base,
+                    teamName: athleteData.teamName,
+                    teamId: athleteData.teamId,
+                    members: (athleteData.members ?? []).map((m: any) => ({
+                        name: m.name,
+                        rol: m.rol,
+                    })),
+                    });
+                } else {
+                    this.addMedal(tallyMap, institution, medal, rank, {
+                    ...base,
+                    athleteName: athleteData.fullName,
+                    document: athleteData.document,
+                    });
+                }
+                }
             }
-          }
-
-          if (categoryPodium.length > 0) {
-            bySportMap.get(ref.sportId)!.categories.push({
-              eventCategoryId: ref.eventCategoryId,
-              categoryName: ref.categoryName,
-              podium: categoryPodium.sort((a, b) => a.rank - b.rank),
-            });
-          }
+        }
         }
       }
     }
 
-    // ── Ordenar medallero olímpico ─────────────────────────────────────────
+    // ── Ordenar: oro > plata > bronce (estándar olímpico) ─────────────────
     const medalTally = Array.from(tallyMap.values()).sort((a, b) => {
       if (b.gold   !== a.gold)   return b.gold   - a.gold;
       if (b.silver !== a.silver) return b.silver - a.silver;
@@ -215,10 +190,10 @@ export class MedalTallyService {
     return {
       meta: {
         generatedAt: new Date().toISOString(),
-        version: '1.0',
+        version: '1.1',
         source: 'medal-tally',
       },
-      event: overview.event,          // ← nombre e info del evento incluidos
+      event: overview.event,
       eventId,
       summary: {
         totalInstitutions: medalTally.length,
@@ -228,18 +203,43 @@ export class MedalTallyService {
         totalBronze:  medalTally.reduce((s, t) => s + t.bronze, 0),
       },
       medalTally,
-      bySport: Array.from(bySportMap.values()),
     };
+  }
+
+  // ── Helper: inicializa la institución si no existe y agrega la medalla ───
+  private addMedal(
+    tallyMap: Map<number, InstitutionTally>,
+    institution: { id: number; name: string; abrev?: string | null; logoUrl?: string | null },
+    medal: MedalType,
+    rank: number,
+    data: Omit<MedalAthlete, 'medal' | 'rank'>,
+  ) {
+    const instId = institution.id;
+
+    if (!tallyMap.has(instId)) {
+      tallyMap.set(instId, {
+        institutionId: instId,
+        institutionName: institution.name,
+        abrev: institution.abrev ?? null,
+        logoUrl: institution.logoUrl ?? null,
+        gold: 0, silver: 0, bronze: 0, total: 0,
+        medals: [],
+      });
+    }
+
+    const tally = tallyMap.get(instId)!;
+    tally[medal]++;
+    tally.total++;
+    tally.medals.push({ ...data, medal, rank });
   }
 
   private buildEmpty(eventId: number, event: any) {
     return {
-      meta: { generatedAt: new Date().toISOString(), version: '1.0', source: 'medal-tally' },
+      meta: { generatedAt: new Date().toISOString(), version: '1.1', source: 'medal-tally' },
       event,
       eventId,
       summary: { totalInstitutions: 0, totalMedals: 0, totalGold: 0, totalSilver: 0, totalBronze: 0 },
       medalTally: [],
-      bySport: [],
     };
   }
 }
