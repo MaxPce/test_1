@@ -167,6 +167,7 @@ export class CompetitionPhaseReportService {
       .leftJoinAndSelect('r.athlete', 'athlete')
       .leftJoinAndSelect('athlete.institution', 'athleteInstitution') 
       .leftJoinAndSelect('r.team', 'team')
+      .leftJoinAndSelect('team.institution', 'teamInstitution')
       .leftJoinAndSelect('team.members', 'teamMembers')
       .leftJoinAndSelect('teamMembers.athlete', 'memberAthlete')
       .where('r.event_category_id IN (:...ids)', { ids: eventCategoryIds })
@@ -765,22 +766,18 @@ export class CompetitionPhaseReportService {
     if (detailLevel === 'category') {
       let podium: any[] = [];
 
-      // ✅ NUEVO: natación/ciclismo — construir podio desde swimmingResultsForPhase
       if (isTimedSport && swimmingResultsForPhase.length > 0) {
+        // Natación / Ciclismo (sin cambios)
         const mapped = swimmingResultsForPhase.map((r) => {
           const regId = swimmingParticipationToRegId.get(r.participationId) ?? null;
           return {
             rank: r.rankPosition ?? null,
-            athlete: regId != null
-              ? (regMap[regId] ?? { registrationId: regId })
-              : null,
+            athlete: regId != null ? (regMap[regId] ?? { registrationId: regId }) : null,
             finalTime: r.timeValue ?? null,
             notes: r.notes ?? null,
             isTied: false,
           };
         });
-
-        // Detectar empates
         const rankCount = new Map<number, number>();
         for (const row of mapped) {
           if (row.rank != null)
@@ -790,10 +787,21 @@ export class CompetitionPhaseReportService {
           if (row.rank != null)
             row.isTied = (rankCount.get(row.rank) ?? 1) > 1;
         }
-
         podium = mapped
           .filter((r) => r.rank != null && r.rank <= 3)
           .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
+
+      // ✅ FIX 1: Levantamiento de pesas → weightlifting_phase_manual_ranks
+      } else if (isWeightlifting && weightliftingManualRanksForPhase.length > 0) {
+        podium = weightliftingManualRanksForPhase
+          .filter((mr) => mr.totalRank != null && mr.totalRank <= 3)
+          .sort((a, b) => (a.totalRank ?? 99) - (b.totalRank ?? 99))
+          .map((mr) => ({
+            rank: mr.totalRank,
+            athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
+            snatchRank: mr.snatchRank ?? null,
+            cleanAndJerkRank: mr.cleanAndJerkRank ?? null,
+          }));
 
       } else if (phaseManualRanks.length > 0) {
         podium = phaseManualRanks
@@ -802,6 +810,7 @@ export class CompetitionPhaseReportService {
             rank: mr.manualRankPosition,
             athlete: regMap[mr.registrationId] ?? { registrationId: mr.registrationId },
           }));
+
       } else if (phaseStandings.length > 0) {
         podium = phaseStandings
           .map((s) => ({
@@ -817,7 +826,8 @@ export class CompetitionPhaseReportService {
         phaseName: phase.name ?? null,
         phaseType: phase.type ?? null,
         displayOrder: phase.displayOrder ?? null,
-        isTimedSport: isTimedSport || undefined,  // solo si aplica
+        isTimedSport: isTimedSport || undefined,
+        isWeightlifting: isWeightlifting || undefined,  
         totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
         podium,
       };
@@ -1442,19 +1452,30 @@ export class CompetitionPhaseReportService {
             : null,
         };
       } else if (reg.team) {
-        const members = ((reg.team as any).members ?? []).map((m: any) => ({
-          tmId: m.tmId,
+        const team = reg.team as any;
+        const teamInst = team.institution ?? null;
+
+        const members = (team.members ?? []).map((m: any) => ({
+          tmId:      m.tmId,
           athleteId: m.athleteId,
-          rol: m.rol ?? null,
-          name: m.athlete?.name ?? null,
-          photoUrl: m.athlete?.photoUrl ?? null,
+          rol:       m.rol ?? null,
+          name:      m.athlete?.name ?? null,
+          photoUrl:  m.athlete?.photoUrl ?? null,
         }));
 
         athleteInfo = {
-          source: 'team',
-          teamId: reg.teamId,
-          teamName: (reg.team as any).name ?? null,
+          source:   'team',
+          teamId:   reg.teamId,
+          teamName: team.name ?? null,
           members,
+          institution: teamInst
+            ? {
+                id:      teamInst.institutionId,
+                name:    teamInst.name ?? null,
+                abrev:   teamInst.abrev ?? null,
+                logoUrl: teamInst.logoUrl ?? null,
+              }
+            : null,
         };
       }
 
