@@ -5,6 +5,8 @@ import { SismasterService } from './sismaster.service';
 import { SismasterController } from './sismaster.controller';
 import { SismasterCacheService } from './sismaster-cache.service';
 import { CompetitionSnapshotService } from './competition-snapshot.service';
+import { MedalTallyService }    from '../medal-tally/medal-tally.service';
+import { MedalTallyController } from '../medal-tally/medal-tally.controller';
 import { HaymasterModule } from '../haymaster/haymaster.module'; 
 import {
   SismasterEvent,
@@ -77,16 +79,18 @@ import { WeightliftingManualRank } from '../competitions/entities/weightlifting-
     CacheModule.register({ ttl: 600, max: 1000 }),
     forwardRef(() => HaymasterModule),  
   ],
-  controllers: [SismasterController],
+  controllers: [SismasterController, MedalTallyController,],
   providers: [
     SismasterService,
     SismasterCacheService,
     CompetitionSnapshotService,
     CompetitionPhaseReportService,
+    MedalTallyService,
   ],
   exports: [
     SismasterService,
     SismasterCacheService,
+
     CompetitionSnapshotService,
     CompetitionPhaseReportService,
   ],
