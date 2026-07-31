@@ -764,6 +764,18 @@ export class CompetitionPhaseReportService {
 
 
     if (detailLevel === 'category') {
+
+      if (ATHLETICS_PHASE_TYPES.includes(phase.type as AthleticsPhaseType)) {
+        return this.buildAthleticsPhase(
+          phase,
+          phaseRegsForAthletics,
+          regMap,
+          athleticsSectionsForPhase,
+          athleticsEntriesBySectionId,
+          athleticsResultsByPrId,
+          athleticsClassificationsForPhase,
+        );
+      }
       let podium: any[] = [];
 
       if (isTimedSport && swimmingResultsForPhase.length > 0) {
