@@ -150,61 +150,60 @@ export class MedalTallyService {
                 .filter((e) => e.rank != null && e.rank <= 8)
                 .sort((a, b) => a.rank - b.rank);
 
-              let adjustedRank = 0;
-
               for (const entry of rawEntries) {
-                const athleteData = entry.athlete?.athlete;
-                if (!athleteData) continue;
-                const institution = athleteData.institution;
-                if (!institution?.id) continue;
+              const athleteData = entry.athlete?.athlete;
+              if (!athleteData) continue;
+              const institution = athleteData.institution;
+              if (!institution?.id) continue;
 
-                const entrySource: string = athleteData.source;
-                const isTeamEntry = entrySource === 'team';
+              const entrySource: string = athleteData.source;
+              const isTeamEntry = entrySource === 'team';
 
-                // Clave de deduplicación: institución + categoría
-                const groupKey =
-                  institution.abrev?.trim().toUpperCase() ??
-                  institution.name.trim().toUpperCase();
-                const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
+              // Clave de deduplicación: institución + categoría
+              const groupKey =
+                institution.abrev?.trim().toUpperCase() ??
+                institution.name.trim().toUpperCase();
+              const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
 
-                // Aplicar restricción SOLO en natación + prueba de equipo/relay
-                if (isSwimming && isTeamEntry) {
-                  if (awardedInCategory.has(dedupKey)) continue; // saltar: ya fue premiada
-                  awardedInCategory.add(dedupKey);
-                }
-
-                // Incrementar rank efectivo y verificar que siga dentro del podio
-                adjustedRank++;
-                if (adjustedRank > 3) break;
-
-                const medal = MEDAL_MAP[adjustedRank];
-
-                const base = {
-                  sport: ref.sportName,
-                  sportId: ref.sportId,
-                  category: ref.categoryName,
-                  eventCategoryId: ref.eventCategoryId,
-                  disciplineType: 'open' as const,
-                };
-
-                if (isTeamEntry) {
-                  this.addMedal(tallyMap, institution, medal, adjustedRank, {
-                    ...base,
-                    teamName: athleteData.teamName,
-                    teamId: athleteData.teamId,
-                    members: (athleteData.members ?? []).map((m: any) => ({
-                      name: m.name,
-                      rol: m.rol,
-                    })),
-                  });
-                } else {
-                  this.addMedal(tallyMap, institution, medal, adjustedRank, {
-                    ...base,
-                    athleteName: athleteData.fullName,
-                    document: athleteData.document,
-                  });
-                }
+              // Aplicar restricción SOLO en natación + prueba de equipo/relay
+              if (isSwimming && isTeamEntry) {
+                if (awardedInCategory.has(dedupKey)) continue; // saltar: ya fue premiada
+                awardedInCategory.add(dedupKey);
               }
+
+              // ✅ Usar el rank real del entry, no un contador
+              const rank: number = entry.rank;
+              if (!rank || rank > 3) continue;
+
+              const medal = MEDAL_MAP[rank];
+              if (!medal) continue;
+
+              const base = {
+                sport: ref.sportName,
+                sportId: ref.sportId,
+                category: ref.categoryName,
+                eventCategoryId: ref.eventCategoryId,
+                disciplineType: 'open' as const,
+              };
+
+              if (isTeamEntry) {
+                this.addMedal(tallyMap, institution, medal, rank, {
+                  ...base,
+                  teamName: athleteData.teamName,
+                  teamId: athleteData.teamId,
+                  members: (athleteData.members ?? []).map((m: any) => ({
+                    name: m.name,
+                    rol: m.rol,
+                  })),
+                });
+              } else {
+                this.addMedal(tallyMap, institution, medal, rank, {
+                  ...base,
+                  athleteName: athleteData.fullName,
+                  document: athleteData.document,
+                });
+              }
+            }
           }
         }
         }
