@@ -137,75 +137,125 @@ export class MedalTallyService {
                 }
 
             } else {
-              // ── Individual / Equipo: podium sigue siendo array ───────────────────
-              const isSwimming =
-                ref.sportName?.toLowerCase().includes('nataci') ||
-                ref.sportName?.toLowerCase().includes('swimming');
+            // ── Individual / Equipo: podium sigue siendo array ───────────────────
+            const isSwimming =
+              ref.sportName?.toLowerCase().includes('nataci') ||
+              ref.sportName?.toLowerCase().includes('swimming');
 
-              // Para natación en equipo: control de una sola medalla por institución/categoría
-              const awardedInCategory = new Set<string>();
+            // Traer hasta rank 8 para poder redistribuir si hay duplicados
+            const rawEntries = ((phase.podium as any[]) ?? [])
+              .filter((e) => e.rank != null && e.rank <= 8)
+              .sort((a, b) => a.rank - b.rank);
 
-              // Traer hasta rank 8 para poder redistribuir si hay duplicados
-              const rawEntries = ((phase.podium as any[]) ?? [])
-                .filter((e) => e.rank != null && e.rank <= 8)
-                .sort((a, b) => a.rank - b.rank);
+            if (isSwimming) {
+              // ── Natación: deduplicar primero, luego asignar rank efectivo ──────
+              const seenInstitutions = new Set<string>();
+              const deduped: { entry: any; effectiveRank: number }[] = [];
 
               for (const entry of rawEntries) {
-              const athleteData = entry.athlete?.athlete;
-              if (!athleteData) continue;
-              const institution = athleteData.institution;
-              if (!institution?.id) continue;
+                const athleteData = entry.athlete?.athlete;
+                if (!athleteData) continue;
+                const institution = athleteData.institution;
+                if (!institution?.id) continue;
 
-              const entrySource: string = athleteData.source;
-              const isTeamEntry = entrySource === 'team';
+                const entrySource: string = athleteData.source;
+                const isTeamEntry = entrySource === 'team';
 
-              // Clave de deduplicación: institución + categoría
-              const groupKey =
-                institution.abrev?.trim().toUpperCase() ??
-                institution.name.trim().toUpperCase();
-              const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
+                if (isTeamEntry) {
+                  const groupKey =
+                    institution.abrev?.trim().toUpperCase() ??
+                    institution.name.trim().toUpperCase();
+                  const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
+                  if (seenInstitutions.has(dedupKey)) continue; // ← salta duplicado
+                  seenInstitutions.add(dedupKey);
+                }
 
-              // Aplicar restricción SOLO en natación + prueba de equipo/relay
-              if (isSwimming && isTeamEntry) {
-                if (awardedInCategory.has(dedupKey)) continue; // saltar: ya fue premiada
-                awardedInCategory.add(dedupKey);
+                deduped.push({ entry, effectiveRank: deduped.length + 1 });
               }
 
-              // ✅ Usar el rank real del entry, no un contador
-              const rank: number = entry.rank;
-              if (!rank || rank > 3) continue;
+              for (const { entry, effectiveRank } of deduped) {
+                if (effectiveRank > 3) break;
 
-              const medal = MEDAL_MAP[rank];
-              if (!medal) continue;
+                const athleteData = entry.athlete?.athlete;
+                const institution = athleteData.institution;
+                const medal = MEDAL_MAP[effectiveRank]; // ← rank efectivo, no el real
+                if (!medal) continue;
 
-              const base = {
-                sport: ref.sportName,
-                sportId: ref.sportId,
-                category: ref.categoryName,
-                eventCategoryId: ref.eventCategoryId,
-                disciplineType: 'open' as const,
-              };
+                const entrySource: string = athleteData.source;
+                const isTeamEntry = entrySource === 'team';
 
-              if (isTeamEntry) {
-                this.addMedal(tallyMap, institution, medal, rank, {
-                  ...base,
-                  teamName: athleteData.teamName,
-                  teamId: athleteData.teamId,
-                  members: (athleteData.members ?? []).map((m: any) => ({
-                    name: m.name,
-                    rol: m.rol,
-                  })),
-                });
-              } else {
-                this.addMedal(tallyMap, institution, medal, rank, {
-                  ...base,
-                  athleteName: athleteData.fullName,
-                  document: athleteData.document,
-                });
+                const base = {
+                  sport: ref.sportName,
+                  sportId: ref.sportId,
+                  category: ref.categoryName,
+                  eventCategoryId: ref.eventCategoryId,
+                  disciplineType: 'open' as const,
+                };
+
+                if (isTeamEntry) {
+                  this.addMedal(tallyMap, institution, medal, effectiveRank, {
+                    ...base,
+                    teamName: athleteData.teamName,
+                    teamId: athleteData.teamId,
+                    members: (athleteData.members ?? []).map((m: any) => ({
+                      name: m.name,
+                      rol: m.rol,
+                    })),
+                  });
+                } else {
+                  this.addMedal(tallyMap, institution, medal, effectiveRank, {
+                    ...base,
+                    athleteName: athleteData.fullName,
+                    document: athleteData.document,
+                  });
+                }
+              }
+
+            } else {
+              // ── No natación: lógica original intacta ─────────────────────────────
+              for (const entry of rawEntries) {
+                const athleteData = entry.athlete?.athlete;
+                if (!athleteData) continue;
+                const institution = athleteData.institution;
+                if (!institution?.id) continue;
+
+                const entrySource: string = athleteData.source;
+                const isTeamEntry = entrySource === 'team';
+                const rank: number = entry.rank;
+                if (!rank || rank > 3) continue;
+
+                const medal = MEDAL_MAP[rank];
+                if (!medal) continue;
+
+                const base = {
+                  sport: ref.sportName,
+                  sportId: ref.sportId,
+                  category: ref.categoryName,
+                  eventCategoryId: ref.eventCategoryId,
+                  disciplineType: 'open' as const,
+                };
+
+                if (isTeamEntry) {
+                  this.addMedal(tallyMap, institution, medal, rank, {
+                    ...base,
+                    teamName: athleteData.teamName,
+                    teamId: athleteData.teamId,
+                    members: (athleteData.members ?? []).map((m: any) => ({
+                      name: m.name,
+                      rol: m.rol,
+                    })),
+                  });
+                } else {
+                  this.addMedal(tallyMap, institution, medal, rank, {
+                    ...base,
+                    athleteName: athleteData.fullName,
+                    document: athleteData.document,
+                  });
+                }
               }
             }
           }
-        }
+          }
         }
       }
     }
