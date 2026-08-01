@@ -34,9 +34,7 @@ export interface InstitutionTally {
 
 @Injectable()
 export class MedalTallyService {
-  private readonly INSTITUTION_MERGE_MAP: Record<number, number> = {
-    172: 17,
-  };
+  
 
   constructor(
     private readonly reportService: CompetitionPhaseReportService,
@@ -82,7 +80,7 @@ export class MedalTallyService {
     );
 
     // ── PASO 3: procesar podios ────────────────────────────────────────────
-    const tallyMap = new Map<number, InstitutionTally>();
+    const tallyMap = new Map<string, InstitutionTally>();
     const MEDAL_MAP: Record<number, MedalType> = { 1: 'gold', 2: 'silver', 3: 'bronze' };
 
     for (let i = 0; i < categoryRefs.length; i++) {
@@ -212,18 +210,19 @@ export class MedalTallyService {
 
   // ── Helper: inicializa la institución si no existe y agrega la medalla ───
   private addMedal(
-    tallyMap: Map<number, InstitutionTally>,
+    tallyMap: Map<string, InstitutionTally>,  // ← string, no number
     institution: { id: number; name: string; abrev?: string | null; logoUrl?: string | null },
     medal: MedalType,
     rank: number,
     data: Omit<MedalAthlete, 'medal' | 'rank'>,
   ) {
-    const instId = this.INSTITUTION_MERGE_MAP[institution.id] ?? institution.id;
+    // Agrupa por abrev en mayúsculas; si no tiene, usa el nombre normalizado
+    const groupKey = institution.abrev?.trim().toUpperCase()
+      ?? institution.name.trim().toUpperCase();
 
-
-    if (!tallyMap.has(instId)) {
-      tallyMap.set(instId, {
-        institutionId: instId,
+    if (!tallyMap.has(groupKey)) {
+      tallyMap.set(groupKey, {
+        institutionId: institution.id,
         institutionName: institution.name,
         abrev: institution.abrev ?? null,
         logoUrl: institution.logoUrl ?? null,
@@ -232,12 +231,8 @@ export class MedalTallyService {
       });
     }
 
-    
-
-    const tally = tallyMap.get(instId)!;
-    if (!tally.logoUrl && institution.logoUrl) {
-      tally.logoUrl = institution.logoUrl;   // garantiza que se use el logo del id:17
-    }
+    const tally = tallyMap.get(groupKey)!;
+    if (!tally.logoUrl && institution.logoUrl) tally.logoUrl = institution.logoUrl;
     tally[medal]++;
     tally.total++;
     tally.medals.push({ ...data, medal, rank });
