@@ -34,6 +34,10 @@ export interface InstitutionTally {
 
 @Injectable()
 export class MedalTallyService {
+  private readonly INSTITUTION_MERGE_MAP: Record<number, number> = {
+    172: 17,
+  };
+
   constructor(
     private readonly reportService: CompetitionPhaseReportService,
   ) {}
@@ -214,7 +218,8 @@ export class MedalTallyService {
     rank: number,
     data: Omit<MedalAthlete, 'medal' | 'rank'>,
   ) {
-    const instId = institution.id;
+    const instId = this.INSTITUTION_MERGE_MAP[institution.id] ?? institution.id;
+
 
     if (!tallyMap.has(instId)) {
       tallyMap.set(instId, {
@@ -227,7 +232,12 @@ export class MedalTallyService {
       });
     }
 
+    
+
     const tally = tallyMap.get(instId)!;
+    if (!tally.logoUrl && institution.logoUrl) {
+      tally.logoUrl = institution.logoUrl;   // garantiza que se use el logo del id:17
+    }
     tally[medal]++;
     tally.total++;
     tally.medals.push({ ...data, medal, rank });
