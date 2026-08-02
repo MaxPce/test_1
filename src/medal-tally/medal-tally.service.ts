@@ -162,6 +162,12 @@ export class MedalTallyService {
             const deduped: { entry: any; effectiveRank: number }[] = [];
             let cumulativeCount = 0;
 
+            console.log(JSON.stringify(rawEntries.map(e => ({
+              rank: e.rank,
+              source: e.athlete?.athlete?.source,
+              institution: e.athlete?.athlete?.institution?.abrev,
+            })), null, 2));
+
             for (const rank of orderedRanks) {
               const groupEntries = rankGroupsMap.get(rank)!;
               const survivors: any[] = [];
@@ -196,7 +202,7 @@ export class MedalTallyService {
               }
               cumulativeCount += survivors.length;
 
-              if (cumulativeCount >= 3) break; // ya se llenó oro/plata/bronce
+               // ya se llenó oro/plata/bronce
             }
 
             for (const { entry, effectiveRank } of deduped) {
