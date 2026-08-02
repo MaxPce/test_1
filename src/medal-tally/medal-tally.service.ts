@@ -148,9 +148,9 @@ export class MedalTallyService {
               .sort((a, b) => a.rank - b.rank);
 
             if (isSwimming) {
-              const deduped: { entry: any; effectiveRank: number }[] = [];
+              const deduped: { entry: any; rank: number }[] = [];
               const seenInstitutions = new Set<string>();
-              let effectiveRank = 1;
+              let removedBefore = 0; // filas duplicadas descartadas hasta el momento
 
               for (const entry of rawEntries) {
                 const athleteData = entry.athlete?.athlete;
@@ -171,19 +171,21 @@ export class MedalTallyService {
                   const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
 
                   if (seenInstitutions.has(dedupKey)) {
+                    removedBefore++;
                     continue;
                   }
-
                   seenInstitutions.add(dedupKey);
                 }
 
+                // Respeta empates reales: solo se corrige por duplicados ya removidos
+                const effectiveRank = entry.rank - removedBefore;
+
                 if (effectiveRank > 3) break;
 
-                deduped.push({ entry, effectiveRank });
-                effectiveRank += 1;
+                deduped.push({ entry, rank: effectiveRank });
               }
 
-              for (const { entry, effectiveRank } of deduped) {
+              for (const { entry, rank: effectiveRank } of deduped) {
                 const athleteData = entry.athlete?.athlete;
                 const institution = athleteData.institution;
                 const medal = MEDAL_MAP[effectiveRank];
