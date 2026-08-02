@@ -148,98 +148,77 @@ export class MedalTallyService {
               .sort((a, b) => a.rank - b.rank);
 
             if (isSwimming) {
-            // ── Natación: agrupar por rank real para preservar empates individuales,
-            //    y deduplicar equipos/relevos de forma global entre ranks ──────────
-            const rankGroupsMap = new Map<number, any[]>();
-            for (const entry of rawEntries) {
-              const list = rankGroupsMap.get(entry.rank) ?? [];
-              list.push(entry);
-              rankGroupsMap.set(entry.rank, list);
-            }
-            const orderedRanks = Array.from(rankGroupsMap.keys()).sort((a, b) => a - b);
+              const deduped: { entry: any; effectiveRank: number }[] = [];
+              const seenInstitutions = new Set<string>();
+              let effectiveRank = 1;
 
-            const seenInstitutions = new Set<string>();
-            const deduped: { entry: any; effectiveRank: number }[] = [];
-            let cumulativeCount = 0;
-
-            console.log(JSON.stringify(rawEntries.map(e => ({
-              rank: e.rank,
-              source: e.athlete?.athlete?.source,
-              institution: e.athlete?.athlete?.institution?.abrev,
-            })), null, 2));
-
-            for (const rank of orderedRanks) {
-              const groupEntries = rankGroupsMap.get(rank)!;
-              const survivors: any[] = [];
-
-              for (const entry of groupEntries) {
+              for (const entry of rawEntries) {
                 const athleteData = entry.athlete?.athlete;
                 if (!athleteData) continue;
+
                 const institution = athleteData.institution;
                 if (!institution?.id) continue;
 
                 const entrySource: string = athleteData.source;
                 const isTeamEntry = entrySource === 'team';
 
+                // Solo deduplicar equipos/relevos
                 if (isTeamEntry) {
                   const groupKey =
                     institution.abrev?.trim().toUpperCase() ??
                     institution.name.trim().toUpperCase();
+
                   const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
-                  if (seenInstitutions.has(dedupKey)) continue;
+
+                  if (seenInstitutions.has(dedupKey)) {
+                    continue;
+                  }
+
                   seenInstitutions.add(dedupKey);
                 }
 
-                survivors.push(entry);
-              }
+                if (effectiveRank > 3) break;
 
-              if (survivors.length === 0) continue; // rank 100% duplicado → no consume posición
-
-              const effectiveRank = cumulativeCount + 1;
-              for (const entry of survivors) {
                 deduped.push({ entry, effectiveRank });
+                effectiveRank += 1;
               }
-              // ✅ CAMBIO: avanzar de 1 en 1 siempre, no por survivors.length
-              cumulativeCount += 1;
-            }
 
-            for (const { entry, effectiveRank } of deduped) {
-              if (effectiveRank > 3) continue;
-              const athleteData = entry.athlete?.athlete;
-              const institution = athleteData.institution;
-              const medal = MEDAL_MAP[effectiveRank];
-              if (!medal) continue;
+              for (const { entry, effectiveRank } of deduped) {
+                const athleteData = entry.athlete?.athlete;
+                const institution = athleteData.institution;
+                const medal = MEDAL_MAP[effectiveRank];
+                if (!medal) continue;
 
-              const entrySource: string = athleteData.source;
-              const isTeamEntry = entrySource === 'team';
+                const entrySource: string = athleteData.source;
+                const isTeamEntry = entrySource === 'team';
 
-              const base = {
-                sport: ref.sportName,
-                sportId: ref.sportId,
-                category: ref.categoryName,
-                eventCategoryId: ref.eventCategoryId,
-                disciplineType: 'open' as const,
-              };
+                const base = {
+                  sport: ref.sportName,
+                  sportId: ref.sportId,
+                  category: ref.categoryName,
+                  eventCategoryId: ref.eventCategoryId,
+                  disciplineType: 'open' as const,
+                };
 
-              if (isTeamEntry) {
-                this.addMedal(tallyMap, institution, medal, effectiveRank, {
-                  ...base,
-                  teamName: athleteData.teamName,
-                  teamId: athleteData.teamId,
-                  members: (athleteData.members ?? []).map((m: any) => ({
-                    name: m.name,
-                    rol: m.rol,
-                  })),
-                });
-              } else {
-                this.addMedal(tallyMap, institution, medal, effectiveRank, {
-                  ...base,
-                  athleteName: athleteData.fullName,
-                  document: athleteData.document,
-                });
+                if (isTeamEntry) {
+                  this.addMedal(tallyMap, institution, medal, effectiveRank, {
+                    ...base,
+                    teamName: athleteData.teamName,
+                    teamId: athleteData.teamId,
+                    members: (athleteData.members ?? []).map((m: any) => ({
+                      name: m.name,
+                      rol: m.rol,
+                    })),
+                  });
+                } else {
+                  this.addMedal(tallyMap, institution, medal, effectiveRank, {
+                    ...base,
+                    athleteName: athleteData.fullName,
+                    document: athleteData.document,
+                  });
+                }
               }
-            }
-          } else {
+            } else {
               // ── No natación: lógica original intacta ─────────────────────────────
               for (const entry of rawEntries) {
                 const athleteData = entry.athlete?.athlete;
