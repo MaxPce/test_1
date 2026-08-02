@@ -161,17 +161,14 @@ export class MedalTallyService {
                 const entrySource: string = athleteData.source;
                 const isTeamEntry = entrySource === 'team';
 
-                const isRelayPhase = (phase.isRelay === true) || (phase.isTeam === true);
-
-                if (isTeamEntry && isRelayPhase) {
+                if (isTeamEntry) {
                   const groupKey =
                     institution.abrev?.trim().toUpperCase() ??
                     institution.name.trim().toUpperCase();
                   const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
-                  if (seenInstitutions.has(dedupKey)) continue;
+                  if (seenInstitutions.has(dedupKey)) continue; // ← salta duplicado
                   seenInstitutions.add(dedupKey);
                 }
-
 
                 deduped.push({ entry, effectiveRank: deduped.length + 1 });
               }
