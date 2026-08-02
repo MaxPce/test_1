@@ -95,6 +95,8 @@ export class MedalTallyService {
           if (category.eventCategoryId !== ref.eventCategoryId) continue;
 
           for (const phase of category.phases ?? []) {
+            if (phase.excludeFromMedalTally === true) continue;
+            
             const isWeightlifting = phase.isWeightlifting === true;
 
             if (isWeightlifting) {

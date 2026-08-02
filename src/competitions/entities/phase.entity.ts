@@ -60,6 +60,8 @@ export class Phase {
 
   @Column({ name: 'deleted_by', nullable: true })
   deletedBy: number;
+  @Column({ name: 'exclude_from_medal_tally', default: false })
+  excludeFromMedalTally: boolean;
 
   // ── Relaciones existentes
   @ManyToOne(() => EventCategory)

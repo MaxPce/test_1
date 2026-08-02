@@ -844,6 +844,7 @@ export class CompetitionPhaseReportService {
           phaseType: phase.type ?? null,
           displayOrder: phase.displayOrder ?? null,
           isWeightlifting: true,
+          excludeFromMedalTally: phase.excludeFromMedalTally === true,
           totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
           podium: {
             snatch:       { label: 'Mejor Arranque',  positions: snatchPodium },
@@ -877,6 +878,7 @@ export class CompetitionPhaseReportService {
         displayOrder: phase.displayOrder ?? null,
         isTimedSport: isTimedSport || undefined,
         isWeightlifting: isWeightlifting || undefined,  
+        excludeFromMedalTally: phase.excludeFromMedalTally === true,
         totalParticipants: (phaseRegs.length > 0 ? phaseRegs : phaseMatches).length,
         podium,
       };
