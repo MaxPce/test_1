@@ -41,6 +41,7 @@ const ATHLETICS_PHASE_TYPES = [
   'combined_altura',
 ] as const;
 type AthleticsPhaseType = (typeof ATHLETICS_PHASE_TYPES)[number];
+const SWIMMING_PODIUM_SIZE = 5;
 
 @Injectable()
 export class CompetitionPhaseReportService {
@@ -800,7 +801,7 @@ export class CompetitionPhaseReportService {
             row.isTied = (rankCount.get(row.rank) ?? 1) > 1;
         }
         podium = mapped
-          .filter((r) => r.rank != null && r.rank <= 3)
+          .filter((r) => r.rank != null && r.rank <= SWIMMING_PODIUM_SIZE)
           .sort((a, b) => (a.rank ?? 9999) - (b.rank ?? 9999));
 
       // ✅ FIX 1: Levantamiento de pesas → weightlifting_phase_manual_ranks
@@ -1990,8 +1991,8 @@ export class CompetitionPhaseReportService {
 
     // ← PODIO: top-3 incluyendo empates
     const podium = mapped.filter(
-      (r) => r.rank != null && r.rank <= 3
-    );
+        (r) => r.rank != null && r.rank <= SWIMMING_PODIUM_SIZE
+      );
 
     return {
       phaseId: phase.phaseId,
