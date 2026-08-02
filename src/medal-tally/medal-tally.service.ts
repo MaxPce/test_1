@@ -186,23 +186,21 @@ export class MedalTallyService {
                     institution.abrev?.trim().toUpperCase() ??
                     institution.name.trim().toUpperCase();
                   const dedupKey = `${groupKey}:${ref.eventCategoryId}`;
-
-                  if (seenInstitutions.has(dedupKey)) continue; // institución ya premiada en este rank o uno anterior
+                  if (seenInstitutions.has(dedupKey)) continue;
                   seenInstitutions.add(dedupKey);
                 }
 
                 survivors.push(entry);
               }
 
-              if (survivors.length === 0) continue; // todo el rank era duplicado de equipo, no consume posición
+              if (survivors.length === 0) continue; // rank 100% duplicado → no consume posición
 
               const effectiveRank = cumulativeCount + 1;
               for (const entry of survivors) {
                 deduped.push({ entry, effectiveRank });
               }
-              cumulativeCount += survivors.length;
-
-               // ya se llenó oro/plata/bronce
+              // ✅ CAMBIO: avanzar de 1 en 1 siempre, no por survivors.length
+              cumulativeCount += 1;
             }
 
             for (const { entry, effectiveRank } of deduped) {
